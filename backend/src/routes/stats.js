@@ -1,9 +1,18 @@
 import { Router } from "express";
 import { pool } from "../db.js";
+import { generateInsight } from "../services/insights.js";
 
 export const statsRouter = Router();
 
-// Totals by wallet for the current month (used for the top summary cards)
+function periodWhere(period) {
+  if (period === "month") {
+    return { where: "created_at >= date_trunc('month', now())", values: [] };
+  }
+  const days = Number(period) || 30;
+  return { where: "created_at >= now() - ($1 || ' days')::interval", values: [days] };
+}
+
+// Totals by wallet for the current month (used for the per-wallet cards)
 statsRouter.get("/by-wallet", async (req, res) => {
   const { rows } = await pool.query(`
     SELECT wallet, COALESCE(SUM(amount), 0) AS total
@@ -14,28 +23,23 @@ statsRouter.get("/by-wallet", async (req, res) => {
   res.json(rows);
 });
 
-// Totals by category, for the pie/bar chart
-statsRouter.get("/by-category", async (req, res) => {
-  const { wallet, days = 30 } = req.query;
-  const values = [Number(days)];
-  let walletFilter = "";
-  if (wallet) {
-    values.push(wallet);
-    walletFilter = `AND wallet = $${values.length}`;
-  }
+// Total + category breakdown for a period ("month" | "7" | "30"),
+// used for the big spend total and the category chart.
+statsRouter.get("/summary", async (req, res) => {
+  const { period = "month" } = req.query;
+  const { where, values } = periodWhere(period);
 
   const { rows } = await pool.query(
-    `
-    SELECT category, COALESCE(SUM(amount), 0) AS total
-    FROM expenses
-    WHERE created_at >= now() - ($1 || ' days')::interval
-    ${walletFilter}
-    GROUP BY category
-    ORDER BY total DESC
-  `,
+    `SELECT category, COALESCE(SUM(amount), 0) AS total
+     FROM expenses
+     WHERE ${where}
+     GROUP BY category
+     ORDER BY total DESC`,
     values
   );
-  res.json(rows);
+
+  const total = rows.reduce((sum, row) => sum + Number(row.total), 0);
+  res.json({ total, categories: rows });
 });
 
 // Daily totals, for the trend line chart
@@ -52,4 +56,29 @@ statsRouter.get("/daily", async (req, res) => {
     [Number(days)]
   );
   res.json(rows);
+});
+
+// One-shot natural-language insight for the same period as /summary
+statsRouter.get("/insights", async (req, res) => {
+  const { period = "month" } = req.query;
+  const { where, values } = periodWhere(period);
+
+  const { rows } = await pool.query(
+    `SELECT category, COALESCE(SUM(amount), 0) AS total
+     FROM expenses
+     WHERE ${where}
+     GROUP BY category
+     ORDER BY total DESC`,
+    values
+  );
+
+  const total = rows.reduce((sum, row) => sum + Number(row.total), 0);
+  const periodLabel = period === "month" ? "текущий месяц" : `последние ${values[0] ?? 30} дней`;
+
+  try {
+    const text = await generateInsight(rows, total, periodLabel);
+    res.json({ text });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
 });

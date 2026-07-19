@@ -33,9 +33,9 @@ expensesRouter.get("/", async (req, res) => {
   res.json(rows);
 });
 
-// Create an expense manually (used as fallback when not created via voice)
+// Create an expense — used both for manual entry and to confirm a voice-parsed proposal
 expensesRouter.post("/", async (req, res) => {
-  const { wallet, amount, category, description } = req.body;
+  const { wallet, amount, category, description, raw_text } = req.body;
 
   if (!isValidWallet(wallet)) {
     return res.status(400).json({ error: "Некорректный кошелёк" });
@@ -45,9 +45,9 @@ expensesRouter.post("/", async (req, res) => {
   }
 
   const { rows } = await pool.query(
-    `INSERT INTO expenses (wallet, amount, category, description)
-     VALUES ($1, $2, $3, $4) RETURNING *`,
-    [wallet, amount, category || "Другое", description || null]
+    `INSERT INTO expenses (wallet, amount, category, description, raw_text)
+     VALUES ($1, $2, $3, $4, $5) RETURNING *`,
+    [wallet, amount, category || "Прочее", description || null, raw_text || null]
   );
   res.status(201).json(rows[0]);
 });

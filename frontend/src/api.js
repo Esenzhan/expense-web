@@ -7,6 +7,19 @@ export async function fetchExpenses(params = {}) {
   return res.json();
 }
 
+export async function createExpense(payload) {
+  const res = await fetch(`${API_BASE}/api/expenses`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    throw new Error(body.error || "Не удалось сохранить трату");
+  }
+  return res.json();
+}
+
 export async function deleteExpense(id) {
   await fetch(`${API_BASE}/api/expenses/${id}`, { method: "DELETE" });
 }
@@ -16,12 +29,17 @@ export async function fetchWalletTotals() {
   return res.json();
 }
 
-export async function fetchCategoryTotals(days = 30) {
-  const res = await fetch(`${API_BASE}/api/stats/by-category?days=${days}`);
+export async function fetchSummary(period = "month") {
+  const res = await fetch(`${API_BASE}/api/stats/summary?period=${period}`);
   return res.json();
 }
 
 export async function fetchDailyTotals(days = 30) {
   const res = await fetch(`${API_BASE}/api/stats/daily?days=${days}`);
+  return res.json();
+}
+
+export async function fetchInsights(period = "month") {
+  const res = await fetch(`${API_BASE}/api/stats/insights?period=${period}`);
   return res.json();
 }

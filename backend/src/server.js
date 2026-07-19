@@ -4,7 +4,7 @@ import cors from "cors";
 import http from "http";
 import { WebSocketServer } from "ws";
 
-import { initSchema, pool } from "./db.js";
+import { initSchema } from "./db.js";
 import { expensesRouter } from "./routes/expenses.js";
 import { statsRouter } from "./routes/stats.js";
 import { openDeepgramStream } from "./services/deepgramStream.js";
@@ -26,8 +26,9 @@ const server = http.createServer(app);
 //  1. streams raw MediaRecorder audio chunks (binary frames) as the user speaks
 //  2. receives {type: "partial", text} messages continuously — live transcript
 //  3. receives {type: "final", text} when an utterance ends (silence detected)
-//  4. server then parses the final text with Claude Haiku, saves the expense,
-//     and sends {type: "saved", expense} back to the client
+//  4. server then parses the final text with Claude Haiku and sends
+//     {type: "parsed", proposal, rawText} back — the client shows a
+//     confirm/cancel card and saves it via a plain POST /api/expenses
 const wss = new WebSocketServer({ server, path: "/ws/voice" });
 
 wss.on("connection", (clientSocket) => {
@@ -48,13 +49,7 @@ wss.on("connection", (clientSocket) => {
           return;
         }
 
-        const { rows } = await pool.query(
-          `INSERT INTO expenses (wallet, amount, category, description, raw_text)
-           VALUES ($1, $2, $3, $4, $5) RETURNING *`,
-          [parsed.wallet, parsed.amount, parsed.category, parsed.description, text]
-        );
-
-        clientSocket.send(JSON.stringify({ type: "saved", expense: rows[0] }));
+        clientSocket.send(JSON.stringify({ type: "parsed", proposal: parsed, rawText: text }));
       } catch (err) {
         clientSocket.send(JSON.stringify({ type: "error", message: err.message }));
       }

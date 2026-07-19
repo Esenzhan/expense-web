@@ -1,5 +1,6 @@
 import { useRef, useState } from "react";
-import { WS_URL } from "../api";
+import { WS_URL, createExpense } from "../api";
+import { getCategoryIcon } from "../categoryIcons";
 
 const CANDIDATE_MIME_TYPES = [
   "audio/webm;codecs=opus",
@@ -14,18 +15,31 @@ function pickMimeType() {
   );
 }
 
+// phase: idle -> listening -> processing -> confirming -> idle
 export default function VoiceRecorder({ onSaved }) {
-  const [recording, setRecording] = useState(false);
+  const [phase, setPhase] = useState("idle");
   const [transcript, setTranscript] = useState("");
-  const [status, setStatus] = useState("Нажми и говори");
+  const [proposal, setProposal] = useState(null);
+  const [errorMessage, setErrorMessage] = useState("");
+  const [saving, setSaving] = useState(false);
 
   const wsRef = useRef(null);
   const mediaRecorderRef = useRef(null);
   const streamRef = useRef(null);
+  const fallbackTimerRef = useRef(null);
+
+  function stopMedia() {
+    mediaRecorderRef.current?.stop();
+    streamRef.current?.getTracks().forEach((track) => track.stop());
+    mediaRecorderRef.current = null;
+    streamRef.current = null;
+  }
 
   async function startRecording() {
     setTranscript("");
-    setStatus("Слушаю…");
+    setProposal(null);
+    setErrorMessage("");
+    setPhase("listening");
 
     const ws = new WebSocket(WS_URL);
     ws.binaryType = "arraybuffer";
@@ -37,64 +51,158 @@ export default function VoiceRecorder({ onSaved }) {
         setTranscript(msg.text);
       } else if (msg.type === "final") {
         setTranscript(msg.text);
-        setStatus("Обрабатываю…");
-      } else if (msg.type === "saved") {
-        setStatus(`Сохранено: ${msg.expense.amount} ₸ · ${msg.expense.category}`);
-        onSaved?.(msg.expense);
+        setPhase("processing");
+      } else if (msg.type === "parsed") {
+        clearTimeout(fallbackTimerRef.current);
+        setProposal({ ...msg.proposal, raw_text: msg.rawText });
+        setPhase("confirming");
         ws.close();
       } else if (msg.type === "error") {
-        setStatus(msg.message);
+        clearTimeout(fallbackTimerRef.current);
+        setErrorMessage(msg.message);
+        setPhase("idle");
         ws.close();
       }
     };
 
-    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-    streamRef.current = stream;
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      streamRef.current = stream;
 
-    const mimeType = pickMimeType();
-    const recorder = new MediaRecorder(stream, mimeType ? { mimeType } : undefined);
-    mediaRecorderRef.current = recorder;
+      const mimeType = pickMimeType();
+      const recorder = new MediaRecorder(stream, mimeType ? { mimeType } : undefined);
+      mediaRecorderRef.current = recorder;
 
-    recorder.ondataavailable = (event) => {
-      if (event.data.size > 0 && ws.readyState === WebSocket.OPEN) {
-        event.data.arrayBuffer().then((buf) => ws.send(buf));
-      }
-    };
+      recorder.ondataavailable = (event) => {
+        if (event.data.size > 0 && ws.readyState === WebSocket.OPEN) {
+          event.data.arrayBuffer().then((buf) => ws.send(buf));
+        }
+      };
 
-    // Small timeslice = near-instant streaming to the server
-    recorder.start(250);
-    setRecording(true);
+      // Small timeslice = near-instant streaming to the server
+      recorder.start(250);
+    } catch (err) {
+      setErrorMessage("Нет доступа к микрофону");
+      setPhase("idle");
+      ws.close();
+    }
   }
 
   function stopRecording() {
-    mediaRecorderRef.current?.stop();
-    streamRef.current?.getTracks().forEach((track) => track.stop());
-    setRecording(false);
-    setStatus("Обрабатываю…");
-    // Socket stays open until the server sends "saved"/"error" so we don't
-    // miss the response while Claude + the DB write are still in flight.
-    // Fallback timeout guards against a real server-side hang.
-    setTimeout(() => {
+    stopMedia();
+    setPhase("processing");
+    // Socket stays open until the server sends "parsed"/"error" so we don't
+    // miss the response while Claude is still parsing. Fallback timeout
+    // guards against a real server-side hang.
+    fallbackTimerRef.current = setTimeout(() => {
       if (wsRef.current?.readyState === WebSocket.OPEN) {
         wsRef.current.close();
-        setStatus("Не дождались ответа сервера, попробуй ещё раз");
       }
+      setErrorMessage("Не дождались ответа сервера, попробуй ещё раз");
+      setPhase("idle");
     }, 15000);
   }
 
+  function cancelRecording() {
+    clearTimeout(fallbackTimerRef.current);
+    stopMedia();
+    wsRef.current?.close();
+    setTranscript("");
+    setPhase("idle");
+  }
+
+  function dismissProposal() {
+    setProposal(null);
+    setTranscript("");
+    setPhase("idle");
+  }
+
+  async function confirmProposal() {
+    if (!proposal) return;
+    setSaving(true);
+    setErrorMessage("");
+    try {
+      const expense = await createExpense(proposal);
+      onSaved?.(expense);
+      setProposal(null);
+      setTranscript("");
+      setPhase("idle");
+    } catch (err) {
+      setErrorMessage(err.message);
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  const icon = proposal ? getCategoryIcon(proposal.category) : null;
+
   return (
-    <div className="recorder-dock">
-      <div className={`transcript-bubble ${transcript ? "" : "empty"}`}>
-        {transcript || "Например: «Запиши затраты 2500 кофе»"}
+    <>
+      {phase !== "idle" && <div className="recorder-backdrop" />}
+
+      <div className="recorder-dock">
+        {(phase === "listening" || phase === "processing") && (
+          <div className="listen-pill">
+            <span>{transcript ? `«${transcript}»` : "Я вас слушаю…"}</span>
+            {phase === "processing" && <span className="spinner" />}
+          </div>
+        )}
+
+        {phase === "confirming" && proposal && (
+          <div className="confirm-card">
+            <div className="confirm-transcript">«{proposal.raw_text}»</div>
+            <div className="confirm-date">
+              {new Date().toLocaleDateString("ru-RU", {
+                weekday: "short",
+                day: "2-digit",
+                month: "long",
+              })}{" "}
+              — Сегодня
+            </div>
+            <div className="confirm-row">
+              <span className="category-icon" style={{ background: icon.bg, color: icon.fg }}>
+                {icon.emoji}
+              </span>
+              <div className="confirm-meta">
+                <div className="confirm-category">{proposal.category}</div>
+                <div className="confirm-wallet">{proposal.wallet}</div>
+              </div>
+              <div className="confirm-amount">
+                −{Number(proposal.amount).toLocaleString("ru-RU")} ₸
+              </div>
+            </div>
+            <div className="confirm-actions">
+              <button className="btn-secondary" onClick={dismissProposal} disabled={saving}>
+                Отмена
+              </button>
+              <button className="btn-primary" onClick={confirmProposal} disabled={saving}>
+                {saving ? "Сохраняю…" : "Сохранить"}
+              </button>
+            </div>
+          </div>
+        )}
+
+        {phase === "idle" && errorMessage && (
+          <div className="status-line error">{errorMessage}</div>
+        )}
+
+        {(phase === "idle" || phase === "listening") && (
+          <div className="mic-row">
+            <button
+              className={`mic-button ${phase === "listening" ? "recording" : ""}`}
+              onClick={phase === "listening" ? stopRecording : startRecording}
+              aria-label={phase === "listening" ? "Остановить запись" : "Начать запись"}
+            >
+              {phase === "listening" ? "■" : "●"}
+            </button>
+            {phase === "listening" && (
+              <button className="cancel-button" onClick={cancelRecording} aria-label="Отменить запись">
+                ✕
+              </button>
+            )}
+          </div>
+        )}
       </div>
-      <div className="status-line">{status}</div>
-      <button
-        className={`mic-button ${recording ? "recording" : ""}`}
-        onClick={recording ? stopRecording : startRecording}
-        aria-label={recording ? "Остановить запись" : "Начать запись"}
-      >
-        {recording ? "■" : "●"}
-      </button>
-    </div>
+    </>
   );
 }
