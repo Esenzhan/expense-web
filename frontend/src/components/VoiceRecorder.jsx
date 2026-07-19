@@ -41,8 +41,10 @@ export default function VoiceRecorder({ onSaved }) {
       } else if (msg.type === "saved") {
         setStatus(`Сохранено: ${msg.expense.amount} ₸ · ${msg.expense.category}`);
         onSaved?.(msg.expense);
+        ws.close();
       } else if (msg.type === "error") {
         setStatus(msg.message);
+        ws.close();
       }
     };
 
@@ -68,9 +70,16 @@ export default function VoiceRecorder({ onSaved }) {
     mediaRecorderRef.current?.stop();
     streamRef.current?.getTracks().forEach((track) => track.stop());
     setRecording(false);
-    setStatus("Нажми и говори");
-    // Give the server a moment to flush the final transcript before closing
-    setTimeout(() => wsRef.current?.close(), 1500);
+    setStatus("Обрабатываю…");
+    // Socket stays open until the server sends "saved"/"error" so we don't
+    // miss the response while Claude + the DB write are still in flight.
+    // Fallback timeout guards against a real server-side hang.
+    setTimeout(() => {
+      if (wsRef.current?.readyState === WebSocket.OPEN) {
+        wsRef.current.close();
+        setStatus("Не дождались ответа сервера, попробуй ещё раз");
+      }
+    }, 15000);
   }
 
   return (
