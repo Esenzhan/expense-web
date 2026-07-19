@@ -52,6 +52,29 @@ expensesRouter.post("/", async (req, res) => {
   res.status(201).json(rows[0]);
 });
 
+// Edit an existing expense (amount/category/wallet/note) from the edit sheet
+expensesRouter.put("/:id", async (req, res) => {
+  const { wallet, amount, category, description } = req.body;
+
+  if (!isValidWallet(wallet)) {
+    return res.status(400).json({ error: "Некорректный кошелёк" });
+  }
+  if (typeof amount !== "number" || amount <= 0) {
+    return res.status(400).json({ error: "Некорректная сумма" });
+  }
+
+  const { rows } = await pool.query(
+    `UPDATE expenses SET wallet = $1, amount = $2, category = $3, description = $4
+     WHERE id = $5 RETURNING *`,
+    [wallet, amount, category || "Прочее", description || null, req.params.id]
+  );
+
+  if (!rows.length) {
+    return res.status(404).json({ error: "Трата не найдена" });
+  }
+  res.json(rows[0]);
+});
+
 expensesRouter.delete("/:id", async (req, res) => {
   await pool.query(`DELETE FROM expenses WHERE id = $1`, [req.params.id]);
   res.status(204).end();

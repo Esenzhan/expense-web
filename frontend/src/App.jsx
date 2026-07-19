@@ -1,15 +1,10 @@
 import { useEffect, useState, Suspense, lazy } from "react";
-import {
-  fetchExpenses,
-  fetchWalletTotals,
-  fetchSummary,
-  fetchDailyTotals,
-  deleteExpense,
-} from "./api";
+import { fetchExpenses, fetchWalletTotals, fetchSummary, fetchDailyTotals } from "./api";
 import VoiceRecorder from "./components/VoiceRecorder";
 import WalletSummary from "./components/WalletSummary";
 import ExpenseList from "./components/ExpenseList";
 import InsightsSheet from "./components/InsightsSheet";
+import EditExpenseSheet from "./components/EditExpenseSheet";
 
 // Recharts is the heaviest dependency in the bundle — load it after first
 // paint so the mic button and cached list are interactive immediately.
@@ -53,6 +48,7 @@ export default function App() {
   const [summary, setSummary] = useState(cached.summary || { total: 0, categories: [] });
   const [dailyTotals, setDailyTotals] = useState(cached.dailyTotals || []);
   const [insightsOpen, setInsightsOpen] = useState(false);
+  const [editingExpense, setEditingExpense] = useState(null);
 
   async function refreshAll(currentPeriod) {
     const [exp, wallets, sum, daily] = await Promise.all([
@@ -74,10 +70,6 @@ export default function App() {
     refreshAll(period);
   }, [period]);
 
-  async function handleDelete(id) {
-    await deleteExpense(id);
-    refreshAll(period);
-  }
 
   const monthLabel = new Date().toLocaleDateString("ru-RU", { month: "long", year: "numeric" });
   const walletBalance = walletTotals.reduce((sum, w) => sum + Number(w.total), 0);
@@ -125,12 +117,27 @@ export default function App() {
         <CategoryBarChart data={summary.categories} />
       </Suspense>
 
-      <ExpenseList expenses={expenses} onDelete={handleDelete} />
+      <ExpenseList expenses={expenses} onSelect={setEditingExpense} />
 
       <VoiceRecorder onSaved={() => refreshAll(period)} />
 
       {insightsOpen && (
         <InsightsSheet period={period} onClose={() => setInsightsOpen(false)} />
+      )}
+
+      {editingExpense && (
+        <EditExpenseSheet
+          expense={editingExpense}
+          onClose={() => setEditingExpense(null)}
+          onSaved={() => {
+            setEditingExpense(null);
+            refreshAll(period);
+          }}
+          onDeleted={() => {
+            setEditingExpense(null);
+            refreshAll(period);
+          }}
+        />
       )}
     </div>
   );

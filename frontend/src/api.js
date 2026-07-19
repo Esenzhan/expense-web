@@ -20,6 +20,19 @@ export async function createExpense(payload) {
   return res.json();
 }
 
+export async function updateExpense(id, payload) {
+  const res = await fetch(`${API_BASE}/api/expenses/${id}`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    throw new Error(body.error || "Не удалось обновить трату");
+  }
+  return res.json();
+}
+
 export async function deleteExpense(id) {
   await fetch(`${API_BASE}/api/expenses/${id}`, { method: "DELETE" });
 }

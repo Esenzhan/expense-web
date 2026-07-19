@@ -12,6 +12,8 @@ const ICONS = {
   "Прочее": { emoji: "💳", bg: "#e9e9ec", fg: "#5b5b63" },
 };
 
+export const CATEGORIES = Object.keys(ICONS);
+
 export function getCategoryIcon(category) {
   return ICONS[category] || ICONS["Прочее"];
 }

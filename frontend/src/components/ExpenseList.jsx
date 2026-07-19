@@ -37,7 +37,7 @@ function groupByDay(expenses) {
   return groups;
 }
 
-export default function ExpenseList({ expenses, onDelete }) {
+export default function ExpenseList({ expenses, onSelect }) {
   const groups = groupByDay(expenses);
 
   return (
@@ -53,7 +53,7 @@ export default function ExpenseList({ expenses, onDelete }) {
             {group.items.map((expense) => {
               const icon = getCategoryIcon(expense.category);
               return (
-                <div className="expense-row" key={expense.id} onClick={() => onDelete?.(expense.id)}>
+                <div className="expense-row" key={expense.id} onClick={() => onSelect?.(expense)}>
                   <span className="category-icon" style={{ background: icon.bg, color: icon.fg }}>
                     {icon.emoji}
                   </span>
