@@ -1,0 +1,212 @@
+@import url("https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;700;800&family=Space+Mono:wght@400;700&display=swap");
+
+:root {
+  --ink: #1b1a17;
+  --ink-soft: #262420;
+  --paper: #f6f1e7;
+  --paper-dim: #cfc8b8;
+  --gold: #c9a227;
+  --rust: #b5542d;
+  --stone: #8a8578;
+
+  --font-ui: "Manrope", system-ui, sans-serif;
+  --font-mono: "Space Mono", ui-monospace, monospace;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  background: var(--ink);
+  color: var(--paper);
+  font-family: var(--font-ui);
+  -webkit-tap-highlight-color: transparent;
+  overscroll-behavior-y: none;
+}
+
+.app {
+  max-width: 480px;
+  margin: 0 auto;
+  min-height: 100vh;
+  padding: calc(env(safe-area-inset-top) + 20px) 18px calc(env(safe-area-inset-bottom) + 100px);
+  display: flex;
+  flex-direction: column;
+  gap: 22px;
+}
+
+.app-header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+}
+
+.app-header h1 {
+  font-size: 20px;
+  font-weight: 800;
+  letter-spacing: -0.01em;
+  margin: 0;
+}
+
+.app-header .month {
+  font-family: var(--font-mono);
+  color: var(--stone);
+  font-size: 13px;
+  text-transform: uppercase;
+}
+
+/* Wallet summary cards */
+.wallet-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+
+.wallet-card {
+  background: var(--ink-soft);
+  border-radius: 4px;
+  padding: 14px;
+  border-top: 2px dashed var(--paper-dim);
+}
+
+.wallet-card .name {
+  font-size: 12px;
+  color: var(--stone);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.wallet-card .amount {
+  font-family: var(--font-mono);
+  font-size: 20px;
+  font-weight: 700;
+  margin-top: 4px;
+}
+
+/* Charts section */
+.section-title {
+  font-size: 13px;
+  color: var(--stone);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  margin: 0 0 10px;
+}
+
+.chart-card {
+  background: var(--ink-soft);
+  border-radius: 4px;
+  padding: 14px 8px 6px;
+}
+
+/* Expense list — receipt line items */
+.expense-list {
+  display: flex;
+  flex-direction: column;
+}
+
+.expense-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 12px 0;
+  border-bottom: 1px dashed var(--paper-dim);
+}
+
+.expense-row .meta {
+  display: flex;
+  flex-direction: column;
+}
+
+.expense-row .category {
+  font-weight: 600;
+  font-size: 15px;
+}
+
+.expense-row .sub {
+  font-size: 12px;
+  color: var(--stone);
+  margin-top: 2px;
+}
+
+.expense-row .amount {
+  font-family: var(--font-mono);
+  font-weight: 700;
+  color: var(--rust);
+  font-size: 15px;
+  white-space: nowrap;
+}
+
+/* Voice recorder — fixed mic button + live transcript bubble */
+.recorder-dock {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 18px calc(env(safe-area-inset-bottom) + 18px);
+  background: linear-gradient(to top, var(--ink) 60%, transparent);
+}
+
+.transcript-bubble {
+  max-width: 440px;
+  width: 100%;
+  background: var(--paper);
+  color: var(--ink);
+  border-radius: 16px;
+  padding: 12px 16px;
+  font-size: 15px;
+  min-height: 20px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
+}
+
+.transcript-bubble.empty {
+  color: var(--stone);
+  font-style: italic;
+}
+
+.mic-button {
+  width: 68px;
+  height: 68px;
+  border-radius: 50%;
+  border: none;
+  background: var(--gold);
+  color: var(--ink);
+  font-size: 26px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 4px 18px rgba(201, 162, 39, 0.45);
+}
+
+.mic-button.recording {
+  background: var(--rust);
+  color: var(--paper);
+  animation: pulse 1.4s ease-in-out infinite;
+}
+
+@keyframes pulse {
+  0%, 100% {
+    box-shadow: 0 0 0 0 rgba(181, 84, 45, 0.5);
+  }
+  50% {
+    box-shadow: 0 0 0 14px rgba(181, 84, 45, 0);
+  }
+}
+
+.status-line {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--stone);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
