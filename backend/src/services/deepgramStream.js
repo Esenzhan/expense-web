@@ -18,6 +18,19 @@ export function openDeepgramStream({ onPartial, onFinal, onError }) {
     headers: { Authorization: `Token ${process.env.DEEPGRAM_API_KEY}` },
   });
 
+  // If the handshake itself is rejected (e.g. bad/missing API key), `ws`
+  // fires "unexpected-response" instead of "error" — without this handler
+  // the failure is completely silent and the client hangs forever.
+  dgSocket.on("unexpected-response", (req, res) => {
+    let body = "";
+    res.on("data", (chunk) => (body += chunk));
+    res.on("end", () => {
+      onError?.(
+        new Error(`Deepgram отклонил подключение (HTTP ${res.statusCode}): ${body || res.statusMessage}`)
+      );
+    });
+  });
+
   dgSocket.on("message", (data) => {
     try {
       const msg = JSON.parse(data.toString());
