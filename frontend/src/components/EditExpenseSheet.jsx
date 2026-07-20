@@ -1,8 +1,8 @@
-import { useReducer, useRef, useState } from "react";
+import { useEffect, useReducer, useRef, useState } from "react";
 import { createExpense, updateExpense, deleteExpense } from "../api";
 import { CATEGORIES, getCategoryIcon } from "../categoryIcons";
 import { WALLETS } from "../wallets";
-import { haptic } from "../haptics";
+import { haptic, hapticTick } from "../haptics";
 import { useSwipeDismiss } from "../sheetGestures";
 
 function toNumber(raw) {
@@ -76,6 +76,49 @@ export default function EditExpenseSheet({ expense, onClose, onSaved, onDeleted 
 
   const sheetRef = useRef(null);
   useSwipeDismiss(sheetRef, onClose);
+
+  // Category picker is a center-snap carousel: whatever icon sits in the
+  // middle of the row is the selected category, like the reference app.
+  const categoryRowRef = useRef(null);
+  const categoryRef = useRef(category);
+  categoryRef.current = category;
+
+  function centerOf(row, index) {
+    const child = row.children[index];
+    return child ? child.offsetLeft - row.clientWidth / 2 + child.offsetWidth / 2 : 0;
+  }
+
+  useEffect(() => {
+    // Start with the current category centered (no animation on mount)
+    const row = categoryRowRef.current;
+    if (row) row.scrollLeft = centerOf(row, CATEGORIES.indexOf(categoryRef.current));
+  }, []);
+
+  function onCategoryScroll() {
+    const row = categoryRowRef.current;
+    if (!row) return;
+    const middle = row.scrollLeft + row.clientWidth / 2;
+    let bestIndex = 0;
+    let bestDistance = Infinity;
+    for (let i = 0; i < row.children.length; i++) {
+      const child = row.children[i];
+      const distance = Math.abs(child.offsetLeft + child.offsetWidth / 2 - middle);
+      if (distance < bestDistance) {
+        bestDistance = distance;
+        bestIndex = i;
+      }
+    }
+    const centered = CATEGORIES[bestIndex];
+    if (centered && centered !== categoryRef.current) {
+      setCategory(centered);
+      hapticTick();
+    }
+  }
+
+  function scrollCategoryTo(index) {
+    const row = categoryRowRef.current;
+    if (row) row.scrollTo({ left: centerOf(row, index), behavior: "smooth" });
+  }
 
   function press(action) {
     haptic();
@@ -182,15 +225,15 @@ export default function EditExpenseSheet({ expense, onClose, onSaved, onDeleted 
           onChange={(event) => setNote(event.target.value)}
         />
 
-        <div className="category-row">
-          {CATEGORIES.map((cat) => {
+        <div className="category-row" ref={categoryRowRef} onScroll={onCategoryScroll}>
+          {CATEGORIES.map((cat, index) => {
             const catIcon = getCategoryIcon(cat);
             return (
               <button
                 key={cat}
                 className={`category-pick ${category === cat ? "selected" : ""}`}
                 style={{ background: catIcon.bg, color: catIcon.fg }}
-                onClick={() => setCategory(cat)}
+                onClick={() => scrollCategoryTo(index)}
                 aria-label={cat}
               >
                 {catIcon.emoji}

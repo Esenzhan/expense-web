@@ -20,21 +20,43 @@ export function useSwipeDismiss(sheetRef, onClose) {
   useEffect(() => {
     const el = sheetRef.current;
     if (!el) return;
-    const state = { armed: false, pulling: false, startY: 0, dy: 0 };
+    const backdrop = el.parentElement;
+    const state = { armed: false, pulling: false, startX: 0, startY: 0, dy: 0 };
+
+    // The dim fades out in step with the pull and comes back on spring-back
+    function paintBackdrop(progress, animate) {
+      if (!backdrop) return;
+      backdrop.style.transition = animate
+        ? "background-color 0.26s ease, backdrop-filter 0.26s ease"
+        : "none";
+      backdrop.style.backgroundColor = `rgba(20, 20, 26, ${0.4 * (1 - progress)})`;
+      backdrop.style.backdropFilter = `blur(${4 * (1 - progress)}px)`;
+    }
+
+    function resetBackdrop() {
+      if (!backdrop) return;
+      backdrop.style.transition = "background-color 0.26s ease, backdrop-filter 0.26s ease";
+      backdrop.style.backgroundColor = "";
+      backdrop.style.backdropFilter = "";
+    }
 
     function onTouchStart(event) {
       state.armed = el.scrollTop <= 0;
       state.pulling = false;
+      state.startX = event.touches[0].clientX;
       state.startY = event.touches[0].clientY;
       state.dy = 0;
     }
 
     function onTouchMove(event) {
       if (!state.armed) return;
+      const dx = event.touches[0].clientX - state.startX;
       const dy = event.touches[0].clientY - state.startY;
       if (!state.pulling) {
-        if (dy < -4 || el.scrollTop > 0) {
-          state.armed = false; // became an internal scroll
+        // Horizontal intent (e.g. the category carousel) or an internal
+        // scroll — stand down for this touch
+        if (dy < -4 || el.scrollTop > 0 || Math.abs(dx) > Math.abs(dy)) {
+          state.armed = false;
           return;
         }
         if (dy < 10) return;
@@ -44,6 +66,7 @@ export function useSwipeDismiss(sheetRef, onClose) {
       event.preventDefault();
       el.style.transition = "none";
       el.style.transform = `translateY(${Math.max(0, dy)}px)`;
+      paintBackdrop(Math.min(1, Math.max(0, dy) / el.offsetHeight), false);
     }
 
     function onTouchEnd() {
@@ -54,6 +77,7 @@ export function useSwipeDismiss(sheetRef, onClose) {
       el.style.transition = "transform 0.26s cubic-bezier(0.2, 0.9, 0.3, 1)";
       if (state.dy > 130) {
         el.style.transform = "translateY(110%)";
+        paintBackdrop(1, true); // dim finishes fading with the slide-out
         // Unmount exactly when the slide-out finishes — a fixed timeout
         // shorter than the transition left the sheet's top edge hanging at
         // the bottom of the screen for a frame or two
@@ -67,13 +91,13 @@ export function useSwipeDismiss(sheetRef, onClose) {
         setTimeout(close, 350); // fallback if transitionend never fires
       } else {
         el.style.transform = "translateY(0)";
+        resetBackdrop();
       }
       state.dy = 0;
     }
 
     // Drags on the dimmed area around the sheet must not scroll the page
     // behind (overflow:hidden alone doesn't stop iOS touch scroll-chaining)
-    const backdrop = el.parentElement;
     function onBackdropMove(event) {
       if (event.target === backdrop) event.preventDefault();
     }

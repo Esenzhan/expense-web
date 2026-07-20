@@ -648,11 +648,19 @@ body {
   color: var(--ink-soft);
 }
 
+/* Center-snap carousel: the icon in the middle of the row is the selection */
 .category-row {
   display: flex;
-  gap: 8px;
+  gap: 10px;
   overflow-x: auto;
-  padding-bottom: 2px;
+  scroll-snap-type: x mandatory;
+  padding: 8px calc(50% - 22px);
+  scrollbar-width: none;
+  -webkit-overflow-scrolling: touch;
+}
+
+.category-row::-webkit-scrollbar {
+  display: none;
 }
 
 .category-pick {
@@ -660,15 +668,19 @@ body {
   height: 44px;
   min-width: 44px;
   border-radius: 14px;
-  border: 2px solid transparent;
+  border: none;
   font-size: 18px;
   display: flex;
   align-items: center;
   justify-content: center;
+  scroll-snap-align: center;
+  transition: transform 0.18s ease, opacity 0.18s ease;
+  opacity: 0.65;
 }
 
 .category-pick.selected {
-  border-color: currentColor;
+  transform: scale(1.22);
+  opacity: 1;
 }
 
 .category-caption {
