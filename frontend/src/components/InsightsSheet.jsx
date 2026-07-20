@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { fetchInsights } from "../api";
 import { getCategoryIcon } from "../categoryIcons";
 import { getWalletIcon } from "../wallets";
@@ -37,7 +38,10 @@ export default function InsightsSheet({ period, wallet, walletBalance, onClose }
 
   const biggestIcon = data?.biggestExpense ? getCategoryIcon(data.biggestExpense.category) : null;
 
-  return (
+  // Портал в body: шторка рендерится внутри .app, который при открытии
+  // получает transform (scale) — transform делает предка containing block
+  // для position:fixed, и затемнение сжималось вместе с экраном
+  return createPortal(
     <div className="sheet-backdrop" onClick={onClose}>
       <div className="insights-sheet" ref={sheetRef} onClick={(event) => event.stopPropagation()}>
         <div className="insights-header">
@@ -159,6 +163,7 @@ export default function InsightsSheet({ period, wallet, walletBalance, onClose }
           </>
         )}
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }
