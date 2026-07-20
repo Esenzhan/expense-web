@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useReducer, useState } from "react";
 import { createExpense, updateExpense, deleteExpense } from "../api";
 import { CATEGORIES, getCategoryIcon } from "../categoryIcons";
 import { WALLETS } from "../wallets";
@@ -24,12 +24,46 @@ function formatDisplay(raw) {
   return hasComma ? `${grouped},${decPart}` : grouped;
 }
 
+// A plain useState per field would let rapid/batched presses (React 18
+// batches state updates within one tick) read a stale `display` closure and
+// silently drop keystrokes. useReducer guarantees every action sees the
+// result of the one before it.
+function calcReducer(state, action) {
+  switch (action.type) {
+    case "digit": {
+      if (state.overwrite) return { ...state, display: action.value, overwrite: false };
+      if (state.display === "0") return { ...state, display: action.value };
+      if (state.display.replace(",", "").length >= 9) return state;
+      return { ...state, display: state.display + action.value };
+    }
+    case "comma": {
+      if (state.overwrite) return { ...state, display: "0,", overwrite: false };
+      if (state.display.includes(",")) return state;
+      return { ...state, display: state.display + "," };
+    }
+    case "backspace":
+      return { ...state, display: state.display.length > 1 ? state.display.slice(0, -1) : "0" };
+    case "operator": {
+      const current = toNumber(state.display);
+      if (state.pendingOp && !state.overwrite) {
+        const result = applyOp(state.stored, current, state.pendingOp);
+        return { display: String(result), stored: result, pendingOp: action.value, overwrite: true };
+      }
+      return { ...state, stored: current, pendingOp: action.value, overwrite: true };
+    }
+    default:
+      return state;
+  }
+}
+
 export default function EditExpenseSheet({ expense, onClose, onSaved, onDeleted }) {
   const isNew = !expense;
-  const [display, setDisplay] = useState(isNew ? "0" : String(Number(expense.amount)));
-  const [stored, setStored] = useState(null);
-  const [pendingOp, setPendingOp] = useState(null);
-  const [overwrite, setOverwrite] = useState(false);
+  const [calc, dispatch] = useReducer(calcReducer, {
+    display: isNew ? "0" : String(Number(expense.amount)),
+    stored: null,
+    pendingOp: null,
+    overwrite: false,
+  });
   const [wallet, setWallet] = useState(expense?.wallet || WALLETS[0]);
   const [category, setCategory] = useState(expense?.category || CATEGORIES[0]);
   const [note, setNote] = useState(expense?.description || "");
@@ -38,46 +72,9 @@ export default function EditExpenseSheet({ expense, onClose, onSaved, onDeleted 
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
 
-  function pressDigit(d) {
-    if (overwrite) {
-      setDisplay(d);
-      setOverwrite(false);
-    } else if (display === "0") {
-      setDisplay(d);
-    } else if (display.replace(",", "").length < 9) {
-      setDisplay(display + d);
-    }
-  }
-
-  function pressComma() {
-    if (overwrite) {
-      setDisplay("0,");
-      setOverwrite(false);
-      return;
-    }
-    if (!display.includes(",")) setDisplay(display + ",");
-  }
-
-  function pressBackspace() {
-    setDisplay((prev) => (prev.length > 1 ? prev.slice(0, -1) : "0"));
-  }
-
-  function pressOperator(op) {
-    const current = toNumber(display);
-    if (pendingOp && !overwrite) {
-      const result = applyOp(stored, current, pendingOp);
-      setStored(result);
-      setDisplay(String(result));
-    } else {
-      setStored(current);
-    }
-    setPendingOp(op);
-    setOverwrite(true);
-  }
-
   function finalAmount() {
-    const current = toNumber(display);
-    return pendingOp ? applyOp(stored, current, pendingOp) : current;
+    const current = toNumber(calc.display);
+    return calc.pendingOp ? applyOp(calc.stored, current, calc.pendingOp) : current;
   }
 
   const icon = getCategoryIcon(category);
@@ -148,7 +145,7 @@ export default function EditExpenseSheet({ expense, onClose, onSaved, onDeleted 
           )}
         </div>
 
-        <div className="edit-amount">{formatDisplay(display)} ₸</div>
+        <div className="edit-amount">{formatDisplay(calc.display)} ₸</div>
 
         <div className="edit-wallet-row">
           <span className="category-icon" style={{ background: icon.bg, color: icon.fg }}>
@@ -199,39 +196,39 @@ export default function EditExpenseSheet({ expense, onClose, onSaved, onDeleted 
 
         <div className="keypad">
           {["1", "2", "3"].map((d) => (
-            <button key={d} className="key" onClick={() => pressDigit(d)}>
+            <button key={d} className="key" onClick={() => dispatch({ type: "digit", value: d })}>
               {d}
             </button>
           ))}
-          <button className="key op" onClick={() => pressOperator("+")}>
+          <button className="key op" onClick={() => dispatch({ type: "operator", value: "+" })}>
             +
           </button>
           {["4", "5", "6"].map((d) => (
-            <button key={d} className="key" onClick={() => pressDigit(d)}>
+            <button key={d} className="key" onClick={() => dispatch({ type: "digit", value: d })}>
               {d}
             </button>
           ))}
-          <button className="key op" onClick={() => pressOperator("−")}>
+          <button className="key op" onClick={() => dispatch({ type: "operator", value: "−" })}>
             −
           </button>
           {["7", "8", "9"].map((d) => (
-            <button key={d} className="key" onClick={() => pressDigit(d)}>
+            <button key={d} className="key" onClick={() => dispatch({ type: "digit", value: d })}>
               {d}
             </button>
           ))}
-          <button className="key op" onClick={() => pressOperator("×")}>
+          <button className="key op" onClick={() => dispatch({ type: "operator", value: "×" })}>
             ×
           </button>
-          <button className="key" onClick={pressComma}>
+          <button className="key" onClick={() => dispatch({ type: "comma" })}>
             ,
           </button>
-          <button className="key" onClick={() => pressDigit("0")}>
+          <button className="key" onClick={() => dispatch({ type: "digit", value: "0" })}>
             0
           </button>
-          <button className="key" onClick={pressBackspace} aria-label="Стереть">
+          <button className="key" onClick={() => dispatch({ type: "backspace" })} aria-label="Стереть">
             ⌫
           </button>
-          <button className="key op" onClick={() => pressOperator("÷")}>
+          <button className="key op" onClick={() => dispatch({ type: "operator", value: "÷" })}>
             ÷
           </button>
         </div>
