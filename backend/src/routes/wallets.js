@@ -48,6 +48,25 @@ walletsRouter.post("/", async (req, res) => {
   }
 });
 
+// A wallet can be deleted only while no expenses reference it; "Личные"
+// stays as the voice-parse fallback
+walletsRouter.delete("/:name", async (req, res) => {
+  const name = req.params.name;
+  if (name === "Личные") {
+    return res.status(400).json({ error: "Этот счёт нельзя удалить" });
+  }
+  const { rows } = await pool.query(
+    `SELECT COUNT(*)::int AS n FROM expenses WHERE wallet = $1`,
+    [name]
+  );
+  if (rows[0].n > 0) {
+    return res.status(400).json({ error: "Сначала перенеси или удали траты этого счёта" });
+  }
+  await pool.query(`DELETE FROM wallets WHERE name = $1`, [name]);
+  invalidateWalletCache();
+  res.status(204).end();
+});
+
 // Edit a wallet; renaming also re-points the expenses that reference it
 walletsRouter.put("/:name", async (req, res) => {
   const problem = validate(req.body);
