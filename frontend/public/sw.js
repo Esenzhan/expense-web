@@ -1,5 +1,9 @@
 const CACHE_NAME = "traty-shell-v2";
 
+function notifyDebug(data) {
+  self.clients.matchAll().then((clients) => clients.forEach((c) => c.postMessage({ __swDebug: true, ...data })));
+}
+
 self.addEventListener("install", (event) => {
   self.skipWaiting();
 });
@@ -24,23 +28,30 @@ self.addEventListener("fetch", (event) => {
   // showing a stale build until the cache happens to revalidate in the
   // background. Fall back to cache only when actually offline.
   if (request.mode === "navigate") {
+    // .clone() must happen in the very first reaction to fetch(), before the
+    // response is handed anywhere else — once respondWith's consumer (the
+    // browser, rendering the navigation) starts reading the body, cloning
+    // later throws "body is already used" and the cache write silently
+    // never happens. This was the actual bug: the previous version cloned
+    // inside a second, separately-scheduled .then(), racing the renderer.
+    const fetchPromise = fetch(request).then((response) => {
+      const toCache = response.clone();
+      event.waitUntil(
+        caches
+          .open(CACHE_NAME)
+          .then((cache) => cache.put(request, toCache))
+          .then(() => notifyDebug({ step: "navigate-cache-put-ok", url: request.url }))
+          .catch((err) => notifyDebug({ step: "navigate-cache-put-failed", url: request.url, error: String(err) }))
+      );
+      return response;
+    });
+
     event.respondWith(
-      (async () => {
-        try {
-          const response = await fetch(request);
-          // Cache writes must be tied to waitUntil, or the browser can kill
-          // this worker right after respondWith settles — that was silently
-          // dropping the shell from the cache on every single load (only
-          // hashed assets survived, since their write has one fewer await
-          // hop and usually raced ahead of teardown).
-          event.waitUntil(caches.open(CACHE_NAME).then((cache) => cache.put(request, response.clone())));
-          return response;
-        } catch {
-          const cached = await caches.match(request);
-          if (cached) return cached;
-          throw new Error("offline and no cached shell yet");
-        }
-      })()
+      fetchPromise.catch(async () => {
+        const cached = await caches.match(request);
+        if (cached) return cached;
+        throw new Error("offline and no cached shell yet");
+      })
     );
     return;
   }
