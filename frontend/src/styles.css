@@ -155,12 +155,12 @@ body {
   min-width: 110px;
   padding: 0 16px;
   border-radius: 75px;
-  display: inline-flex;
+  display: flex;
+  margin: 0 auto;
   align-items: center;
   justify-content: center;
   gap: 6px;
   overflow: hidden;
-  touch-action: none;
 }
 
 .insights-button:active .insights-btn-icon {

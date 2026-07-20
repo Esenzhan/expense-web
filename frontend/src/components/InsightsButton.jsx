@@ -5,10 +5,11 @@ const BASE_HEIGHT = 38; // matches .insights-button padding/font at rest
 const MAX_HEIGHT = 150; // fully stretched blob, like the reference video
 const PULL_DISTANCE = 170; // finger travel (px) for a full stretch
 
-// The «✦ Инсайты» button. Opens on tap, and also on a long downward drag:
-// the pill stretches into a tall blob while the label fades out and the
-// sparkle grows/rotates, with haptic ticks as the pull deepens — release past
-// the threshold opens the sheet, otherwise it springs back.
+// The «✦ Инсайты» button. Opens on tap, and also on a long downward drag
+// started anywhere on the page while it's scrolled to the top: the pill
+// stretches into a tall blob while the label fades out and the sparkle
+// grows/rotates, with haptic ticks as the pull deepens — release past the
+// threshold opens the sheet, otherwise it springs back.
 export default function InsightsButton({ onOpen }) {
   const btnRef = useRef(null);
   const iconRef = useRef(null);
@@ -18,7 +19,7 @@ export default function InsightsButton({ onOpen }) {
 
   useEffect(() => {
     const btn = btnRef.current;
-    const state = { pulling: false, startY: 0, progress: 0, zone: 0 };
+    const state = { armed: false, pulling: false, startY: 0, progress: 0, zone: 0 };
 
     function paint(progress, springBack) {
       btn.style.transition = springBack
@@ -33,20 +34,38 @@ export default function InsightsButton({ onOpen }) {
       iconRef.current.style.transform = `scale(${1 + progress * 1.4}) rotate(${progress * 30}deg)`;
     }
 
+    // armed: a candidate touch began at the top of the page;
+    // pulling: the drag showed clear downward intent and now drives the button
     function onTouchStart(event) {
-      state.pulling = true;
+      state.armed = false;
+      state.pulling = false;
+      if (window.scrollY > 0) return;
+      // Touches inside overlays (sheets, mic dock) must scroll/act normally
+      if (event.target.closest?.(".sheet-backdrop, .recorder-dock, .recorder-backdrop")) return;
+      state.armed = true;
       state.startY = event.touches[0].clientY;
       state.progress = 0;
       state.zone = 0;
-      // "Grabbed" cue. Also the only pre-release moment iOS can buzz at:
-      // while the finger is dragging, iOS suppresses web haptics entirely,
-      // so the per-quarter ticks below are Android-only in practice.
-      haptic();
     }
 
     function onTouchMove(event) {
-      if (!state.pulling) return;
+      if (!state.armed) return;
       const dy = event.touches[0].clientY - state.startY;
+
+      if (!state.pulling) {
+        if (dy < -6 || window.scrollY > 0) {
+          // The gesture became a normal scroll — stand down for this touch
+          state.armed = false;
+          return;
+        }
+        if (dy < 8) return; // not enough intent yet
+        state.pulling = true;
+        // "Grabbed" cue. Also the only pre-release moment iOS can buzz at:
+        // while the finger is dragging, iOS suppresses web haptics entirely,
+        // so the per-quarter ticks below are Android-only in practice.
+        haptic();
+      }
+
       if (dy <= 0) {
         state.progress = 0;
         paint(0, false);
@@ -69,8 +88,10 @@ export default function InsightsButton({ onOpen }) {
     }
 
     function onTouchEnd() {
-      if (!state.pulling) return;
+      const wasPulling = state.pulling;
+      state.armed = false;
       state.pulling = false;
+      if (!wasPulling) return;
       const shouldOpen = state.progress >= 0.95;
       paint(0, true);
       state.progress = 0;
@@ -81,15 +102,15 @@ export default function InsightsButton({ onOpen }) {
       }
     }
 
-    btn.addEventListener("touchstart", onTouchStart, { passive: true });
-    btn.addEventListener("touchmove", onTouchMove, { passive: false });
-    btn.addEventListener("touchend", onTouchEnd);
-    btn.addEventListener("touchcancel", onTouchEnd);
+    document.addEventListener("touchstart", onTouchStart, { passive: true });
+    document.addEventListener("touchmove", onTouchMove, { passive: false });
+    document.addEventListener("touchend", onTouchEnd);
+    document.addEventListener("touchcancel", onTouchEnd);
     return () => {
-      btn.removeEventListener("touchstart", onTouchStart);
-      btn.removeEventListener("touchmove", onTouchMove);
-      btn.removeEventListener("touchend", onTouchEnd);
-      btn.removeEventListener("touchcancel", onTouchEnd);
+      document.removeEventListener("touchstart", onTouchStart);
+      document.removeEventListener("touchmove", onTouchMove);
+      document.removeEventListener("touchend", onTouchEnd);
+      document.removeEventListener("touchcancel", onTouchEnd);
     };
   }, []);
 
