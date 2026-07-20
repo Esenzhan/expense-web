@@ -234,6 +234,17 @@ body {
   border-bottom: none;
 }
 
+/* Queued locally while offline, not yet synced to the server */
+.expense-row.pending {
+  opacity: 0.72;
+}
+
+.pending-badge {
+  margin-left: 5px;
+  font-size: 11px;
+  font-family: var(--font-ui);
+}
+
 .category-icon {
   width: 38px;
   height: 38px;

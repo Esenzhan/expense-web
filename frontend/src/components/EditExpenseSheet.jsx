@@ -1,5 +1,6 @@
 import { useEffect, useReducer, useRef, useState } from "react";
-import { createExpense, updateExpense, deleteExpense } from "../api";
+import { createExpense, updateExpense, deleteExpense, isNetworkError } from "../api";
+import { enqueueExpense, updatePendingExpense, removePendingExpense } from "../offlineQueue";
 import { listCategories, getCategoryIcon } from "../categoryIcons";
 import { listWallets } from "../wallets";
 import { haptic, hapticTick } from "../haptics";
@@ -60,6 +61,7 @@ function calcReducer(state, action) {
 
 export default function EditExpenseSheet({ expense, defaultWallet, onClose, onSaved, onDeleted }) {
   const isNew = !expense;
+  const isPending = Boolean(expense?.pending);
   const [calc, dispatch] = useReducer(calcReducer, {
     display: isNew ? "0" : String(Number(expense.amount)),
     stored: null,
@@ -142,9 +144,23 @@ export default function EditExpenseSheet({ expense, defaultWallet, onClose, onSa
     }
     setSaving(true);
     setError("");
+    const payload = { wallet, amount, category, description: note || null };
     try {
-      const payload = { wallet, amount, category, description: note || null };
-      const saved = isNew ? await createExpense(payload) : await updateExpense(expense.id, payload);
+      let saved;
+      if (isNew) {
+        try {
+          saved = await createExpense(payload);
+        } catch (err) {
+          if (!isNetworkError(err)) throw err;
+          // Offline: keep it on the phone and sync once we're back online —
+          // manual add shouldn't require a connection
+          saved = enqueueExpense(payload);
+        }
+      } else if (isPending) {
+        saved = updatePendingExpense(expense.id, payload);
+      } else {
+        saved = await updateExpense(expense.id, payload);
+      }
       onSaved?.(saved);
     } catch (err) {
       setError(err.message);
@@ -155,7 +171,11 @@ export default function EditExpenseSheet({ expense, defaultWallet, onClose, onSa
   async function handleDelete() {
     setSaving(true);
     try {
-      await deleteExpense(expense.id);
+      if (isPending) {
+        removePendingExpense(expense.id);
+      } else {
+        await deleteExpense(expense.id);
+      }
       onDeleted?.();
     } catch (err) {
       setError(err.message);

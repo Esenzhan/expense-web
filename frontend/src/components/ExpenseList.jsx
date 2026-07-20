@@ -53,7 +53,11 @@ export default function ExpenseList({ expenses, onSelect }) {
             {group.items.map((expense) => {
               const icon = getCategoryIcon(expense.category);
               return (
-                <div className="expense-row" key={expense.id} onClick={() => onSelect?.(expense)}>
+                <div
+                  className={`expense-row ${expense.pending ? "pending" : ""}`}
+                  key={expense.id}
+                  onClick={() => onSelect?.(expense)}
+                >
                   <span className="category-icon" style={{ background: icon.bg, color: icon.fg }}>
                     {icon.emoji}
                   </span>
@@ -63,6 +67,11 @@ export default function ExpenseList({ expenses, onSelect }) {
                   </div>
                   <span className="amount">
                     −{Number(expense.amount).toLocaleString("ru-RU")} ₸
+                    {expense.pending && (
+                      <span className="pending-badge" title="Сохранено на телефоне, отправится при подключении к сети">
+                        ⏳
+                      </span>
+                    )}
                   </span>
                 </div>
               );

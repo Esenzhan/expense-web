@@ -1,5 +1,6 @@
-import { useEffect, useState } from "react";
-import { fetchExpenses, fetchWalletTotals, fetchSummary, fetchCategories, fetchWallets, warmBackend } from "./api";
+import { useEffect, useRef, useState } from "react";
+import { fetchExpenses, fetchWalletTotals, fetchSummary, fetchCategories, fetchWallets, warmBackend, createExpense } from "./api";
+import { listPendingExpenses, syncPendingExpenses } from "./offlineQueue";
 import { hydrateCategories } from "./categoryIcons";
 import { hydrateWallets, getWalletIcon } from "./wallets";
 import { haptic } from "./haptics";
@@ -67,6 +68,19 @@ export default function App() {
   );
   const [, setCategoriesVersion] = useState(0);
 
+  // Last known server-truth data (unmerged with the pending-expenses queue),
+  // so re-merging after a queue change never double-counts an already
+  // merged pending total.
+  const rawRef = useRef({
+    exp: cached.expenses || [],
+    wallets: cached.walletTotals || [],
+    sum: cached.summary || { total: 0, categories: [] },
+  });
+  const periodRef = useRef(period);
+  periodRef.current = period;
+  const selectedWalletRef = useRef(selectedWallet);
+  selectedWalletRef.current = selectedWallet;
+
   function selectWallet(name) {
     setSelectedWallet(name);
     if (name) localStorage.setItem("traty-wallet", name);
@@ -122,18 +136,55 @@ export default function App() {
     return () => document.removeEventListener("visibilitychange", onVisible);
   }, []);
 
+  // Layers the local pending-expenses queue on top of the last known server
+  // data — this is what actually feeds the UI, so an offline manual add
+  // shows up in the list and totals immediately, without waiting for sync.
+  function mergeAndSet(wallet) {
+    const { exp, wallets, sum } = rawRef.current;
+    const pending = listPendingExpenses();
+    const pendingForList = wallet ? pending.filter((p) => p.wallet === wallet) : pending;
+    const mergedExpenses = [...pendingForList, ...exp];
+
+    const pendingByWallet = new Map();
+    for (const p of pending) {
+      pendingByWallet.set(p.wallet, (pendingByWallet.get(p.wallet) || 0) + Number(p.amount));
+    }
+    const mergedWallets = wallets.map((w) => ({
+      ...w,
+      total: Number(w.total) + (pendingByWallet.get(w.wallet) || 0),
+    }));
+    for (const [walletName, amount] of pendingByWallet) {
+      if (!mergedWallets.some((w) => w.wallet === walletName)) {
+        mergedWallets.push({ wallet: walletName, total: amount });
+      }
+    }
+
+    // Pending expenses are always "just now", so they fall inside every
+    // period (month/7/30 all include today) — safe to add unconditionally.
+    const pendingTotal = pendingForList.reduce((s, p) => s + Number(p.amount), 0);
+    const mergedSummary = { ...sum, total: Number(sum.total) + pendingTotal };
+
+    setExpenses(mergedExpenses);
+    setWalletTotals(mergedWallets);
+    setSummary(mergedSummary);
+  }
+
   async function refreshAll(currentPeriod, wallet = selectedWallet) {
     const expenseParams = { limit: 50 };
     if (wallet) expenseParams.wallet = wallet;
-    const [exp, wallets, sum] = await Promise.all([
-      fetchExpenses(expenseParams),
-      fetchWalletTotals(),
-      fetchSummary(currentPeriod, wallet),
-    ]);
-    setExpenses(exp);
-    setWalletTotals(wallets);
-    setSummary(sum);
-    saveCache({ expenses: exp, walletTotals: wallets, summary: sum, wallet });
+    try {
+      const [exp, wallets, sum] = await Promise.all([
+        fetchExpenses(expenseParams),
+        fetchWalletTotals(),
+        fetchSummary(currentPeriod, wallet),
+      ]);
+      rawRef.current = { exp, wallets, sum };
+      saveCache({ expenses: exp, walletTotals: wallets, summary: sum, wallet });
+    } catch {
+      // Offline — nothing fresh from the server, keep the last known data
+      // and just re-merge whatever's pending below
+    }
+    mergeAndSet(wallet);
   }
 
   useEffect(() => {
@@ -141,6 +192,27 @@ export default function App() {
     // so this only silently swaps in fresher numbers once they arrive.
     refreshAll(period, selectedWallet);
   }, [period, selectedWallet]);
+
+  useEffect(() => {
+    // Flush any expenses queued while offline as soon as we're back —
+    // on reconnect, and whenever the app returns to the foreground (the
+    // "online" event doesn't always fire reliably on iOS Safari).
+    function trySyncPending() {
+      syncPendingExpenses(createExpense).then((syncedAny) => {
+        if (syncedAny) refreshAll(periodRef.current, selectedWalletRef.current);
+      });
+    }
+    const onVisible = () => {
+      if (document.visibilityState === "visible") trySyncPending();
+    };
+    trySyncPending();
+    window.addEventListener("online", trySyncPending);
+    document.addEventListener("visibilitychange", onVisible);
+    return () => {
+      window.removeEventListener("online", trySyncPending);
+      document.removeEventListener("visibilitychange", onVisible);
+    };
+  }, []);
 
   const walletBalance = selectedWallet
     ? Number(walletTotals.find((w) => w.wallet === selectedWallet)?.total || 0)

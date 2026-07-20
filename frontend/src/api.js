@@ -7,6 +7,13 @@ export async function fetchExpenses(params = {}) {
   return res.json();
 }
 
+// Safari: "Load failed", Chrome: "Failed to fetch", Firefox: "NetworkError
+// when attempting to fetch resource." — fetch throws a plain TypeError with
+// no `.code`, so matching the message is the only reliable signal.
+export function isNetworkError(err) {
+  return err instanceof TypeError || /load failed|failed to fetch|networkerror/i.test(err?.message || "");
+}
+
 export async function createExpense(payload) {
   const res = await fetch(`${API_BASE}/api/expenses`, {
     method: "POST",
