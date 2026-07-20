@@ -23,7 +23,7 @@ export default function InsightsButton({ onOpen }) {
 
     function paint(progress, springBack) {
       btn.style.transition = springBack
-        ? "height 0.35s cubic-bezier(0.2, 0.9, 0.3, 1.35), border-radius 0.35s ease"
+        ? "height 0.35s cubic-bezier(0.2, 0.9, 0.3, 1.35), border-radius 0.35s ease, gap 0.35s ease"
         : "none";
       btn.style.height = `${BASE_HEIGHT + (MAX_HEIGHT - BASE_HEIGHT) * progress}px`;
       // Pill (radius clamps to half-height) flattening into a rounded square
@@ -31,7 +31,10 @@ export default function InsightsButton({ onOpen }) {
       const labelVisibility = Math.max(0, 1 - progress * 2.5);
       labelRef.current.style.opacity = `${labelVisibility}`;
       labelRef.current.style.maxWidth = `${labelVisibility * 70}px`;
-      iconRef.current.style.transform = `scale(${1 + progress * 1.4}) rotate(${progress * 30}deg)`;
+      // Collapse the flex gap along with the label, otherwise the sparkle
+      // sits a few px left of the blob's center once the label is gone
+      btn.style.gap = `${labelVisibility * 6}px`;
+      iconRef.current.style.transform = `scale(${1 + progress * 3}) rotate(${progress * 30}deg)`;
     }
 
     // armed: a candidate touch began at the top of the page;
