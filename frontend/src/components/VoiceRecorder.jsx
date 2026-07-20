@@ -122,6 +122,9 @@ export default function VoiceRecorder({ onSaved, onManualAdd }) {
 
   async function confirmProposal() {
     if (!proposal) return;
+    // Buzz at press time: after the awaits below the transient user
+    // activation is gone and iOS drops the haptic
+    haptic();
     setSaving(true);
     setErrorMessage("");
     try {

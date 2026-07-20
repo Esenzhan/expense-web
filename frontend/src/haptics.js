@@ -41,7 +41,9 @@ export function hapticHeavy() {
   try {
     const label = ensureSwitch();
     label.click();
-    setTimeout(() => label.click(), 70);
+    // ~120ms apart reads as a distinct double tick; much closer and iOS
+    // coalesces the two toggles into one buzz
+    setTimeout(() => label.click(), 120);
   } catch {
     // no haptics — fine
   }

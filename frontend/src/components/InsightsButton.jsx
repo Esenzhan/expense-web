@@ -38,6 +38,10 @@ export default function InsightsButton({ onOpen }) {
       state.startY = event.touches[0].clientY;
       state.progress = 0;
       state.zone = 0;
+      // "Grabbed" cue. Also the only pre-release moment iOS can buzz at:
+      // while the finger is dragging, iOS suppresses web haptics entirely,
+      // so the per-quarter ticks below are Android-only in practice.
+      haptic();
     }
 
     function onTouchMove(event) {
@@ -70,7 +74,11 @@ export default function InsightsButton({ onOpen }) {
       const shouldOpen = state.progress >= 0.95;
       paint(0, true);
       state.progress = 0;
-      if (shouldOpen) onOpenRef.current?.();
+      if (shouldOpen) {
+        // Fires on touchend — the finger is up, so this one lands on iOS too
+        hapticHeavy();
+        onOpenRef.current?.();
+      }
     }
 
     btn.addEventListener("touchstart", onTouchStart, { passive: true });
@@ -90,7 +98,7 @@ export default function InsightsButton({ onOpen }) {
       ref={btnRef}
       className="insights-button"
       onClick={() => {
-        haptic();
+        hapticHeavy();
         onOpen();
       }}
     >
