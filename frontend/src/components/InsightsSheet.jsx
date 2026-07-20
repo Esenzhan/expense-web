@@ -1,6 +1,5 @@
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { fetchInsights } from "../api";
 import { getCategoryIcon } from "../categoryIcons";
 import { getWalletIcon } from "../wallets";
 import InsightsChart from "./InsightsChart";
@@ -27,10 +26,7 @@ function daysInCurrentMonth() {
   return new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
 }
 
-export default function InsightsSheet({ period, wallet, walletBalance, onClose }) {
-  const [loading, setLoading] = useState(true);
-  const [data, setData] = useState(null);
-  const [error, setError] = useState("");
+export default function InsightsSheet({ period, insights: data, wallet, walletBalance, onClose }) {
   const [monthlyLimit, setMonthlyLimit] = useState(() => readLimit(wallet));
   const [editingLimit, setEditingLimit] = useState(false);
   const [limitDraft, setLimitDraft] = useState("");
@@ -51,22 +47,8 @@ export default function InsightsSheet({ period, wallet, walletBalance, onClose }
   const sheetRef = useRef(null);
   useSwipeDismiss(sheetRef, onClose);
 
-  useEffect(() => {
-    let cancelled = false;
-    setLoading(true);
-    fetchInsights(period, wallet)
-      .then((result) => {
-        if (cancelled) return;
-        if (result.error) setError(result.error);
-        else setData(result);
-      })
-      .catch((err) => !cancelled && setError(err.message))
-      .finally(() => !cancelled && setLoading(false));
-    return () => {
-      cancelled = true;
-    };
-  }, [period, wallet]);
-
+  // `data` (aliased from the `insights` prop) is computed by App.jsx in the
+  // background — already fresh by the time this sheet opens, no fetch here.
   const biggestIcon = data?.biggestExpense ? getCategoryIcon(data.biggestExpense.category) : null;
 
   // Портал в body: шторка рендерится внутри .app, который при открытии
@@ -93,10 +75,9 @@ export default function InsightsSheet({ period, wallet, walletBalance, onClose }
           </button>
         </div>
 
-        {loading && <div className="sheet-spinner" />}
-        {!loading && error && <p className="sheet-error">{error}</p>}
+        {!data && <div className="sheet-spinner" />}
 
-        {!loading && !error && data && (
+        {data && (
           <>
             <div className="insights-period-pill">{PERIOD_LABELS[period] || PERIOD_LABELS.month}</div>
             <div className="insights-total">−{tenge(data.total)}</div>

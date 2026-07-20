@@ -1,6 +1,5 @@
 import { Router } from "express";
 import { pool } from "../db.js";
-import { periodRange, computeInsights } from "../services/computeInsights.js";
 
 export const statsRouter = Router();
 
@@ -62,36 +61,4 @@ statsRouter.get("/daily", async (req, res) => {
     [Number(days)]
   );
   res.json(rows);
-});
-
-// Pure computed stats for the Insights sheet — no LLM, just arithmetic over
-// the raw rows: cumulative spend trend, biggest expense, most expensive day,
-// no-spend streak, weekend share, transaction count.
-statsRouter.get("/insights", async (req, res) => {
-  const { period = "month", wallet } = req.query;
-  const { start, end, prevStart, prevEnd } = periodRange(period);
-
-  const walletFilter = wallet ? "AND wallet = $3" : "";
-  const params = (a, b) => (wallet ? [a, b, wallet] : [a, b]);
-
-  const [{ rows }, { rows: prevRows }] = await Promise.all([
-    pool.query(
-      `SELECT amount, category, description, created_at FROM expenses
-       WHERE created_at >= $1 AND created_at < $2 ${walletFilter} ORDER BY created_at ASC`,
-      params(start, end)
-    ),
-    pool.query(
-      `SELECT COALESCE(SUM(amount), 0) AS total FROM expenses
-       WHERE created_at >= $1 AND created_at < $2 ${walletFilter}`,
-      params(prevStart, prevEnd)
-    ),
-  ]);
-
-  const insights = computeInsights({
-    period,
-    rows,
-    previousTotal: Number(prevRows[0].total),
-  });
-
-  res.json(insights);
 });

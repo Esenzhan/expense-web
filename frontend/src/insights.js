@@ -1,15 +1,13 @@
-// Pure arithmetic over the raw expense rows — no LLM involved. Day bucketing
-// uses a fixed Asia/Almaty (UTC+5) offset so "today"/"yesterday" match the
-// user's phone regardless of which timezone the server itself runs in.
+// Pure arithmetic over expense rows — ported from the backend's
+// computeInsights.js so the Insights sheet can be computed entirely
+// client-side: instant to open (no network round trip) and correct offline,
+// since it only ever needs whatever expense rows are already cached locally.
+// Day bucketing uses a fixed Asia/Almaty (UTC+5) offset so "today"/"yesterday"
+// match the user's phone regardless of the device's own timezone.
 const ALMATY_OFFSET_MS = 5 * 60 * 60 * 1000;
 
 function almaty(date) {
   return new Date(date.getTime() + ALMATY_OFFSET_MS);
-}
-
-function dayKey(date) {
-  const a = almaty(date);
-  return `${a.getUTCFullYear()}-${a.getUTCMonth()}-${a.getUTCDate()}`;
 }
 
 function startOfAlmatyDay(date) {
@@ -50,7 +48,7 @@ export function periodRange(period, now = new Date()) {
   return { start, end, prevStart, prevEnd, daysInPeriod: days };
 }
 
-export function computeInsights({ period, rows, previousTotal, now = new Date() }) {
+export function computeInsights({ period, rows, previousTotal = 0, now = new Date() }) {
   const { start, end, daysInPeriod } = periodRange(period, now);
   const today = now < end ? now : addDays(end, -1);
   const todayIndex = Math.min(

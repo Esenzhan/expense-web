@@ -7,6 +7,15 @@ export async function fetchExpenses(params = {}) {
   return res.json();
 }
 
+// All expenses in a date range, for computing Insights client-side (see
+// insights.js) — a generous limit since this covers a whole period at once,
+// not just the most recent handful shown in the list.
+export async function fetchExpensesRange(from, to, wallet) {
+  const params = { from: from.toISOString(), to: to.toISOString(), limit: 2000 };
+  if (wallet) params.wallet = wallet;
+  return fetchExpenses(params);
+}
+
 // Safari: "Load failed", Chrome: "Failed to fetch", Firefox: "NetworkError
 // when attempting to fetch resource." — fetch throws a plain TypeError with
 // no `.code`, so matching the message is the only reliable signal.
@@ -53,13 +62,6 @@ export async function fetchSummary(period = "month", wallet) {
   const qs = new URLSearchParams({ period });
   if (wallet) qs.set("wallet", wallet);
   const res = await fetch(`${API_BASE}/api/stats/summary?${qs}`);
-  return res.json();
-}
-
-export async function fetchInsights(period = "month", wallet) {
-  const qs = new URLSearchParams({ period });
-  if (wallet) qs.set("wallet", wallet);
-  const res = await fetch(`${API_BASE}/api/stats/insights?${qs}`);
   return res.json();
 }
 

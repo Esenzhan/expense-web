@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
-import { fetchExpenses, fetchWalletTotals, fetchSummary, fetchCategories, fetchWallets, warmBackend, createExpense } from "./api";
+import { fetchExpenses, fetchExpensesRange, fetchWalletTotals, fetchSummary, fetchCategories, fetchWallets, warmBackend, createExpense } from "./api";
 import { listPendingExpenses, syncPendingExpenses, hasPendingExpenses } from "./offlineQueue";
+import { computeInsights, periodRange } from "./insights";
 import { hydrateCategories } from "./categoryIcons";
 import { hydrateWallets, getWalletIcon } from "./wallets";
 import { haptic } from "./haptics";
@@ -54,6 +55,15 @@ export default function App() {
   const [expenses, setExpenses] = useState(cached.expenses || []);
   const [walletTotals, setWalletTotals] = useState(cached.walletTotals || []);
   const [summary, setSummary] = useState(cached.summary || { total: 0, categories: [] });
+  // Computed synchronously from whatever was cached last session, so even
+  // the very first render already has something to show — no flash of
+  // "loading" the instant the sheet is opened.
+  const [insights, setInsights] = useState(() => {
+    const initialWallet = localStorage.getItem("traty-wallet") || null;
+    const pending = listPendingExpenses();
+    const pendingForList = initialWallet ? pending.filter((p) => p.wallet === initialWallet) : pending;
+    return computeInsights({ period: "month", rows: [...pendingForList, ...(cached.insightsRows || [])] });
+  });
   const [insightsOpen, setInsightsOpen] = useState(false);
   const [editingExpense, setEditingExpense] = useState(null);
   const [addingExpense, setAddingExpense] = useState(false);
@@ -75,6 +85,7 @@ export default function App() {
     exp: cached.expenses || [],
     wallets: cached.walletTotals || [],
     sum: cached.summary || { total: 0, categories: [] },
+    insightsRows: cached.insightsRows || [],
   });
   const periodRef = useRef(period);
   periodRef.current = period;
@@ -138,9 +149,13 @@ export default function App() {
 
   // Layers the local pending-expenses queue on top of the last known server
   // data — this is what actually feeds the UI, so an offline manual add
-  // shows up in the list and totals immediately, without waiting for sync.
-  function mergeAndSet(wallet) {
-    const { exp, wallets, sum } = rawRef.current;
+  // shows up in the list, totals, and Insights immediately, without waiting
+  // for sync. Also recomputes Insights synchronously (see insights.js) so
+  // it's always ready before the sheet is even opened — no network call,
+  // no loading spinner, and it works offline since it's pure local
+  // arithmetic over whatever rows are cached.
+  function mergeAndSet(wallet, currentPeriod) {
+    const { exp, wallets, sum, insightsRows } = rawRef.current;
     const pending = listPendingExpenses();
     const pendingForList = wallet ? pending.filter((p) => p.wallet === wallet) : pending;
     const mergedExpenses = [...pendingForList, ...exp];
@@ -167,24 +182,27 @@ export default function App() {
     setExpenses(mergedExpenses);
     setWalletTotals(mergedWallets);
     setSummary(mergedSummary);
+    setInsights(computeInsights({ period: currentPeriod, rows: [...pendingForList, ...insightsRows] }));
   }
 
   async function refreshAll(currentPeriod, wallet = selectedWallet) {
     const expenseParams = { limit: 50 };
     if (wallet) expenseParams.wallet = wallet;
+    const { start, end } = periodRange(currentPeriod);
     try {
-      const [exp, wallets, sum] = await Promise.all([
+      const [exp, wallets, sum, insightsRows] = await Promise.all([
         fetchExpenses(expenseParams),
         fetchWalletTotals(),
         fetchSummary(currentPeriod, wallet),
+        fetchExpensesRange(start, end, wallet),
       ]);
-      rawRef.current = { exp, wallets, sum };
-      saveCache({ expenses: exp, walletTotals: wallets, summary: sum, wallet });
+      rawRef.current = { exp, wallets, sum, insightsRows };
+      saveCache({ expenses: exp, walletTotals: wallets, summary: sum, insightsRows, wallet });
     } catch {
       // Offline — nothing fresh from the server, keep the last known data
       // and just re-merge whatever's pending below
     }
-    mergeAndSet(wallet);
+    mergeAndSet(wallet, currentPeriod);
   }
 
   useEffect(() => {
@@ -299,6 +317,7 @@ export default function App() {
       {insightsOpen && (
         <InsightsSheet
           period={period}
+          insights={insights}
           wallet={selectedWallet}
           walletBalance={walletBalance}
           onClose={() => setInsightsOpen(false)}
