@@ -55,6 +55,16 @@ export function openDeepgramStream({ onPartial, onFinal, onError }) {
         dgSocket.send(chunk);
       }
     },
+    // The recording ended: ask Deepgram to flush the final transcript for
+    // whatever audio it has. Deliberately does NOT close the socket — the
+    // flushed transcript still has to arrive; Deepgram closes after flushing.
+    // Without this, an utterance that isn't followed by ≥500ms of in-stream
+    // silence never gets an is_final and the client hangs on "Обрабатываю…".
+    finish() {
+      if (dgSocket.readyState === WebSocket.OPEN) {
+        dgSocket.send(JSON.stringify({ type: "CloseStream" }));
+      }
+    },
     close() {
       if (dgSocket.readyState === WebSocket.OPEN) {
         dgSocket.send(JSON.stringify({ type: "CloseStream" }));

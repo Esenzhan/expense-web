@@ -62,6 +62,17 @@ wss.on("connection", (clientSocket) => {
   clientSocket.on("message", (data, isBinary) => {
     if (isBinary) {
       dgStream.sendAudioChunk(data);
+      return;
+    }
+    try {
+      const msg = JSON.parse(data.toString());
+      if (msg.type === "stop") {
+        // Client finished recording — flush Deepgram so the final
+        // transcript arrives now instead of waiting for in-stream silence
+        dgStream.finish();
+      }
+    } catch {
+      // ignore malformed control frames
     }
   });
 

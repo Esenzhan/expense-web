@@ -92,6 +92,17 @@ export default function VoiceRecorder({ onSaved, onManualAdd }) {
 
   function stopRecording() {
     haptic();
+    const recorder = mediaRecorderRef.current;
+    if (recorder) {
+      // The final dataavailable fires before onstop, so by this point the
+      // last audio chunk is already on the wire — now tell the server the
+      // recording is over so it can flush Deepgram's final transcript.
+      recorder.onstop = () => {
+        if (wsRef.current?.readyState === WebSocket.OPEN) {
+          wsRef.current.send(JSON.stringify({ type: "stop" }));
+        }
+      };
+    }
     stopMedia();
     setPhase("processing");
     // Socket stays open until the server sends "parsed"/"error" so we don't
