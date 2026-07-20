@@ -28,32 +28,74 @@ function formatDisplay(raw) {
   return hasComma ? `${grouped},${decPart}` : grouped;
 }
 
-// A plain useState per field would let rapid/batched presses (React 18
-// batches state updates within one tick) read a stale `display` closure and
-// silently drop keystrokes. useReducer guarantees every action sees the
-// result of the one before it.
+const OPS = ["+", "−", "×", "÷"];
+const isOp = (token) => OPS.includes(token);
+
+// The calculator works like the reference: the whole chain is kept as
+// tokens ("200", "+", "500", "×", "5", …), evaluated strictly left to right
+// (no operator precedence — matches the reference's math), the full
+// expression is shown in a strip above the amount, and the big number is
+// the live running result.
+function evaluateTokens(tokens) {
+  let acc = null;
+  let op = null;
+  for (const token of tokens) {
+    if (isOp(token)) {
+      op = token;
+      continue;
+    }
+    const value = toNumber(token);
+    acc = acc === null ? value : applyOp(acc, value, op);
+  }
+  return acc ?? 0;
+}
+
+// Evaluated result back into a display string ("125.5" → "125,5"),
+// rounded so long division chains don't overflow the big display.
+function resultToDisplay(value) {
+  return String(Math.round(value * 100) / 100).replace(".", ",");
+}
+
+// useReducer (not useState) so rapid/batched key presses each see the
+// result of the previous one — with plain state, React 18's batching made
+// fast typing read stale closures and drop keystrokes.
 function calcReducer(state, action) {
+  const tokens = [...state.tokens];
+  const last = tokens[tokens.length - 1];
   switch (action.type) {
     case "digit": {
-      if (state.overwrite) return { ...state, display: action.value, overwrite: false };
-      if (state.display === "0") return { ...state, display: action.value };
-      if (state.display.replace(",", "").length >= 9) return state;
-      return { ...state, display: state.display + action.value };
+      if (isOp(last)) return { tokens: [...tokens, action.value] };
+      if (last.replace(",", "").length >= 9) return state;
+      tokens[tokens.length - 1] = last === "0" ? action.value : last + action.value;
+      return { tokens };
     }
     case "comma": {
-      if (state.overwrite) return { ...state, display: "0,", overwrite: false };
-      if (state.display.includes(",")) return state;
-      return { ...state, display: state.display + "," };
+      if (isOp(last)) return { tokens: [...tokens, "0,"] };
+      if (last.includes(",")) return state;
+      tokens[tokens.length - 1] = last + ",";
+      return { tokens };
     }
-    case "backspace":
-      return { ...state, display: state.display.length > 1 ? state.display.slice(0, -1) : "0" };
     case "operator": {
-      const current = toNumber(state.display);
-      if (state.pendingOp && !state.overwrite) {
-        const result = applyOp(state.stored, current, state.pendingOp);
-        return { display: String(result), stored: result, pendingOp: action.value, overwrite: true };
+      if (isOp(last)) {
+        tokens[tokens.length - 1] = action.value; // retap = swap the operator
+        return { tokens };
       }
-      return { ...state, stored: current, pendingOp: action.value, overwrite: true };
+      return { tokens: [...tokens, action.value] };
+    }
+    case "backspace": {
+      if (isOp(last)) {
+        tokens.pop();
+        return { tokens };
+      }
+      if (last.length > 1) {
+        tokens[tokens.length - 1] = last.slice(0, -1);
+        return { tokens };
+      }
+      if (tokens.length > 1) {
+        tokens.pop(); // single-digit operand gone; next tap removes the operator
+        return { tokens };
+      }
+      return { tokens: ["0"] };
     }
     default:
       return state;
@@ -64,10 +106,7 @@ export default function EditExpenseSheet({ expense, defaultWallet, onClose, onSa
   const isNew = !expense;
   const isPending = Boolean(expense?.pending);
   const [calc, dispatch] = useReducer(calcReducer, {
-    display: isNew ? "0" : String(Number(expense.amount)),
-    stored: null,
-    pendingOp: null,
-    overwrite: false,
+    tokens: [isNew ? "0" : String(Number(expense.amount)).replace(".", ",")],
   });
   const walletNames = listWallets().map((w) => w.name);
   const [wallet, setWallet] = useState(expense?.wallet || defaultWallet || walletNames[0]);
@@ -112,7 +151,7 @@ export default function EditExpenseSheet({ expense, defaultWallet, onClose, onSa
       const distance = Math.abs(child.offsetLeft + child.offsetWidth / 2 - middle);
       const step = child.offsetWidth + 10; // tile + flex gap
       const proximity = Math.max(0, 1 - distance / step); // 1 at center → 0 one slot away
-      child.style.transform = `scale(${1 + 0.22 * proximity})`;
+      child.style.transform = `scale(${1 + 0.4 * proximity})`;
       child.style.opacity = `${0.65 + 0.35 * proximity}`;
     }
   }
@@ -150,8 +189,7 @@ export default function EditExpenseSheet({ expense, defaultWallet, onClose, onSa
   }
 
   function finalAmount() {
-    const current = toNumber(calc.display);
-    return calc.pendingOp ? applyOp(calc.stored, current, calc.pendingOp) : current;
+    return evaluateTokens(calc.tokens);
   }
 
   const icon = getCategoryIcon(category);
@@ -240,7 +278,16 @@ export default function EditExpenseSheet({ expense, defaultWallet, onClose, onSa
           )}
         </div>
 
-        <div className="edit-amount">{formatDisplay(calc.display)} ₸</div>
+        <div className="edit-amount-zone">
+          {calc.tokens.length > 1 && (
+            <div className="calc-expression">
+              {calc.tokens.map((t) => (isOp(t) ? t : formatDisplay(t))).join(" ")}
+            </div>
+          )}
+          <div className="edit-amount">
+            {formatDisplay(calc.tokens.length === 1 ? calc.tokens[0] : resultToDisplay(evaluateTokens(calc.tokens)))} ₸
+          </div>
+        </div>
 
         <div className="edit-wallet-row">
           <span className="category-icon" style={{ background: icon.bg, color: icon.fg }}>

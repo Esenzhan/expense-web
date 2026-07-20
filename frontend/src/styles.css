@@ -549,17 +549,27 @@ body {
 
 /* Edit expense sheet */
 .edit-sheet {
+  /* Near-full-screen, pinned to the backdrop's edges (same trick as the
+     Insights sheet — height:vh on flex items glitches on iOS): the amount
+     zone stretches, so wallet/note/categories/keypad all sit at the bottom
+     of the screen within thumb reach, like the reference */
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  top: 6vh;
+  top: 6dvh;
+  margin: 0 auto;
   width: 100%;
   max-width: 480px;
-  max-height: 90vh;
   overflow-y: auto;
   overscroll-behavior: contain;
   background: var(--surface);
   border-radius: 24px 24px 0 0;
-  padding: 16px 18px calc(env(safe-area-inset-bottom) + 20px);
+  padding: 16px 18px calc(env(safe-area-inset-bottom) + 14px);
   display: flex;
   flex-direction: column;
-  gap: 14px;
+  gap: 12px;
   animation: sheet-up 0.32s cubic-bezier(0.2, 0.9, 0.3, 1);
 }
 
@@ -629,12 +639,34 @@ body {
   color: var(--danger);
 }
 
+/* Flexible middle zone: soaks up the free vertical space so everything
+   below it (wallet, note, categories, keypad, save) sinks to the bottom */
+.edit-amount-zone {
+  flex: 1;
+  min-height: 84px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+}
+
+.calc-expression {
+  background: var(--surface-soft);
+  color: var(--ink-soft);
+  font-weight: 600;
+  font-size: 13px;
+  padding: 6px 12px;
+  border-radius: 10px;
+  text-align: center;
+  max-width: 100%;
+}
+
 .edit-amount {
   text-align: center;
   font-family: var(--font-mono);
   font-size: 40px;
   font-weight: 700;
-  padding: 10px 0;
 }
 
 .edit-wallet-row {
@@ -670,13 +702,14 @@ body {
   color: var(--ink-soft);
 }
 
-/* Center-snap carousel: the icon in the middle of the row is the selection */
+/* Center-snap carousel: the icon in the middle of the row is the selection.
+   Vertical padding leaves room for the centered tile's 1.4x scale-up. */
 .category-row {
   display: flex;
   gap: 10px;
   overflow-x: auto;
   scroll-snap-type: x mandatory;
-  padding: 8px calc(50% - 22px);
+  padding: 12px calc(50% - 22px);
   scrollbar-width: none;
   -webkit-overflow-scrolling: touch;
 }
@@ -721,8 +754,9 @@ body {
   font-family: var(--font-ui);
   font-weight: 700;
   font-size: 18px;
-  padding: 16px 0;
-  border-radius: 14px;
+  /* Flatter keys, like the reference — less vertical travel for the thumb */
+  padding: 12px 0;
+  border-radius: 16px;
 }
 
 .key.op {
