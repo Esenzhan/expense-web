@@ -1,9 +1,5 @@
 const CACHE_NAME = "traty-shell-v2";
 
-function notifyDebug(data) {
-  self.clients.matchAll().then((clients) => clients.forEach((c) => c.postMessage({ __swDebug: true, ...data })));
-}
-
 self.addEventListener("install", (event) => {
   self.skipWaiting();
 });
@@ -36,13 +32,7 @@ self.addEventListener("fetch", (event) => {
     // inside a second, separately-scheduled .then(), racing the renderer.
     const fetchPromise = fetch(request).then((response) => {
       const toCache = response.clone();
-      event.waitUntil(
-        caches
-          .open(CACHE_NAME)
-          .then((cache) => cache.put(request, toCache))
-          .then(() => notifyDebug({ step: "navigate-cache-put-ok", url: request.url }))
-          .catch((err) => notifyDebug({ step: "navigate-cache-put-failed", url: request.url, error: String(err) }))
-      );
+      event.waitUntil(caches.open(CACHE_NAME).then((cache) => cache.put(request, toCache)));
       return response;
     });
 
