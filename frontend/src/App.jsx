@@ -1,12 +1,25 @@
 import { useEffect, useState } from "react";
-import { fetchExpenses, fetchWalletTotals, fetchSummary } from "./api";
+import { fetchExpenses, fetchWalletTotals, fetchSummary, fetchCategories } from "./api";
+import { hydrateCategories } from "./categoryIcons";
+import { haptic } from "./haptics";
 import VoiceRecorder from "./components/VoiceRecorder";
 import ExpenseList from "./components/ExpenseList";
 import InsightsSheet from "./components/InsightsSheet";
 import InsightsButton from "./components/InsightsButton";
 import EditExpenseSheet from "./components/EditExpenseSheet";
+import SettingsSheet from "./components/SettingsSheet";
+import CategoriesSheet from "./components/CategoriesSheet";
+import NewCategorySheet from "./components/NewCategorySheet";
 
-const CACHE_KEY = "traty-cache-v3";
+const CACHE_KEY = "traty-cache-v4";
+
+function HeaderIcon({ children }) {
+  return (
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+      {children}
+    </svg>
+  );
+}
 
 const PERIODS = [
   { value: "month", label: "Этот месяц" },
@@ -40,6 +53,30 @@ export default function App() {
   const [insightsOpen, setInsightsOpen] = useState(false);
   const [editingExpense, setEditingExpense] = useState(null);
   const [addingExpense, setAddingExpense] = useState(false);
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [categoriesOpen, setCategoriesOpen] = useState(false);
+  const [newCategoryOpen, setNewCategoryOpen] = useState(false);
+  const [, setCategoriesVersion] = useState(0);
+
+  async function reloadCategories() {
+    try {
+      const list = await fetchCategories();
+      hydrateCategories(list);
+      localStorage.setItem("traty-categories", JSON.stringify(list));
+      setCategoriesVersion((v) => v + 1); // re-render everything that shows icons
+    } catch {
+      // offline — keep whatever we have
+    }
+  }
+
+  useEffect(() => {
+    try {
+      hydrateCategories(JSON.parse(localStorage.getItem("traty-categories")));
+    } catch {
+      // no cached categories yet
+    }
+    reloadCategories();
+  }, []);
 
   async function refreshAll(currentPeriod) {
     const [exp, wallets, sum] = await Promise.all([
@@ -59,7 +96,6 @@ export default function App() {
     refreshAll(period);
   }, [period]);
 
-  const monthLabel = new Date().toLocaleDateString("ru-RU", { month: "long", year: "numeric" });
   const walletBalance = walletTotals.reduce((sum, w) => sum + Number(w.total), 0);
 
   return (
@@ -74,7 +110,27 @@ export default function App() {
             </div>
           </div>
         </div>
-        <span className="month">{monthLabel}</span>
+        <div className="header-actions">
+          <button className="header-icon" aria-label="Поиск">
+            <HeaderIcon><circle cx="11" cy="11" r="6" /><path d="m16 16 4 4" /></HeaderIcon>
+          </button>
+          <button className="header-icon" aria-label="Статистика">
+            <HeaderIcon><circle cx="12" cy="12" r="8" /><path d="M12 4v8h8" /></HeaderIcon>
+          </button>
+          <button className="header-icon" aria-label="Кошельки">
+            <HeaderIcon><ellipse cx="12" cy="7" rx="7" ry="2.5" /><path d="M5 7v10c0 1.4 3.1 2.5 7 2.5s7-1.1 7-2.5V7" /><path d="M5 12c0 1.4 3.1 2.5 7 2.5s7-1.1 7-2.5" /></HeaderIcon>
+          </button>
+          <button
+            className="header-icon"
+            aria-label="Настройки"
+            onClick={() => {
+              haptic();
+              setSettingsOpen(true);
+            }}
+          >
+            <HeaderIcon><circle cx="12" cy="12" r="3" /><path d="M12 2.5v3M12 18.5v3M2.5 12h3M18.5 12h3M5.3 5.3l2.1 2.1M16.6 16.6l2.1 2.1M18.7 5.3l-2.1 2.1M7.4 16.6l-2.1 2.1" /></HeaderIcon>
+          </button>
+        </div>
       </div>
 
       <div className="summary-card">
@@ -129,6 +185,30 @@ export default function App() {
           onSaved={() => {
             setAddingExpense(false);
             refreshAll(period);
+          }}
+        />
+      )}
+
+      {settingsOpen && (
+        <SettingsSheet
+          onClose={() => setSettingsOpen(false)}
+          onOpenCategories={() => setCategoriesOpen(true)}
+        />
+      )}
+
+      {categoriesOpen && (
+        <CategoriesSheet
+          onClose={() => setCategoriesOpen(false)}
+          onAdd={() => setNewCategoryOpen(true)}
+        />
+      )}
+
+      {newCategoryOpen && (
+        <NewCategorySheet
+          onClose={() => setNewCategoryOpen(false)}
+          onCreated={async () => {
+            await reloadCategories();
+            setNewCategoryOpen(false);
           }}
         />
       )}

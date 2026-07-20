@@ -1,6 +1,6 @@
 import { useEffect, useReducer, useRef, useState } from "react";
 import { createExpense, updateExpense, deleteExpense } from "../api";
-import { CATEGORIES, getCategoryIcon } from "../categoryIcons";
+import { listCategories, getCategoryIcon } from "../categoryIcons";
 import { WALLETS } from "../wallets";
 import { haptic, hapticTick } from "../haptics";
 import { useSwipeDismiss } from "../sheetGestures";
@@ -67,7 +67,8 @@ export default function EditExpenseSheet({ expense, onClose, onSaved, onDeleted 
     overwrite: false,
   });
   const [wallet, setWallet] = useState(expense?.wallet || WALLETS[0]);
-  const [category, setCategory] = useState(expense?.category || CATEGORIES[0]);
+  const categoryNames = listCategories().map((c) => c.name);
+  const [category, setCategory] = useState(expense?.category || categoryNames[0]);
   const [note, setNote] = useState(expense?.description || "");
   const [menuOpen, setMenuOpen] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
@@ -91,7 +92,7 @@ export default function EditExpenseSheet({ expense, onClose, onSaved, onDeleted 
   useEffect(() => {
     // Start with the current category centered (no animation on mount)
     const row = categoryRowRef.current;
-    if (row) row.scrollLeft = centerOf(row, CATEGORIES.indexOf(categoryRef.current));
+    if (row) row.scrollLeft = centerOf(row, categoryNames.indexOf(categoryRef.current));
   }, []);
 
   function onCategoryScroll() {
@@ -108,7 +109,7 @@ export default function EditExpenseSheet({ expense, onClose, onSaved, onDeleted 
         bestIndex = i;
       }
     }
-    const centered = CATEGORIES[bestIndex];
+    const centered = categoryNames[bestIndex];
     if (centered && centered !== categoryRef.current) {
       setCategory(centered);
       hapticTick();
@@ -226,7 +227,7 @@ export default function EditExpenseSheet({ expense, onClose, onSaved, onDeleted 
         />
 
         <div className="category-row" ref={categoryRowRef} onScroll={onCategoryScroll}>
-          {CATEGORIES.map((cat, index) => {
+          {categoryNames.map((cat, index) => {
             const catIcon = getCategoryIcon(cat);
             return (
               <button

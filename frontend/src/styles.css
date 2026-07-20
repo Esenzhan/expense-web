@@ -86,11 +86,22 @@ body {
   font-family: var(--font-mono);
 }
 
-.app-header .month {
-  font-family: var(--font-mono);
-  color: var(--ink-soft);
-  font-size: 12px;
-  text-transform: uppercase;
+.header-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.header-icon {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  border: none;
+  background: var(--surface);
+  color: var(--ink);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 2px 8px rgba(20, 20, 26, 0.06);
 }
 
 /* Spend summary card */
@@ -929,4 +940,332 @@ body {
 
 .insights-card-value.accent {
   color: #e07a2e;
+}
+
+/* Settings page — pushed in from the right like native navigation */
+@keyframes page-in {
+  from {
+    transform: translateX(100%);
+  }
+  to {
+    transform: translateX(0);
+  }
+}
+
+.settings-page {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+  background: var(--bg);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: calc(env(safe-area-inset-top) + 16px) 16px calc(env(safe-area-inset-bottom) + 30px);
+  animation: page-in 0.3s cubic-bezier(0.2, 0.9, 0.3, 1);
+}
+
+.settings-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 14px;
+}
+
+.settings-header .icon-button {
+  background: var(--surface);
+  font-size: 22px;
+  box-shadow: 0 2px 8px rgba(20, 20, 26, 0.06);
+}
+
+.settings-title {
+  font-weight: 700;
+  font-size: 17px;
+}
+
+.settings-section {
+  font-size: 13px;
+  color: var(--ink-soft);
+  margin: 18px 4px 8px;
+}
+
+.settings-group {
+  background: var(--surface);
+  border-radius: 16px;
+  overflow: hidden;
+  margin-bottom: 12px;
+}
+
+.settings-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  border: none;
+  background: none;
+  padding: 14px;
+  font-family: var(--font-ui);
+  font-size: 15px;
+  color: var(--ink);
+  border-bottom: 1px solid var(--border);
+  text-align: left;
+}
+
+.settings-row:last-child {
+  border-bottom: none;
+}
+
+.settings-row.danger {
+  color: var(--danger);
+}
+
+.settings-row-icon {
+  display: flex;
+  color: var(--ink);
+  min-width: 22px;
+}
+
+.settings-row.danger .settings-row-icon {
+  color: var(--danger);
+}
+
+.settings-row-label {
+  flex: 1;
+  min-width: 0;
+}
+
+.settings-row-value {
+  color: var(--ink-soft);
+  font-size: 14px;
+  white-space: nowrap;
+}
+
+.settings-badge {
+  background: var(--ink);
+  color: #fff;
+  font-size: 11px;
+  font-weight: 700;
+  padding: 3px 8px;
+  border-radius: 999px;
+}
+
+/* iOS-style switch */
+.switch {
+  width: 48px;
+  height: 29px;
+  min-width: 48px;
+  border-radius: 999px;
+  background: var(--border);
+  display: inline-flex;
+  align-items: center;
+  padding: 2px;
+  transition: background 0.2s ease;
+}
+
+.switch.on {
+  background: var(--ink);
+}
+
+.switch-knob {
+  width: 25px;
+  height: 25px;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 1px 4px rgba(20, 20, 26, 0.25);
+  transition: transform 0.2s ease;
+}
+
+.switch.on .switch-knob {
+  transform: translateX(19px);
+}
+
+/* Sheets stack above the settings page */
+.sheet-backdrop {
+  z-index: 50;
+}
+
+/* Categories manager + new category */
+.categories-sheet {
+  width: 100%;
+  max-width: 480px;
+  height: 92vh;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  background: var(--surface);
+  border-radius: 24px 24px 0 0;
+  padding: 16px 18px calc(env(safe-area-inset-bottom) + 20px);
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  animation: sheet-up 0.32s cubic-bezier(0.2, 0.9, 0.3, 1);
+}
+
+.cats-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.cats-header .icon-button {
+  font-size: 18px;
+}
+
+.cats-title {
+  font-weight: 700;
+  font-size: 16px;
+}
+
+.type-toggle {
+  align-self: center;
+  display: flex;
+  align-items: center;
+  background: var(--surface-soft);
+  border-radius: 999px;
+  padding: 4px;
+  gap: 4px;
+}
+
+.type-side {
+  padding: 7px 12px;
+  border-radius: 999px;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--ink-soft);
+}
+
+.type-side.income {
+  color: #2f8f4e;
+}
+
+.type-side.expense.active {
+  background: #ffe6d1;
+  color: #c2681f;
+}
+
+.cats-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.cat-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  background: var(--surface-soft);
+  border-radius: 14px;
+  padding: 10px 12px;
+}
+
+.cat-name {
+  flex: 1;
+  font-weight: 600;
+  font-size: 15px;
+}
+
+.drag-handle {
+  color: var(--ink-soft);
+  font-size: 15px;
+  letter-spacing: 2px;
+}
+
+.parent-category-pill {
+  align-self: center;
+  border: 1.5px dashed var(--paper-dim, #cfc8b8);
+  border-color: var(--border);
+  background: none;
+  color: var(--ink-soft);
+  font-size: 14px;
+  padding: 10px 18px;
+  border-radius: 999px;
+  font-family: var(--font-ui);
+}
+
+.newcat-name-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.newcat-name-input {
+  flex: 1;
+}
+
+.newcat-suggestions-label {
+  color: var(--ink-soft);
+  font-size: 13px;
+  margin: 0;
+}
+
+.newcat-suggestions {
+  display: flex;
+  gap: 8px;
+  overflow-x: auto;
+  scrollbar-width: none;
+  padding-bottom: 2px;
+}
+
+.newcat-suggestions::-webkit-scrollbar {
+  display: none;
+}
+
+.palette-row {
+  display: flex;
+  gap: 8px;
+  overflow-x: auto;
+  scrollbar-width: none;
+  background: var(--surface-soft);
+  border-radius: 14px;
+  padding: 10px;
+}
+
+.palette-row::-webkit-scrollbar {
+  display: none;
+}
+
+.palette-swatch {
+  width: 40px;
+  height: 40px;
+  min-width: 40px;
+  border-radius: 12px;
+  border: 3px solid transparent;
+}
+
+.palette-swatch.picked {
+  border-color: var(--ink);
+}
+
+.newcat-icon-groups {
+  background: var(--surface-soft);
+  border-radius: 14px;
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.newcat-group-title {
+  color: var(--ink-soft);
+  font-size: 13px;
+  margin: 0 0 6px;
+}
+
+.newcat-icon-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(44px, 1fr));
+  gap: 8px;
+}
+
+.newcat-icon {
+  width: 44px;
+  height: 44px;
+  border-radius: 12px;
+  border: 2px solid transparent;
+  background: var(--surface);
+  font-size: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.newcat-icon.picked {
+  border-color: var(--ink);
 }

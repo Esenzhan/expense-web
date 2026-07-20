@@ -51,3 +51,21 @@ export async function fetchInsights(period = "month") {
   const res = await fetch(`${API_BASE}/api/stats/insights?period=${period}`);
   return res.json();
 }
+
+export async function fetchCategories() {
+  const res = await fetch(`${API_BASE}/api/categories`);
+  return res.json();
+}
+
+export async function createCategory(payload) {
+  const res = await fetch(`${API_BASE}/api/categories`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    throw new Error(body.error || "Не удалось создать категорию");
+  }
+  return res.json();
+}
