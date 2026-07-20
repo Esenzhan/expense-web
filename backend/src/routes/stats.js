@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { pool } from "../db.js";
-import { generateInsight } from "../services/insights.js";
+import { periodRange, computeInsights } from "../services/computeInsights.js";
 
 export const statsRouter = Router();
 
@@ -58,27 +58,31 @@ statsRouter.get("/daily", async (req, res) => {
   res.json(rows);
 });
 
-// One-shot natural-language insight for the same period as /summary
+// Pure computed stats for the Insights sheet — no LLM, just arithmetic over
+// the raw rows: cumulative spend trend, biggest expense, most expensive day,
+// no-spend streak, weekend share, transaction count.
 statsRouter.get("/insights", async (req, res) => {
   const { period = "month" } = req.query;
-  const { where, values } = periodWhere(period);
+  const { start, end, prevStart, prevEnd } = periodRange(period);
 
-  const { rows } = await pool.query(
-    `SELECT category, COALESCE(SUM(amount), 0) AS total
-     FROM expenses
-     WHERE ${where}
-     GROUP BY category
-     ORDER BY total DESC`,
-    values
-  );
+  const [{ rows }, { rows: prevRows }] = await Promise.all([
+    pool.query(
+      `SELECT amount, category, description, created_at FROM expenses
+       WHERE created_at >= $1 AND created_at < $2 ORDER BY created_at ASC`,
+      [start, end]
+    ),
+    pool.query(
+      `SELECT COALESCE(SUM(amount), 0) AS total FROM expenses
+       WHERE created_at >= $1 AND created_at < $2`,
+      [prevStart, prevEnd]
+    ),
+  ]);
 
-  const total = rows.reduce((sum, row) => sum + Number(row.total), 0);
-  const periodLabel = period === "month" ? "текущий месяц" : `последние ${values[0] ?? 30} дней`;
+  const insights = computeInsights({
+    period,
+    rows,
+    previousTotal: Number(prevRows[0].total),
+  });
 
-  try {
-    const text = await generateInsight(rows, total, periodLabel);
-    res.json({ text });
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
+  res.json(insights);
 });

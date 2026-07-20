@@ -92,7 +92,13 @@ export default function App() {
           </div>
         </div>
         <div className="summary-total">−{Number(summary.total).toLocaleString("ru-RU")} ₸</div>
-        <button className="insights-button" onClick={() => setInsightsOpen(true)}>
+        <button
+          className="insights-button"
+          onClick={() => {
+            navigator.vibrate?.(10);
+            setInsightsOpen(true);
+          }}
+        >
           ✦ Инсайты
         </button>
       </div>
@@ -102,7 +108,11 @@ export default function App() {
       <VoiceRecorder onSaved={() => refreshAll(period)} onManualAdd={() => setAddingExpense(true)} />
 
       {insightsOpen && (
-        <InsightsSheet period={period} onClose={() => setInsightsOpen(false)} />
+        <InsightsSheet
+          period={period}
+          walletBalance={walletBalance}
+          onClose={() => setInsightsOpen(false)}
+        />
       )}
 
       {editingExpense && (
