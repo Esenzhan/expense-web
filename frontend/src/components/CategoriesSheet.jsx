@@ -2,6 +2,7 @@ import { useRef } from "react";
 import { listCategories } from "../categoryIcons";
 import { haptic } from "../haptics";
 import { useSwipeDismiss } from "../sheetGestures";
+import CategoryGlyph from "./CategoryGlyph";
 
 export default function CategoriesSheet({ onClose, onAdd }) {
   const sheetRef = useRef(null);
@@ -37,7 +38,7 @@ export default function CategoriesSheet({ onClose, onAdd }) {
           {categories.map((cat) => (
             <div className="cat-row" key={cat.name}>
               <span className="category-icon" style={{ background: cat.bg, color: cat.fg }}>
-                {cat.emoji}
+                <CategoryGlyph emoji={cat.emoji} size={20} />
               </span>
               <span className="cat-name">{cat.name}</span>
               <span className="drag-handle" aria-hidden="true">

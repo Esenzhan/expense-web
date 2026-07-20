@@ -2,6 +2,7 @@ import { useEffect, useReducer, useRef, useState } from "react";
 import { createExpense, updateExpense, deleteExpense, isNetworkError } from "../api";
 import { enqueueExpense, updatePendingExpense, removePendingExpense } from "../offlineQueue";
 import { listCategories, getCategoryIcon } from "../categoryIcons";
+import CategoryGlyph from "./CategoryGlyph";
 import { listWallets } from "../wallets";
 import { haptic, hapticTick } from "../haptics";
 import { useSwipeDismiss } from "../sheetGestures";
@@ -95,13 +96,32 @@ export default function EditExpenseSheet({ expense, defaultWallet, onClose, onSa
   useEffect(() => {
     // Start with the current category centered (no animation on mount)
     const row = categoryRowRef.current;
-    if (row) row.scrollLeft = centerOf(row, categoryNames.indexOf(categoryRef.current));
+    if (row) {
+      row.scrollLeft = centerOf(row, categoryNames.indexOf(categoryRef.current));
+      applyCarouselScales(row, row.scrollLeft + row.clientWidth / 2);
+    }
   }, []);
+
+  // Like the reference: each tile's scale follows the scroll position
+  // continuously — full size fades in as the tile approaches the center,
+  // not with a discrete jump once it snaps. Styles are written directly to
+  // the DOM (not through React state) so every scroll event repaints
+  // without a re-render.
+  function applyCarouselScales(row, middle) {
+    for (const child of row.children) {
+      const distance = Math.abs(child.offsetLeft + child.offsetWidth / 2 - middle);
+      const step = child.offsetWidth + 10; // tile + flex gap
+      const proximity = Math.max(0, 1 - distance / step); // 1 at center → 0 one slot away
+      child.style.transform = `scale(${1 + 0.22 * proximity})`;
+      child.style.opacity = `${0.65 + 0.35 * proximity}`;
+    }
+  }
 
   function onCategoryScroll() {
     const row = categoryRowRef.current;
     if (!row) return;
     const middle = row.scrollLeft + row.clientWidth / 2;
+    applyCarouselScales(row, middle);
     let bestIndex = 0;
     let bestDistance = Infinity;
     for (let i = 0; i < row.children.length; i++) {
@@ -224,7 +244,7 @@ export default function EditExpenseSheet({ expense, defaultWallet, onClose, onSa
 
         <div className="edit-wallet-row">
           <span className="category-icon" style={{ background: icon.bg, color: icon.fg }}>
-            {icon.emoji}
+            <CategoryGlyph emoji={icon.emoji} size={20} />
           </span>
           <select
             className="wallet-select"
@@ -253,12 +273,12 @@ export default function EditExpenseSheet({ expense, defaultWallet, onClose, onSa
             return (
               <button
                 key={cat}
-                className={`category-pick ${category === cat ? "selected" : ""}`}
+                className="category-pick"
                 style={{ background: catIcon.bg, color: catIcon.fg }}
                 onClick={() => scrollCategoryTo(index)}
                 aria-label={cat}
               >
-                {catIcon.emoji}
+                <CategoryGlyph emoji={catIcon.emoji} />
               </button>
             );
           })}

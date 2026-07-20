@@ -1,4 +1,5 @@
 import { getCategoryIcon } from "../categoryIcons";
+import CategoryGlyph from "./CategoryGlyph";
 
 function sameDay(a, b) {
   return (
@@ -59,7 +60,7 @@ export default function ExpenseList({ expenses, onSelect }) {
                   onClick={() => onSelect?.(expense)}
                 >
                   <span className="category-icon" style={{ background: icon.bg, color: icon.fg }}>
-                    {icon.emoji}
+                    <CategoryGlyph emoji={icon.emoji} size={20} />
                   </span>
                   <div className="meta">
                     <span className="category">{expense.category}</span>

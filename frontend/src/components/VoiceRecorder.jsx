@@ -1,6 +1,7 @@
 import { useRef, useState } from "react";
 import { WS_URL, createExpense } from "../api";
 import { getCategoryIcon } from "../categoryIcons";
+import CategoryGlyph from "./CategoryGlyph";
 import { haptic, hapticHeavy } from "../haptics";
 
 const CANDIDATE_MIME_TYPES = [
@@ -318,7 +319,7 @@ export default function VoiceRecorder({ onSaved, onManualAdd }) {
             </div>
             <div className="confirm-row">
               <span className="category-icon" style={{ background: icon.bg, color: icon.fg }}>
-                {icon.emoji}
+                <CategoryGlyph emoji={icon.emoji} size={20} />
               </span>
               <div className="confirm-meta">
                 <div className="confirm-category">{proposal.category}</div>

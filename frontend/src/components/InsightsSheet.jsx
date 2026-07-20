@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { getCategoryIcon } from "../categoryIcons";
 import { getWalletIcon } from "../wallets";
+import CategoryGlyph from "./CategoryGlyph";
 import InsightsChart from "./InsightsChart";
 import { useSwipeDismiss } from "../sheetGestures";
 
@@ -144,8 +145,8 @@ export default function InsightsSheet({ period, insights: data, wallet, walletBa
                 </div>
                 {data.biggestExpense ? (
                   <>
-                    <span className="insights-card-icon-badge" style={{ background: "#fff" }}>
-                      {biggestIcon.emoji}
+                    <span className="insights-card-icon-badge" style={{ background: "#fff", color: biggestIcon.fg }}>
+                      <CategoryGlyph emoji={biggestIcon.emoji} size={20} />
                     </span>
                     <div className="insights-card-sub">{data.biggestExpense.category}</div>
                     <div className="insights-card-value accent">{tenge(data.biggestExpense.amount)}</div>

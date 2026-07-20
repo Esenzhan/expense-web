@@ -696,13 +696,9 @@ body {
   align-items: center;
   justify-content: center;
   scroll-snap-align: center;
-  transition: transform 0.18s ease, opacity 0.18s ease;
   opacity: 0.65;
-}
-
-.category-pick.selected {
-  transform: scale(1.22);
-  opacity: 1;
+  /* Scale/opacity are driven per-scroll-event from JS (continuous, follows
+     the finger) — no CSS transition, it would lag behind the live values */
 }
 
 .category-caption {
