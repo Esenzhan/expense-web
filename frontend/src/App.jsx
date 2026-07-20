@@ -3,6 +3,7 @@ import { fetchExpenses, fetchWalletTotals, fetchSummary } from "./api";
 import VoiceRecorder from "./components/VoiceRecorder";
 import ExpenseList from "./components/ExpenseList";
 import InsightsSheet from "./components/InsightsSheet";
+import InsightsButton from "./components/InsightsButton";
 import EditExpenseSheet from "./components/EditExpenseSheet";
 
 const CACHE_KEY = "traty-cache-v3";
@@ -62,7 +63,7 @@ export default function App() {
   const walletBalance = walletTotals.reduce((sum, w) => sum + Number(w.total), 0);
 
   return (
-    <div className="app">
+    <div className={`app ${insightsOpen ? "app-behind" : ""}`}>
       <div className="app-header">
         <div className="wallet-chip">
           <span className="wallet-chip-icon">💳</span>
@@ -92,15 +93,7 @@ export default function App() {
           </div>
         </div>
         <div className="summary-total">−{Number(summary.total).toLocaleString("ru-RU")} ₸</div>
-        <button
-          className="insights-button"
-          onClick={() => {
-            navigator.vibrate?.(10);
-            setInsightsOpen(true);
-          }}
-        >
-          ✦ Инсайты
-        </button>
+        <InsightsButton onOpen={() => setInsightsOpen(true)} />
       </div>
 
       <ExpenseList expenses={expenses} onSelect={setEditingExpense} />

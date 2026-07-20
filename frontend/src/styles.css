@@ -41,6 +41,14 @@ body {
   display: flex;
   flex-direction: column;
   gap: 18px;
+  transform-origin: top center;
+  transition: transform 0.38s cubic-bezier(0.2, 0.9, 0.3, 1), border-radius 0.38s ease;
+}
+
+/* Main screen shrinks behind an open sheet, iOS-modal style */
+.app-behind {
+  transform: scale(0.94) translateY(10px);
+  border-radius: 24px;
 }
 
 /* Header */
@@ -143,13 +151,30 @@ body {
   color: var(--ink);
   font-weight: 700;
   font-size: 13px;
-  padding: 10px 16px;
-  border-radius: 999px;
-  transition: transform 0.12s ease;
+  height: 38px;
+  min-width: 110px;
+  padding: 0 16px;
+  border-radius: 75px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  overflow: hidden;
+  touch-action: none;
 }
 
-.insights-button:active {
-  transform: scale(0.9);
+.insights-button:active .insights-btn-icon {
+  transform: scale(1.2);
+}
+
+.insights-btn-icon {
+  display: inline-block;
+  transition: transform 0.15s ease;
+}
+
+.insights-btn-label {
+  white-space: nowrap;
+  overflow: hidden;
 }
 
 .section-title {
@@ -675,24 +700,20 @@ body {
   color: #fff;
 }
 
-/* Insights sheet */
-@keyframes sheet-grow {
+/* Insights sheet — slides up from the bottom like an iOS modal */
+@keyframes sheet-up {
   from {
-    transform: scale(0.4) translateY(10%);
-    opacity: 0;
-    border-radius: 999px;
+    transform: translateY(100%);
   }
   to {
-    transform: scale(1) translateY(0);
-    opacity: 1;
-    border-radius: 24px 24px 0 0;
+    transform: translateY(0);
   }
 }
 
 .insights-sheet {
   width: 100%;
   max-width: 480px;
-  max-height: 90vh;
+  max-height: 92vh;
   overflow-y: auto;
   background: linear-gradient(180deg, #fdf0e4 0%, var(--surface) 260px);
   border-radius: 24px 24px 0 0;
@@ -700,8 +721,7 @@ body {
   display: flex;
   flex-direction: column;
   gap: 14px;
-  transform-origin: bottom center;
-  animation: sheet-grow 0.32s cubic-bezier(0.2, 0.9, 0.3, 1);
+  animation: sheet-up 0.38s cubic-bezier(0.2, 0.9, 0.3, 1);
 }
 
 .insights-header {
@@ -822,6 +842,17 @@ body {
   gap: 10px;
 }
 
+@keyframes card-in {
+  from {
+    opacity: 0;
+    transform: translateY(16px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
 .insights-card {
   background: var(--surface-soft);
   border-radius: 16px;
@@ -829,7 +860,16 @@ body {
   min-height: 110px;
   display: flex;
   flex-direction: column;
+  animation: card-in 0.45s ease both;
 }
+
+/* Cards cascade in one after another, like the reference */
+.insights-card:nth-child(1) { animation-delay: 0.1s; }
+.insights-card:nth-child(2) { animation-delay: 0.18s; }
+.insights-card:nth-child(3) { animation-delay: 0.26s; }
+.insights-card:nth-child(4) { animation-delay: 0.34s; }
+.insights-card:nth-child(5) { animation-delay: 0.42s; }
+.insights-card:nth-child(6) { animation-delay: 0.5s; }
 
 .insights-card-head {
   display: flex;

@@ -2,6 +2,7 @@ import { useReducer, useState } from "react";
 import { createExpense, updateExpense, deleteExpense } from "../api";
 import { CATEGORIES, getCategoryIcon } from "../categoryIcons";
 import { WALLETS } from "../wallets";
+import { haptic } from "../haptics";
 
 function toNumber(raw) {
   return parseFloat(raw.replace(",", ".")) || 0;
@@ -71,6 +72,11 @@ export default function EditExpenseSheet({ expense, onClose, onSaved, onDeleted 
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
+
+  function press(action) {
+    haptic();
+    dispatch(action);
+  }
 
   function finalAmount() {
     const current = toNumber(calc.display);
@@ -196,39 +202,39 @@ export default function EditExpenseSheet({ expense, onClose, onSaved, onDeleted 
 
         <div className="keypad">
           {["1", "2", "3"].map((d) => (
-            <button key={d} className="key" onClick={() => dispatch({ type: "digit", value: d })}>
+            <button key={d} className="key" onClick={() => press({ type: "digit", value: d })}>
               {d}
             </button>
           ))}
-          <button className="key op" onClick={() => dispatch({ type: "operator", value: "+" })}>
+          <button className="key op" onClick={() => press({ type: "operator", value: "+" })}>
             +
           </button>
           {["4", "5", "6"].map((d) => (
-            <button key={d} className="key" onClick={() => dispatch({ type: "digit", value: d })}>
+            <button key={d} className="key" onClick={() => press({ type: "digit", value: d })}>
               {d}
             </button>
           ))}
-          <button className="key op" onClick={() => dispatch({ type: "operator", value: "−" })}>
+          <button className="key op" onClick={() => press({ type: "operator", value: "−" })}>
             −
           </button>
           {["7", "8", "9"].map((d) => (
-            <button key={d} className="key" onClick={() => dispatch({ type: "digit", value: d })}>
+            <button key={d} className="key" onClick={() => press({ type: "digit", value: d })}>
               {d}
             </button>
           ))}
-          <button className="key op" onClick={() => dispatch({ type: "operator", value: "×" })}>
+          <button className="key op" onClick={() => press({ type: "operator", value: "×" })}>
             ×
           </button>
-          <button className="key" onClick={() => dispatch({ type: "comma" })}>
+          <button className="key" onClick={() => press({ type: "comma" })}>
             ,
           </button>
-          <button className="key" onClick={() => dispatch({ type: "digit", value: "0" })}>
+          <button className="key" onClick={() => press({ type: "digit", value: "0" })}>
             0
           </button>
-          <button className="key" onClick={() => dispatch({ type: "backspace" })} aria-label="Стереть">
+          <button className="key" onClick={() => press({ type: "backspace" })} aria-label="Стереть">
             ⌫
           </button>
-          <button className="key op" onClick={() => dispatch({ type: "operator", value: "÷" })}>
+          <button className="key op" onClick={() => press({ type: "operator", value: "÷" })}>
             ÷
           </button>
         </div>

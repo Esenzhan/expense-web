@@ -1,6 +1,7 @@
 import { useRef, useState } from "react";
 import { WS_URL, createExpense } from "../api";
 import { getCategoryIcon } from "../categoryIcons";
+import { haptic, hapticHeavy } from "../haptics";
 
 const CANDIDATE_MIME_TYPES = [
   "audio/webm;codecs=opus",
@@ -36,6 +37,7 @@ export default function VoiceRecorder({ onSaved, onManualAdd }) {
   }
 
   async function startRecording() {
+    haptic();
     setTranscript("");
     setProposal(null);
     setErrorMessage("");
@@ -89,6 +91,7 @@ export default function VoiceRecorder({ onSaved, onManualAdd }) {
   }
 
   function stopRecording() {
+    haptic();
     stopMedia();
     setPhase("processing");
     // Socket stays open until the server sends "parsed"/"error" so we don't
@@ -123,6 +126,7 @@ export default function VoiceRecorder({ onSaved, onManualAdd }) {
     setErrorMessage("");
     try {
       const expense = await createExpense(proposal);
+      hapticHeavy();
       onSaved?.(expense);
       setProposal(null);
       setTranscript("");
