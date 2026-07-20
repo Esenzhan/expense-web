@@ -64,6 +64,10 @@ export function removePendingExpense(localId) {
   saveQueue(loadQueue().filter((e) => e.localId !== localId));
 }
 
+export function hasPendingExpenses() {
+  return loadQueue().length > 0;
+}
+
 // Flushes the queue through the real API, oldest first. Stops at the first
 // failure (still offline, or server still asleep) so order is preserved —
 // returns whether anything actually synced, so the caller knows to refresh.

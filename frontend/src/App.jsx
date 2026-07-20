@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { fetchExpenses, fetchWalletTotals, fetchSummary, fetchCategories, fetchWallets, warmBackend, createExpense } from "./api";
-import { listPendingExpenses, syncPendingExpenses } from "./offlineQueue";
+import { listPendingExpenses, syncPendingExpenses, hasPendingExpenses } from "./offlineQueue";
 import { hydrateCategories } from "./categoryIcons";
 import { hydrateWallets, getWalletIcon } from "./wallets";
 import { haptic } from "./haptics";
@@ -194,9 +194,13 @@ export default function App() {
   }, [period, selectedWallet]);
 
   useEffect(() => {
-    // Flush any expenses queued while offline as soon as we're back —
-    // on reconnect, and whenever the app returns to the foreground (the
-    // "online" event doesn't always fire reliably on iOS Safari).
+    // Flush any expenses queued while offline. Triggered on reconnect and on
+    // returning to the foreground, but neither is trustworthy alone — iOS
+    // Safari (especially in standalone/PWA mode) is known to skip the
+    // "online" event, and toggling Wi-Fi/cellular doesn't fire
+    // visibilitychange at all since the tab was never backgrounded. A
+    // 15s poll while anything is queued is what actually guarantees it
+    // eventually goes out.
     function trySyncPending() {
       syncPendingExpenses(createExpense).then((syncedAny) => {
         if (syncedAny) refreshAll(periodRef.current, selectedWalletRef.current);
@@ -208,9 +212,13 @@ export default function App() {
     trySyncPending();
     window.addEventListener("online", trySyncPending);
     document.addEventListener("visibilitychange", onVisible);
+    const pollId = setInterval(() => {
+      if (hasPendingExpenses()) trySyncPending();
+    }, 15000);
     return () => {
       window.removeEventListener("online", trySyncPending);
       document.removeEventListener("visibilitychange", onVisible);
+      clearInterval(pollId);
     };
   }, []);
 
