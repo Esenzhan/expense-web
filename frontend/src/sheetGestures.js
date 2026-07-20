@@ -1,31 +1,24 @@
 import { useEffect, useRef } from "react";
 
-// Locks the page behind an open sheet. overflow:hidden alone doesn't stop
-// iOS Safari from scroll-chaining touches into the page, so the body is
-// pinned with position:fixed and the scroll offset is restored on unlock.
+// Locks the page behind an open sheet. Deliberately NOT the position:fixed
+// body trick: on iOS that offsets the body by the scroll position and the
+// fixed sheet ends up anchored to the shifted box — a page scrolled by N px
+// showed the sheet floating N px above the bottom edge, with a strip of
+// undimmed page visible below it. overflow:hidden keeps the scroll offset
+// and moves nothing; leaked touch scrolling is stopped by preventDefault on
+// the backdrop (see useSwipeDismiss) + overscroll-behavior on the sheets.
 let lockCount = 0;
-let savedScrollY = 0;
 
 export function useBodyScrollLock() {
   useEffect(() => {
     if (++lockCount === 1) {
-      savedScrollY = window.scrollY;
-      const body = document.body;
-      body.style.position = "fixed";
-      body.style.top = `-${savedScrollY}px`;
-      body.style.left = "0";
-      body.style.right = "0";
-      body.style.width = "100%";
+      document.documentElement.style.overflow = "hidden";
+      document.body.style.overflow = "hidden";
     }
     return () => {
       if (--lockCount === 0) {
-        const body = document.body;
-        body.style.position = "";
-        body.style.top = "";
-        body.style.left = "";
-        body.style.right = "";
-        body.style.width = "";
-        window.scrollTo(0, savedScrollY);
+        document.documentElement.style.overflow = "";
+        document.body.style.overflow = "";
       }
     };
   }, []);
@@ -93,11 +86,20 @@ export function useSwipeDismiss(sheetRef, onClose) {
       state.dy = 0;
     }
 
+    // Drags on the dimmed area around the sheet must not scroll the page
+    // behind (overflow:hidden alone doesn't stop iOS touch scroll-chaining)
+    const backdrop = el.parentElement;
+    function onBackdropMove(event) {
+      if (event.target === backdrop) event.preventDefault();
+    }
+    backdrop?.addEventListener("touchmove", onBackdropMove, { passive: false });
+
     el.addEventListener("touchstart", onTouchStart, { passive: true });
     el.addEventListener("touchmove", onTouchMove, { passive: false });
     el.addEventListener("touchend", onTouchEnd);
     el.addEventListener("touchcancel", onTouchEnd);
     return () => {
+      backdrop?.removeEventListener("touchmove", onBackdropMove);
       el.removeEventListener("touchstart", onTouchStart);
       el.removeEventListener("touchmove", onTouchMove);
       el.removeEventListener("touchend", onTouchEnd);
