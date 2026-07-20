@@ -734,12 +734,18 @@ body {
 }
 
 .insights-sheet {
+  /* Pinned to the backdrop's edges instead of a vh height: near-full-screen
+     like the reference, immune to iOS quirks with viewport units on flex
+     items — only a sliver of the scaled main screen stays visible above */
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  top: 7vh;
+  top: 7dvh;
+  margin: 0 auto;
   width: 100%;
   max-width: 480px;
-  /* Fixed near-full-screen height like the reference — only a sliver of the
-     scaled-down main screen stays visible above the sheet */
-  height: 93vh;
-  height: 93dvh;
   overflow-y: auto;
   overscroll-behavior: contain;
   background: linear-gradient(180deg, #fdf0e4 0%, var(--surface) 260px);
