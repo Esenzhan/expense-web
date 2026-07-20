@@ -40,8 +40,15 @@ export default function InsightsButton({ onOpen }) {
       state.armed = false;
       state.pulling = false;
       if (window.scrollY > 0) return;
-      // Touches inside overlays (sheets, mic dock) must scroll/act normally
-      if (event.target.closest?.(".sheet-backdrop, .recorder-dock, .recorder-backdrop")) return;
+      // Only the main screen owns this gesture — touches inside overlays
+      // (sheets, mic dock, settings page) must scroll/act normally
+      if (
+        event.target.closest?.(
+          ".sheet-backdrop, .recorder-dock, .recorder-backdrop, .settings-page"
+        )
+      ) {
+        return;
+      }
       state.armed = true;
       state.startY = event.touches[0].clientY;
       state.progress = 0;
