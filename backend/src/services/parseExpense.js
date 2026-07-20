@@ -1,5 +1,5 @@
 import { anthropic } from "../anthropicClient.js";
-import { WALLETS } from "../wallets.js";
+import { walletNames, fallbackWallet } from "../wallets.js";
 import { pool } from "../db.js";
 
 // Categories now live in the DB (user-creatable), so the parser prompt is
@@ -22,6 +22,7 @@ export function invalidateCategoryCache() {
 
 export async function parseExpenseFromText(text) {
   const categories = await categoryNames();
+  const wallets = await walletNames();
 
   const systemPrompt = `Ты — парсер голосовых записей о тратах для приложения учёта расходов.
 Пользователь произносит фразу на русском (иногда с казахскими словами), например:
@@ -32,7 +33,7 @@ export async function parseExpenseFromText(text) {
   "amount": <число, сумма в тенге>,
   "category": "<строго одна из: ${categories.join(", ")}>",
   "description": "<краткое описание, как есть, но чище>",
-  "wallet": "<один из: ${WALLETS.join(", ")}>"
+  "wallet": "<один из: ${wallets.join(", ")}>"
 }
 
 Если категория явно не подходит ни под одну из списка — ставь "Прочее".
@@ -62,8 +63,8 @@ export async function parseExpenseFromText(text) {
     throw new Error(`Не удалось разобрать ответ модели: ${cleaned}`);
   }
 
-  if (!WALLETS.includes(parsed.wallet)) {
-    parsed.wallet = "Личные";
+  if (!wallets.includes(parsed.wallet)) {
+    parsed.wallet = await fallbackWallet();
   }
   if (!categories.includes(parsed.category)) {
     parsed.category = "Прочее";

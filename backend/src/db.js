@@ -22,6 +22,15 @@ const SEED_CATEGORIES = [
   { name: "Прочее", emoji: "💳", bg: "#e9e9ec", fg: "#5b5b63", sort: 999 },
 ];
 
+// Default wallets — the four the Telegram bot used. "Личные" doubles as the
+// voice-parse fallback.
+const SEED_WALLETS = [
+  { name: "Личные", emoji: "👛", bg: "#d7f5e9", fg: "#159969", sort: 1 },
+  { name: "Семья", emoji: "👨‍👩‍👧", bg: "#e3ecfd", fg: "#2f5fc2", sort: 2 },
+  { name: "Бизнес", emoji: "💼", bg: "#fde2e1", fg: "#c23b3b", sort: 3 },
+  { name: "Ремонт", emoji: "🔨", bg: "#fff2cf", fg: "#a9790a", sort: 4 },
+];
+
 export async function initSchema() {
   await pool.query(`
     CREATE TABLE IF NOT EXISTS expenses (
@@ -55,6 +64,23 @@ export async function initSchema() {
       `INSERT INTO categories (name, emoji, bg, fg, sort_order)
        VALUES ($1, $2, $3, $4, $5) ON CONFLICT (name) DO NOTHING`,
       [cat.name, cat.emoji, cat.bg, cat.fg, cat.sort]
+    );
+  }
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS wallets (
+      id SERIAL PRIMARY KEY,
+      name TEXT NOT NULL UNIQUE,
+      emoji TEXT NOT NULL,
+      bg TEXT NOT NULL,
+      fg TEXT NOT NULL,
+      sort_order INT NOT NULL DEFAULT 0
+    );
+  `);
+  for (const wallet of SEED_WALLETS) {
+    await pool.query(
+      `INSERT INTO wallets (name, emoji, bg, fg, sort_order)
+       VALUES ($1, $2, $3, $4, $5) ON CONFLICT (name) DO NOTHING`,
+      [wallet.name, wallet.emoji, wallet.bg, wallet.fg, wallet.sort]
     );
   }
 }

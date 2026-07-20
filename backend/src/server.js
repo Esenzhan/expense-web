@@ -8,6 +8,7 @@ import { initSchema } from "./db.js";
 import { expensesRouter } from "./routes/expenses.js";
 import { statsRouter } from "./routes/stats.js";
 import { categoriesRouter } from "./routes/categories.js";
+import { walletsRouter } from "./routes/wallets.js";
 import { openDeepgramStream } from "./services/deepgramStream.js";
 import { parseExpenseFromText } from "./services/parseExpense.js";
 
@@ -18,6 +19,7 @@ app.use(express.json());
 app.use("/api/expenses", expensesRouter);
 app.use("/api/stats", statsRouter);
 app.use("/api/categories", categoriesRouter);
+app.use("/api/wallets", walletsRouter);
 
 app.get("/api/health", (req, res) => res.json({ ok: true }));
 

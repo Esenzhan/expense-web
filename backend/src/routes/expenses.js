@@ -37,7 +37,7 @@ expensesRouter.get("/", async (req, res) => {
 expensesRouter.post("/", async (req, res) => {
   const { wallet, amount, category, description, raw_text } = req.body;
 
-  if (!isValidWallet(wallet)) {
+  if (!(await isValidWallet(wallet))) {
     return res.status(400).json({ error: "Некорректный кошелёк" });
   }
   if (typeof amount !== "number" || amount <= 0) {
@@ -56,7 +56,7 @@ expensesRouter.post("/", async (req, res) => {
 expensesRouter.put("/:id", async (req, res) => {
   const { wallet, amount, category, description } = req.body;
 
-  if (!isValidWallet(wallet)) {
+  if (!(await isValidWallet(wallet))) {
     return res.status(400).json({ error: "Некорректный кошелёк" });
   }
   if (typeof amount !== "number" || amount <= 0) {

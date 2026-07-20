@@ -42,13 +42,48 @@ export async function fetchWalletTotals() {
   return res.json();
 }
 
-export async function fetchSummary(period = "month") {
-  const res = await fetch(`${API_BASE}/api/stats/summary?period=${period}`);
+export async function fetchSummary(period = "month", wallet) {
+  const qs = new URLSearchParams({ period });
+  if (wallet) qs.set("wallet", wallet);
+  const res = await fetch(`${API_BASE}/api/stats/summary?${qs}`);
   return res.json();
 }
 
-export async function fetchInsights(period = "month") {
-  const res = await fetch(`${API_BASE}/api/stats/insights?period=${period}`);
+export async function fetchInsights(period = "month", wallet) {
+  const qs = new URLSearchParams({ period });
+  if (wallet) qs.set("wallet", wallet);
+  const res = await fetch(`${API_BASE}/api/stats/insights?${qs}`);
+  return res.json();
+}
+
+export async function fetchWallets() {
+  const res = await fetch(`${API_BASE}/api/wallets`);
+  return res.json();
+}
+
+export async function createWallet(payload) {
+  const res = await fetch(`${API_BASE}/api/wallets`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    throw new Error(body.error || "Не удалось создать счёт");
+  }
+  return res.json();
+}
+
+export async function updateWallet(oldName, payload) {
+  const res = await fetch(`${API_BASE}/api/wallets/${encodeURIComponent(oldName)}`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    throw new Error(body.error || "Не удалось обновить счёт");
+  }
   return res.json();
 }
 

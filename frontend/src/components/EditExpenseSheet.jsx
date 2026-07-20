@@ -1,7 +1,7 @@
 import { useEffect, useReducer, useRef, useState } from "react";
 import { createExpense, updateExpense, deleteExpense } from "../api";
 import { listCategories, getCategoryIcon } from "../categoryIcons";
-import { WALLETS } from "../wallets";
+import { listWallets } from "../wallets";
 import { haptic, hapticTick } from "../haptics";
 import { useSwipeDismiss } from "../sheetGestures";
 
@@ -58,7 +58,7 @@ function calcReducer(state, action) {
   }
 }
 
-export default function EditExpenseSheet({ expense, onClose, onSaved, onDeleted }) {
+export default function EditExpenseSheet({ expense, defaultWallet, onClose, onSaved, onDeleted }) {
   const isNew = !expense;
   const [calc, dispatch] = useReducer(calcReducer, {
     display: isNew ? "0" : String(Number(expense.amount)),
@@ -66,7 +66,8 @@ export default function EditExpenseSheet({ expense, onClose, onSaved, onDeleted 
     pendingOp: null,
     overwrite: false,
   });
-  const [wallet, setWallet] = useState(expense?.wallet || WALLETS[0]);
+  const walletNames = listWallets().map((w) => w.name);
+  const [wallet, setWallet] = useState(expense?.wallet || defaultWallet || walletNames[0]);
   const categoryNames = listCategories().map((c) => c.name);
   const [category, setCategory] = useState(expense?.category || categoryNames[0]);
   const [note, setNote] = useState(expense?.description || "");
@@ -210,7 +211,7 @@ export default function EditExpenseSheet({ expense, onClose, onSaved, onDeleted 
             value={wallet}
             onChange={(event) => setWallet(event.target.value)}
           >
-            {WALLETS.map((w) => (
+            {walletNames.map((w) => (
               <option key={w} value={w}>
                 {w}
               </option>

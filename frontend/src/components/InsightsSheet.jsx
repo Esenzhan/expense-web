@@ -10,7 +10,7 @@ function tenge(value) {
   return `${Math.round(value).toLocaleString("ru-RU")} ₸`;
 }
 
-export default function InsightsSheet({ period, walletBalance, onClose }) {
+export default function InsightsSheet({ period, wallet, walletBalance, onClose }) {
   const [loading, setLoading] = useState(true);
   const [data, setData] = useState(null);
   const [error, setError] = useState("");
@@ -21,7 +21,7 @@ export default function InsightsSheet({ period, walletBalance, onClose }) {
   useEffect(() => {
     let cancelled = false;
     setLoading(true);
-    fetchInsights(period)
+    fetchInsights(period, wallet)
       .then((result) => {
         if (cancelled) return;
         if (result.error) setError(result.error);
@@ -32,7 +32,7 @@ export default function InsightsSheet({ period, walletBalance, onClose }) {
     return () => {
       cancelled = true;
     };
-  }, [period]);
+  }, [period, wallet]);
 
   const biggestIcon = data?.biggestExpense ? getCategoryIcon(data.biggestExpense.category) : null;
 
@@ -43,7 +43,7 @@ export default function InsightsSheet({ period, walletBalance, onClose }) {
           <div className="wallet-chip">
             <span className="wallet-chip-icon">💳</span>
             <div>
-              <div className="wallet-chip-name">Кошелёк</div>
+              <div className="wallet-chip-name">{wallet || "Все счета"}</div>
               <div className="wallet-chip-balance">−{walletBalance.toLocaleString("ru-RU")} ₸</div>
             </div>
           </div>

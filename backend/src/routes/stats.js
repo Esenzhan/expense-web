@@ -26,13 +26,19 @@ statsRouter.get("/by-wallet", async (req, res) => {
 // Total + category breakdown for a period ("month" | "7" | "30"),
 // used for the big spend total and the category chart.
 statsRouter.get("/summary", async (req, res) => {
-  const { period = "month" } = req.query;
+  const { period = "month", wallet } = req.query;
   const { where, values } = periodWhere(period);
+
+  let walletFilter = "";
+  if (wallet) {
+    values.push(wallet);
+    walletFilter = `AND wallet = $${values.length}`;
+  }
 
   const { rows } = await pool.query(
     `SELECT category, COALESCE(SUM(amount), 0) AS total
      FROM expenses
-     WHERE ${where}
+     WHERE ${where} ${walletFilter}
      GROUP BY category
      ORDER BY total DESC`,
     values
@@ -62,19 +68,22 @@ statsRouter.get("/daily", async (req, res) => {
 // the raw rows: cumulative spend trend, biggest expense, most expensive day,
 // no-spend streak, weekend share, transaction count.
 statsRouter.get("/insights", async (req, res) => {
-  const { period = "month" } = req.query;
+  const { period = "month", wallet } = req.query;
   const { start, end, prevStart, prevEnd } = periodRange(period);
+
+  const walletFilter = wallet ? "AND wallet = $3" : "";
+  const params = (a, b) => (wallet ? [a, b, wallet] : [a, b]);
 
   const [{ rows }, { rows: prevRows }] = await Promise.all([
     pool.query(
       `SELECT amount, category, description, created_at FROM expenses
-       WHERE created_at >= $1 AND created_at < $2 ORDER BY created_at ASC`,
-      [start, end]
+       WHERE created_at >= $1 AND created_at < $2 ${walletFilter} ORDER BY created_at ASC`,
+      params(start, end)
     ),
     pool.query(
       `SELECT COALESCE(SUM(amount), 0) AS total FROM expenses
-       WHERE created_at >= $1 AND created_at < $2`,
-      [prevStart, prevEnd]
+       WHERE created_at >= $1 AND created_at < $2 ${walletFilter}`,
+      params(prevStart, prevEnd)
     ),
   ]);
 
