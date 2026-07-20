@@ -16,7 +16,7 @@ function pickMimeType() {
 }
 
 // phase: idle -> listening -> processing -> confirming -> idle
-export default function VoiceRecorder({ onSaved }) {
+export default function VoiceRecorder({ onSaved, onManualAdd }) {
   const [phase, setPhase] = useState("idle");
   const [transcript, setTranscript] = useState("");
   const [proposal, setProposal] = useState(null);
@@ -186,20 +186,32 @@ export default function VoiceRecorder({ onSaved }) {
           <div className="status-line error">{errorMessage}</div>
         )}
 
-        {(phase === "idle" || phase === "listening") && (
+        {phase === "idle" && (
+          <div className="mic-row">
+            <button className="side-button" onClick={onManualAdd} aria-label="Сканировать чек">
+              📷
+            </button>
+            <button className="mic-button" onClick={startRecording} aria-label="Начать запись">
+              ●
+            </button>
+            <button className="side-button" onClick={onManualAdd} aria-label="Добавить вручную">
+              +
+            </button>
+          </div>
+        )}
+
+        {phase === "listening" && (
           <div className="mic-row">
             <button
-              className={`mic-button ${phase === "listening" ? "recording" : ""}`}
-              onClick={phase === "listening" ? stopRecording : startRecording}
-              aria-label={phase === "listening" ? "Остановить запись" : "Начать запись"}
+              className="mic-button recording"
+              onClick={stopRecording}
+              aria-label="Остановить запись"
             >
-              {phase === "listening" ? "■" : "●"}
+              ■
             </button>
-            {phase === "listening" && (
-              <button className="cancel-button" onClick={cancelRecording} aria-label="Отменить запись">
-                ✕
-              </button>
-            )}
+            <button className="cancel-button" onClick={cancelRecording} aria-label="Отменить запись">
+              ✕
+            </button>
           </div>
         )}
       </div>

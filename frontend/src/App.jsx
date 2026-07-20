@@ -1,21 +1,11 @@
-import { useEffect, useState, Suspense, lazy } from "react";
-import { fetchExpenses, fetchWalletTotals, fetchSummary, fetchDailyTotals } from "./api";
+import { useEffect, useState } from "react";
+import { fetchExpenses, fetchWalletTotals, fetchSummary } from "./api";
 import VoiceRecorder from "./components/VoiceRecorder";
-import WalletSummary from "./components/WalletSummary";
 import ExpenseList from "./components/ExpenseList";
 import InsightsSheet from "./components/InsightsSheet";
 import EditExpenseSheet from "./components/EditExpenseSheet";
 
-// Recharts is the heaviest dependency in the bundle — load it after first
-// paint so the mic button and cached list are interactive immediately.
-const DailyTrendChart = lazy(() =>
-  import("./components/Charts").then((m) => ({ default: m.DailyTrendChart }))
-);
-const CategoryBarChart = lazy(() =>
-  import("./components/Charts").then((m) => ({ default: m.CategoryBarChart }))
-);
-
-const CACHE_KEY = "traty-cache-v2";
+const CACHE_KEY = "traty-cache-v3";
 
 const PERIODS = [
   { value: "month", label: "Этот месяц" },
@@ -46,22 +36,20 @@ export default function App() {
   const [expenses, setExpenses] = useState(cached.expenses || []);
   const [walletTotals, setWalletTotals] = useState(cached.walletTotals || []);
   const [summary, setSummary] = useState(cached.summary || { total: 0, categories: [] });
-  const [dailyTotals, setDailyTotals] = useState(cached.dailyTotals || []);
   const [insightsOpen, setInsightsOpen] = useState(false);
   const [editingExpense, setEditingExpense] = useState(null);
+  const [addingExpense, setAddingExpense] = useState(false);
 
   async function refreshAll(currentPeriod) {
-    const [exp, wallets, sum, daily] = await Promise.all([
+    const [exp, wallets, sum] = await Promise.all([
       fetchExpenses({ limit: 50 }),
       fetchWalletTotals(),
       fetchSummary(currentPeriod),
-      fetchDailyTotals(30),
     ]);
     setExpenses(exp);
     setWalletTotals(wallets);
     setSummary(sum);
-    setDailyTotals(daily);
-    saveCache({ expenses: exp, walletTotals: wallets, summary: sum, dailyTotals: daily });
+    saveCache({ expenses: exp, walletTotals: wallets, summary: sum });
   }
 
   useEffect(() => {
@@ -69,7 +57,6 @@ export default function App() {
     // so this only silently swaps in fresher numbers once they arrive.
     refreshAll(period);
   }, [period]);
-
 
   const monthLabel = new Date().toLocaleDateString("ru-RU", { month: "long", year: "numeric" });
   const walletBalance = walletTotals.reduce((sum, w) => sum + Number(w.total), 0);
@@ -110,16 +97,9 @@ export default function App() {
         </button>
       </div>
 
-      <WalletSummary totals={walletTotals} />
-
-      <Suspense fallback={null}>
-        <DailyTrendChart data={dailyTotals} />
-        <CategoryBarChart data={summary.categories} />
-      </Suspense>
-
       <ExpenseList expenses={expenses} onSelect={setEditingExpense} />
 
-      <VoiceRecorder onSaved={() => refreshAll(period)} />
+      <VoiceRecorder onSaved={() => refreshAll(period)} onManualAdd={() => setAddingExpense(true)} />
 
       {insightsOpen && (
         <InsightsSheet period={period} onClose={() => setInsightsOpen(false)} />
@@ -135,6 +115,16 @@ export default function App() {
           }}
           onDeleted={() => {
             setEditingExpense(null);
+            refreshAll(period);
+          }}
+        />
+      )}
+
+      {addingExpense && (
+        <EditExpenseSheet
+          onClose={() => setAddingExpense(false)}
+          onSaved={() => {
+            setAddingExpense(false);
             refreshAll(period);
           }}
         />

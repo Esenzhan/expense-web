@@ -47,11 +47,6 @@ export async function fetchSummary(period = "month") {
   return res.json();
 }
 
-export async function fetchDailyTotals(days = 30) {
-  const res = await fetch(`${API_BASE}/api/stats/daily?days=${days}`);
-  return res.json();
-}
-
 export async function fetchInsights(period = "month") {
   const res = await fetch(`${API_BASE}/api/stats/insights?period=${period}`);
   return res.json();

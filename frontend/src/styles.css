@@ -147,48 +147,12 @@ body {
   border-radius: 999px;
 }
 
-/* Wallet summary cards */
-.wallet-grid {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 10px;
-}
-
-.wallet-card {
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: 14px;
-  padding: 14px;
-}
-
-.wallet-card .name {
-  font-size: 12px;
-  color: var(--ink-soft);
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-}
-
-.wallet-card .amount {
-  font-family: var(--font-mono);
-  font-size: 18px;
-  font-weight: 700;
-  margin-top: 4px;
-}
-
-/* Charts section */
 .section-title {
   font-size: 13px;
   color: var(--ink-soft);
   text-transform: uppercase;
   letter-spacing: 0.06em;
   margin: 0 0 10px;
-}
-
-.chart-card {
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: 16px;
-  padding: 14px 8px 6px;
 }
 
 .empty-hint {
@@ -378,6 +342,20 @@ body {
   box-shadow: 0 4px 16px rgba(20, 20, 26, 0.15);
 }
 
+.side-button {
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+  border: none;
+  background: var(--ink);
+  color: #fff;
+  font-size: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 6px 18px rgba(20, 20, 26, 0.2);
+}
+
 /* Confirmation card */
 .confirm-card {
   width: 100%;
@@ -561,6 +539,11 @@ body {
   display: flex;
   align-items: center;
   justify-content: center;
+}
+
+.icon-button-spacer {
+  width: 36px;
+  height: 36px;
 }
 
 .expense-type-badge {

@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { updateExpense, deleteExpense } from "../api";
+import { createExpense, updateExpense, deleteExpense } from "../api";
 import { CATEGORIES, getCategoryIcon } from "../categoryIcons";
 import { WALLETS } from "../wallets";
 
@@ -25,13 +25,14 @@ function formatDisplay(raw) {
 }
 
 export default function EditExpenseSheet({ expense, onClose, onSaved, onDeleted }) {
-  const [display, setDisplay] = useState(String(Number(expense.amount)));
+  const isNew = !expense;
+  const [display, setDisplay] = useState(isNew ? "0" : String(Number(expense.amount)));
   const [stored, setStored] = useState(null);
   const [pendingOp, setPendingOp] = useState(null);
   const [overwrite, setOverwrite] = useState(false);
-  const [wallet, setWallet] = useState(expense.wallet);
-  const [category, setCategory] = useState(expense.category);
-  const [note, setNote] = useState(expense.description || "");
+  const [wallet, setWallet] = useState(expense?.wallet || WALLETS[0]);
+  const [category, setCategory] = useState(expense?.category || CATEGORIES[0]);
+  const [note, setNote] = useState(expense?.description || "");
   const [menuOpen, setMenuOpen] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -90,13 +91,9 @@ export default function EditExpenseSheet({ expense, onClose, onSaved, onDeleted 
     setSaving(true);
     setError("");
     try {
-      const updated = await updateExpense(expense.id, {
-        wallet,
-        amount,
-        category,
-        description: note || null,
-      });
-      onSaved?.(updated);
+      const payload = { wallet, amount, category, description: note || null };
+      const saved = isNew ? await createExpense(payload) : await updateExpense(expense.id, payload);
+      onSaved?.(saved);
     } catch (err) {
       setError(err.message);
       setSaving(false);
@@ -122,29 +119,33 @@ export default function EditExpenseSheet({ expense, onClose, onSaved, onDeleted 
             ✕
           </button>
           <span className="expense-type-badge">↗ Расход</span>
-          <div className="edit-menu-wrap">
-            <button
-              className="icon-button"
-              onClick={() => {
-                setMenuOpen((open) => !open);
-                setConfirmDelete(false);
-              }}
-              aria-label="Меню"
-            >
-              ⋮
-            </button>
-            {menuOpen && (
-              <div className="edit-menu">
-                <button
-                  className="menu-item danger"
-                  onClick={confirmDelete ? handleDelete : () => setConfirmDelete(true)}
-                  disabled={saving}
-                >
-                  {confirmDelete ? "Точно удалить?" : "Удалить"} 🗑
-                </button>
-              </div>
-            )}
-          </div>
+          {isNew ? (
+            <span className="icon-button-spacer" />
+          ) : (
+            <div className="edit-menu-wrap">
+              <button
+                className="icon-button"
+                onClick={() => {
+                  setMenuOpen((open) => !open);
+                  setConfirmDelete(false);
+                }}
+                aria-label="Меню"
+              >
+                ⋮
+              </button>
+              {menuOpen && (
+                <div className="edit-menu">
+                  <button
+                    className="menu-item danger"
+                    onClick={confirmDelete ? handleDelete : () => setConfirmDelete(true)}
+                    disabled={saving}
+                  >
+                    {confirmDelete ? "Точно удалить?" : "Удалить"} 🗑
+                  </button>
+                </div>
+              )}
+            </div>
+          )}
         </div>
 
         <div className="edit-amount">{formatDisplay(display)} ₸</div>
