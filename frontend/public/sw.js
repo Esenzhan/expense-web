@@ -25,12 +25,22 @@ self.addEventListener("fetch", (event) => {
   // background. Fall back to cache only when actually offline.
   if (request.mode === "navigate") {
     event.respondWith(
-      fetch(request)
-        .then((response) => {
-          caches.open(CACHE_NAME).then((cache) => cache.put(request, response.clone()));
+      (async () => {
+        try {
+          const response = await fetch(request);
+          // Cache writes must be tied to waitUntil, or the browser can kill
+          // this worker right after respondWith settles — that was silently
+          // dropping the shell from the cache on every single load (only
+          // hashed assets survived, since their write has one fewer await
+          // hop and usually raced ahead of teardown).
+          event.waitUntil(caches.open(CACHE_NAME).then((cache) => cache.put(request, response.clone())));
           return response;
-        })
-        .catch(() => caches.match(request))
+        } catch {
+          const cached = await caches.match(request);
+          if (cached) return cached;
+          throw new Error("offline and no cached shell yet");
+        }
+      })()
     );
     return;
   }
@@ -38,16 +48,17 @@ self.addEventListener("fetch", (event) => {
   // Hashed asset files (js/css/icons) are safe to serve stale-while-revalidate
   // since their filename changes whenever their content does.
   event.respondWith(
-    caches.open(CACHE_NAME).then(async (cache) => {
+    (async () => {
+      const cache = await caches.open(CACHE_NAME);
       const cached = await cache.match(request);
       const network = fetch(request)
         .then((response) => {
-          if (response.ok) cache.put(request, response.clone());
+          if (response.ok) event.waitUntil(cache.put(request, response.clone()));
           return response;
         })
         .catch(() => cached);
 
       return cached || network;
-    })
+    })()
   );
 });
