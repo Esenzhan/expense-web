@@ -12,10 +12,41 @@ function tenge(value) {
   return `${Math.round(value).toLocaleString("ru-RU")} ₸`;
 }
 
+// Monthly spending limit, kept on the client per wallet («all» = все счета)
+function limitKey(wallet) {
+  return `monthlyLimit:${wallet || "all"}`;
+}
+
+function readLimit(wallet) {
+  const raw = Number(localStorage.getItem(limitKey(wallet)));
+  return Number.isFinite(raw) && raw > 0 ? raw : 0;
+}
+
+function daysInCurrentMonth() {
+  const now = new Date();
+  return new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
+}
+
 export default function InsightsSheet({ period, wallet, walletBalance, onClose }) {
   const [loading, setLoading] = useState(true);
   const [data, setData] = useState(null);
   const [error, setError] = useState("");
+  const [monthlyLimit, setMonthlyLimit] = useState(() => readLimit(wallet));
+  const [editingLimit, setEditingLimit] = useState(false);
+  const [limitDraft, setLimitDraft] = useState("");
+
+  useEffect(() => {
+    setMonthlyLimit(readLimit(wallet));
+    setEditingLimit(false);
+  }, [wallet]);
+
+  function saveLimit() {
+    const value = Number(limitDraft.replace(/[^\d]/g, ""));
+    if (value > 0) localStorage.setItem(limitKey(wallet), String(value));
+    else localStorage.removeItem(limitKey(wallet));
+    setMonthlyLimit(value > 0 ? value : 0);
+    setEditingLimit(false);
+  }
 
   const sheetRef = useRef(null);
   useSwipeDismiss(sheetRef, onClose);
@@ -75,8 +106,40 @@ export default function InsightsSheet({ period, wallet, walletBalance, onClose }
               daysInPeriod={data.daysInPeriod}
               todayIndex={data.todayIndex}
               total={data.total}
-              previousPeriodTotal={data.previousPeriodTotal}
+              plannedTotal={
+                period === "month"
+                  ? monthlyLimit
+                  : (monthlyLimit / daysInCurrentMonth()) * data.daysInPeriod
+              }
             />
+
+            {editingLimit ? (
+              <div className="limit-editor">
+                <input
+                  className="limit-input"
+                  type="text"
+                  inputMode="numeric"
+                  autoFocus
+                  placeholder="Лимит на месяц, ₸"
+                  value={limitDraft}
+                  onChange={(event) => setLimitDraft(event.target.value)}
+                  onKeyDown={(event) => event.key === "Enter" && saveLimit()}
+                />
+                <button className="limit-save" onClick={saveLimit}>
+                  ОК
+                </button>
+              </div>
+            ) : (
+              <button
+                className="limit-pill"
+                onClick={() => {
+                  setLimitDraft(monthlyLimit ? String(monthlyLimit) : "");
+                  setEditingLimit(true);
+                }}
+              >
+                {monthlyLimit ? `Лимит на месяц: ${tenge(monthlyLimit)} ✎` : "✎ Задать лимит на месяц"}
+              </button>
+            )}
 
             <div className="insights-grid">
               <div className="insights-card">

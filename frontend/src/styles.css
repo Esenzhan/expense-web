@@ -869,6 +869,79 @@ body {
   background: repeating-linear-gradient(90deg, #e07a2e 0 4px, transparent 4px 7px);
 }
 
+.legend-swatch.plan {
+  background: repeating-linear-gradient(90deg, var(--ink-soft) 0 4px, transparent 4px 7px);
+}
+
+.chart-line-plan {
+  fill: none;
+  stroke: var(--ink-soft);
+  stroke-width: 2;
+  stroke-dasharray: 5 4;
+  stroke-linecap: round;
+}
+
+.chart-deviation {
+  text-align: center;
+  font-size: 12px;
+  font-weight: 700;
+  margin-top: 4px;
+}
+
+.chart-deviation.over {
+  color: var(--danger);
+}
+
+.chart-deviation.under {
+  color: #2e9e6b;
+}
+
+/* Monthly limit pill + inline editor under the chart */
+.limit-pill {
+  align-self: center;
+  border: none;
+  background: var(--surface-soft);
+  color: var(--ink-soft);
+  font-weight: 700;
+  font-size: 12px;
+  padding: 8px 14px;
+  border-radius: 75px;
+}
+
+.limit-editor {
+  align-self: center;
+  display: flex;
+  gap: 8px;
+}
+
+.limit-input {
+  width: 170px;
+  border: 1.5px solid var(--border);
+  border-radius: 12px;
+  padding: 8px 12px;
+  font-family: var(--font-ui);
+  /* 16px minimum, otherwise iOS Safari auto-zooms into the focused input */
+  font-size: 16px;
+  font-weight: 600;
+  background: var(--surface);
+  color: var(--ink);
+  outline: none;
+}
+
+.limit-input:focus {
+  border-color: var(--ink-soft);
+}
+
+.limit-save {
+  border: none;
+  background: var(--ink);
+  color: #fff;
+  font-weight: 700;
+  font-size: 13px;
+  padding: 0 16px;
+  border-radius: 12px;
+}
+
 .insights-grid {
   display: grid;
   grid-template-columns: 1fr 1fr;

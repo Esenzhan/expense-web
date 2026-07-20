@@ -17,8 +17,12 @@ function tenge(value) {
   return `${Math.round(value).toLocaleString("ru-RU")} ₸`;
 }
 
-export default function InsightsChart({ series, daysInPeriod, todayIndex, total, previousPeriodTotal }) {
-  const chartMax = niceMax(Math.max(total, previousPeriodTotal, 1000));
+// Two lines: dashed — the even-pace plan toward the period's budget
+// (plannedTotal), solid — actual cumulative spending. The gap between them
+// is how far ahead of / behind the plan we are.
+export default function InsightsChart({ series, daysInPeriod, todayIndex, total, plannedTotal }) {
+  const hasPlan = plannedTotal > 0;
+  const chartMax = niceMax(Math.max(total, hasPlan ? plannedTotal : 0, 1000));
   const plotWidth = WIDTH - PAD_LEFT - PAD_RIGHT;
   const plotHeight = HEIGHT - PAD_TOP - PAD_BOTTOM;
 
@@ -26,10 +30,15 @@ export default function InsightsChart({ series, daysInPeriod, todayIndex, total,
     daysInPeriod > 1 ? PAD_LEFT + ((day - 1) / (daysInPeriod - 1)) * plotWidth : PAD_LEFT;
   const yFor = (value) => PAD_TOP + plotHeight - (Math.min(value, chartMax) / chartMax) * plotHeight;
 
+  const planFor = (day) => (plannedTotal * day) / daysInPeriod;
+  const plannedToday = planFor(todayIndex);
+
   const solidPoints = series.map((p) => `${xFor(p.day)},${yFor(p.cumulative)}`).join(" ");
-  const dashedPoints =
-    todayIndex < daysInPeriod ? `${xFor(todayIndex)},${yFor(total)} ${xFor(daysInPeriod)},${yFor(total)}` : "";
-  const grayPoints = `${xFor(1)},${yFor(previousPeriodTotal)} ${xFor(daysInPeriod)},${yFor(previousPeriodTotal)}`;
+  const planPoints = hasPlan
+    ? `${xFor(1)},${yFor(planFor(1))} ${xFor(daysInPeriod)},${yFor(plannedTotal)}`
+    : "";
+
+  const deviation = total - plannedToday;
 
   const ticks = [chartMax / 3, (chartMax * 2) / 3, chartMax];
   const dayStep = Math.max(1, Math.round(daysInPeriod / 11 / 2) * 2); // even spacing, ~11 labels max
@@ -61,10 +70,12 @@ export default function InsightsChart({ series, daysInPeriod, todayIndex, total,
           </text>
         ))}
 
-        {grayPoints && <polyline points={grayPoints} className="chart-line-gray" />}
+        {planPoints && <polyline points={planPoints} className="chart-line-plan" />}
         {solidPoints && <polyline points={solidPoints} className="chart-line-solid" />}
-        {dashedPoints && <polyline points={dashedPoints} className="chart-line-dashed" />}
 
+        {hasPlan && (
+          <circle cx={xFor(todayIndex)} cy={yFor(plannedToday)} r="3.5" className="chart-dot-gray" />
+        )}
         {series.length > 0 && (
           <circle
             cx={xFor(series[series.length - 1].day)}
@@ -73,20 +84,26 @@ export default function InsightsChart({ series, daysInPeriod, todayIndex, total,
             className="chart-dot-orange"
           />
         )}
-        <circle cx={xFor(todayIndex)} cy={yFor(previousPeriodTotal)} r="3.5" className="chart-dot-gray" />
       </svg>
 
       <div className="chart-legend">
         <span className="legend-item">
-          <span className="legend-swatch solid" /> {tenge(total)}
+          <span className="legend-swatch solid" /> Факт · {tenge(total)}
         </span>
-        <span className="legend-item">
-          <span className="legend-swatch gray" /> {tenge(previousPeriodTotal)}
-        </span>
-        <span className="legend-item">
-          <span className="legend-swatch dashed" /> {tenge(total)}
-        </span>
+        {hasPlan && (
+          <span className="legend-item">
+            <span className="legend-swatch plan" /> План · {tenge(plannedToday)}
+          </span>
+        )}
       </div>
+
+      {hasPlan && (
+        <div className={`chart-deviation ${deviation > 0 ? "over" : "under"}`}>
+          {deviation > 0
+            ? `Превышение плана на ${tenge(deviation)}`
+            : `Запас до плана · ${tenge(-deviation)}`}
+        </div>
+      )}
     </div>
   );
 }
