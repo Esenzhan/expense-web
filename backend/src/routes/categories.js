@@ -43,3 +43,13 @@ categoriesRouter.post("/", async (req, res) => {
     throw err;
   }
 });
+
+categoriesRouter.delete("/:name", async (req, res) => {
+  // "Прочее" is the fallback for voice parsing and old expenses — keep it
+  if (req.params.name === "Прочее") {
+    return res.status(400).json({ error: "Эту категорию нельзя удалить" });
+  }
+  await pool.query(`DELETE FROM categories WHERE name = $1`, [req.params.name]);
+  invalidateCategoryCache();
+  res.status(204).end();
+});
