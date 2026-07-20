@@ -49,10 +49,26 @@ export function openDeepgramStream({ onPartial, onFinal, onError }) {
 
   dgSocket.on("error", (err) => onError?.(err));
 
+  // Audio arriving while the Deepgram socket is still connecting must be
+  // queued, not dropped: the first chunk carries the container header
+  // (webm/wav), and without it Deepgram can't parse anything that follows —
+  // the stream "works" partially or hangs with no finals.
+  const pendingChunks = [];
+  let pendingFinish = false;
+  dgSocket.on("open", () => {
+    for (const chunk of pendingChunks) dgSocket.send(chunk);
+    pendingChunks.length = 0;
+    if (pendingFinish) {
+      dgSocket.send(JSON.stringify({ type: "CloseStream" }));
+    }
+  });
+
   return {
     sendAudioChunk(chunk) {
       if (dgSocket.readyState === WebSocket.OPEN) {
         dgSocket.send(chunk);
+      } else if (dgSocket.readyState === WebSocket.CONNECTING) {
+        pendingChunks.push(chunk);
       }
     },
     // The recording ended: ask Deepgram to flush the final transcript for
@@ -63,6 +79,10 @@ export function openDeepgramStream({ onPartial, onFinal, onError }) {
     finish() {
       if (dgSocket.readyState === WebSocket.OPEN) {
         dgSocket.send(JSON.stringify({ type: "CloseStream" }));
+      } else if (dgSocket.readyState === WebSocket.CONNECTING) {
+        // Recording already over but Deepgram is still connecting — flush
+        // right after the queued audio goes out
+        pendingFinish = true;
       }
     },
     close() {

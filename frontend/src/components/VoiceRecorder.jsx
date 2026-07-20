@@ -28,6 +28,7 @@ export default function VoiceRecorder({ onSaved, onManualAdd }) {
   const mediaRecorderRef = useRef(null);
   const streamRef = useRef(null);
   const fallbackTimerRef = useRef(null);
+  const transmitRef = useRef(null);
 
   function stopMedia() {
     mediaRecorderRef.current?.stop();
@@ -75,10 +76,43 @@ export default function VoiceRecorder({ onSaved, onManualAdd }) {
       const recorder = new MediaRecorder(stream, mimeType ? { mimeType } : undefined);
       mediaRecorderRef.current = recorder;
 
-      recorder.ondataavailable = (event) => {
-        if (event.data.size > 0 && ws.readyState === WebSocket.OPEN) {
-          event.data.arrayBuffer().then((buf) => ws.send(buf));
+      // Everything (audio chunks and the trailing stop marker) goes through
+      // one ordered queue that only starts draining a beat after ws.open —
+      // chunks produced while the socket (or the server's Deepgram leg) is
+      // still connecting must be queued, not dropped: the first chunk
+      // carries the container header, and without it Deepgram can't parse
+      // the rest of the stream.
+      const queue = [];
+      let flushed = false;
+
+      function transmit(data) {
+        if (flushed && ws.readyState === WebSocket.OPEN) {
+          ws.send(data);
+        } else {
+          queue.push(data);
         }
+      }
+      transmitRef.current = transmit;
+
+      function flushQueue() {
+        flushed = true;
+        for (const item of queue) {
+          if (ws.readyState === WebSocket.OPEN) ws.send(item);
+        }
+        queue.length = 0;
+      }
+
+      if (ws.readyState === WebSocket.OPEN) {
+        // Socket opened while we were waiting on the mic permission — the
+        // server's Deepgram leg has had time to connect, drain sooner
+        setTimeout(flushQueue, 200);
+      } else {
+        ws.addEventListener("open", () => setTimeout(flushQueue, 700));
+      }
+
+      recorder.ondataavailable = (event) => {
+        if (event.data.size === 0) return;
+        event.data.arrayBuffer().then(transmit);
       };
 
       // Small timeslice = near-instant streaming to the server
@@ -95,12 +129,10 @@ export default function VoiceRecorder({ onSaved, onManualAdd }) {
     const recorder = mediaRecorderRef.current;
     if (recorder) {
       // The final dataavailable fires before onstop, so by this point the
-      // last audio chunk is already on the wire — now tell the server the
-      // recording is over so it can flush Deepgram's final transcript.
+      // last audio chunk is queued — route the stop marker through the same
+      // ordered queue so it can never overtake the audio.
       recorder.onstop = () => {
-        if (wsRef.current?.readyState === WebSocket.OPEN) {
-          wsRef.current.send(JSON.stringify({ type: "stop" }));
-        }
+        transmitRef.current?.(JSON.stringify({ type: "stop" }));
       };
     }
     // Keep the mic streaming ~700ms of trailing silence before stopping:
