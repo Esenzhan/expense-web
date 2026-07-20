@@ -58,6 +58,9 @@ function StopIcon() {
   );
 }
 
+// How long we keep retrying the socket while Render's free tier wakes up
+const WS_RETRY_WINDOW_MS = 80000;
+
 // phase: idle -> listening -> processing -> confirming -> idle
 export default function VoiceRecorder({ onSaved, onManualAdd }) {
   const [phase, setPhase] = useState("idle");
@@ -65,15 +68,20 @@ export default function VoiceRecorder({ onSaved, onManualAdd }) {
   const [proposal, setProposal] = useState(null);
   const [errorMessage, setErrorMessage] = useState("");
   const [saving, setSaving] = useState(false);
+  // Shows the "waking the server" hint when the socket takes suspiciously
+  // long to open (Render free tier cold start)
+  const [slowWake, setSlowWake] = useState(false);
 
   const wsRef = useRef(null);
+  const sessionRef = useRef(null);
   const mediaRecorderRef = useRef(null);
   const streamRef = useRef(null);
   const fallbackTimerRef = useRef(null);
   const transmitRef = useRef(null);
 
   function stopMedia() {
-    mediaRecorderRef.current?.stop();
+    const recorder = mediaRecorderRef.current;
+    if (recorder && recorder.state !== "inactive") recorder.stop();
     streamRef.current?.getTracks().forEach((track) => track.stop());
     mediaRecorderRef.current = null;
     streamRef.current = null;
@@ -84,31 +92,99 @@ export default function VoiceRecorder({ onSaved, onManualAdd }) {
     setTranscript("");
     setProposal(null);
     setErrorMessage("");
+    setSlowWake(false);
     setPhase("listening");
 
-    const ws = new WebSocket(WS_URL);
-    ws.binaryType = "arraybuffer";
-    wsRef.current = ws;
+    // One session per recording. Every chunk (and the trailing stop marker)
+    // is kept for the whole session: a reconnect gets a fresh Deepgram leg
+    // on the server, which needs the container header from chunk #1 — so on
+    // every (re)connect we replay the entire buffer, not just the tail.
+    const session = { chunks: [], done: false, startedAt: Date.now(), ws: null };
+    sessionRef.current = session;
 
-    ws.onmessage = (event) => {
+    setTimeout(() => {
+      if (!session.done && session.ws?.readyState !== WebSocket.OPEN) setSlowWake(true);
+    }, 2000);
+
+    function handleMessage(event) {
       const msg = JSON.parse(event.data);
       if (msg.type === "partial") {
         setTranscript(msg.text);
       } else if (msg.type === "final") {
         setTranscript(msg.text);
         setPhase("processing");
+        // The server finalized the utterance on its own (silence endpoint) —
+        // release the mic right away, otherwise iOS keeps recording and the
+        // orange indicator stays on until the tab dies
+        stopMedia();
       } else if (msg.type === "parsed") {
         clearTimeout(fallbackTimerRef.current);
+        session.done = true;
+        stopMedia();
         setProposal({ ...msg.proposal, raw_text: msg.rawText });
         setPhase("confirming");
-        ws.close();
+        session.ws?.close();
       } else if (msg.type === "error") {
         clearTimeout(fallbackTimerRef.current);
+        session.done = true;
+        stopMedia();
         setErrorMessage(msg.message);
         setPhase("idle");
-        ws.close();
+        session.ws?.close();
       }
-    };
+    }
+
+    function connect() {
+      const ws = new WebSocket(WS_URL);
+      ws.binaryType = "arraybuffer";
+      ws.flushed = false;
+      session.ws = ws;
+      wsRef.current = ws;
+      ws.onmessage = handleMessage;
+
+      ws.onopen = () => {
+        setSlowWake(false);
+        // Give the server's Deepgram leg a beat to finish its own handshake
+        // before draining the buffer — the first chunk carries the container
+        // header and must not be dropped or reordered
+        setTimeout(() => {
+          if (session.ws !== ws) return;
+          for (const item of session.chunks) {
+            if (ws.readyState === WebSocket.OPEN) ws.send(item);
+          }
+          ws.flushed = true;
+        }, 700);
+      };
+
+      const retry = () => {
+        if (session.done || session.ws !== ws || ws.retried) return;
+        ws.retried = true;
+        setSlowWake(true);
+        if (Date.now() - session.startedAt < WS_RETRY_WINDOW_MS) {
+          // Render's free tier sleeps after idle and takes tens of seconds
+          // to wake — keep retrying while the recording buffers locally
+          setTimeout(() => {
+            if (!session.done && session.ws === ws) connect();
+          }, 1500);
+        } else {
+          clearTimeout(fallbackTimerRef.current);
+          session.done = true;
+          stopMedia();
+          setErrorMessage("Сервер не отвечает, попробуй ещё раз");
+          setPhase("idle");
+        }
+      };
+      ws.onerror = retry;
+      ws.onclose = retry;
+    }
+    connect();
+
+    function transmit(data) {
+      session.chunks.push(data);
+      const ws = session.ws;
+      if (ws?.flushed && ws.readyState === WebSocket.OPEN) ws.send(data);
+    }
+    transmitRef.current = transmit;
 
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
@@ -117,40 +193,6 @@ export default function VoiceRecorder({ onSaved, onManualAdd }) {
       const mimeType = pickMimeType();
       const recorder = new MediaRecorder(stream, mimeType ? { mimeType } : undefined);
       mediaRecorderRef.current = recorder;
-
-      // Everything (audio chunks and the trailing stop marker) goes through
-      // one ordered queue that only starts draining a beat after ws.open —
-      // chunks produced while the socket (or the server's Deepgram leg) is
-      // still connecting must be queued, not dropped: the first chunk
-      // carries the container header, and without it Deepgram can't parse
-      // the rest of the stream.
-      const queue = [];
-      let flushed = false;
-
-      function transmit(data) {
-        if (flushed && ws.readyState === WebSocket.OPEN) {
-          ws.send(data);
-        } else {
-          queue.push(data);
-        }
-      }
-      transmitRef.current = transmit;
-
-      function flushQueue() {
-        flushed = true;
-        for (const item of queue) {
-          if (ws.readyState === WebSocket.OPEN) ws.send(item);
-        }
-        queue.length = 0;
-      }
-
-      if (ws.readyState === WebSocket.OPEN) {
-        // Socket opened while we were waiting on the mic permission — the
-        // server's Deepgram leg has had time to connect, drain sooner
-        setTimeout(flushQueue, 200);
-      } else {
-        ws.addEventListener("open", () => setTimeout(flushQueue, 700));
-      }
 
       recorder.ondataavailable = (event) => {
         if (event.data.size === 0) return;
@@ -162,7 +204,8 @@ export default function VoiceRecorder({ onSaved, onManualAdd }) {
     } catch (err) {
       setErrorMessage("Нет доступа к микрофону");
       setPhase("idle");
-      ws.close();
+      session.done = true;
+      session.ws?.close();
     }
   }
 
@@ -193,18 +236,22 @@ export default function VoiceRecorder({ onSaved, onManualAdd }) {
     setPhase("processing");
     // Socket stays open until the server sends "parsed"/"error" so we don't
     // miss the response while Claude is still parsing. Fallback timeout
-    // guards against a real server-side hang.
+    // guards against a real server-side hang; if the socket is still
+    // connecting (server waking from sleep), allow the whole retry window.
+    const timeoutMs = wsRef.current?.readyState === WebSocket.OPEN ? 15000 : WS_RETRY_WINDOW_MS;
     fallbackTimerRef.current = setTimeout(() => {
+      if (sessionRef.current) sessionRef.current.done = true;
       if (wsRef.current?.readyState === WebSocket.OPEN) {
         wsRef.current.close();
       }
       setErrorMessage("Не дождались ответа сервера, попробуй ещё раз");
       setPhase("idle");
-    }, 15000);
+    }, timeoutMs);
   }
 
   function cancelRecording() {
     clearTimeout(fallbackTimerRef.current);
+    if (sessionRef.current) sessionRef.current.done = true;
     stopMedia();
     wsRef.current?.close();
     setTranscript("");
@@ -247,7 +294,13 @@ export default function VoiceRecorder({ onSaved, onManualAdd }) {
       <div className="recorder-dock">
         {(phase === "listening" || phase === "processing") && (
           <div className="listen-pill">
-            <span>{transcript ? `«${transcript}»` : "Я вас слушаю…"}</span>
+            <span>
+              {transcript
+                ? `«${transcript}»`
+                : slowWake && phase === "listening"
+                  ? "Слушаю… сервер просыпается, договаривай"
+                  : "Я вас слушаю…"}
+            </span>
             {phase === "processing" && <span className="spinner" />}
           </div>
         )}

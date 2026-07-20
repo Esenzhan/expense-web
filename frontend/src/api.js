@@ -104,3 +104,9 @@ export async function createCategory(payload) {
   }
   return res.json();
 }
+
+// Fire-and-forget ping so Render's free tier starts waking up as soon as the
+// app opens, instead of on the first voice-recording attempt
+export function warmBackend() {
+  fetch(`${API_BASE}/api/health`).catch(() => {});
+}

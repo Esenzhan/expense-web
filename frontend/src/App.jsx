@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { fetchExpenses, fetchWalletTotals, fetchSummary, fetchCategories, fetchWallets } from "./api";
+import { fetchExpenses, fetchWalletTotals, fetchSummary, fetchCategories, fetchWallets, warmBackend } from "./api";
 import { hydrateCategories } from "./categoryIcons";
 import { hydrateWallets, getWalletIcon } from "./wallets";
 import { haptic } from "./haptics";
@@ -108,6 +108,18 @@ export default function App() {
     }
     reloadCategories();
     reloadWallets();
+  }, []);
+
+  useEffect(() => {
+    // Render's free tier sleeps after ~15 min idle and wakes for tens of
+    // seconds — start waking it the moment the app opens or comes back to
+    // the foreground, so voice input is ready by the time the mic is tapped
+    warmBackend();
+    const onVisible = () => {
+      if (document.visibilityState === "visible") warmBackend();
+    };
+    document.addEventListener("visibilitychange", onVisible);
+    return () => document.removeEventListener("visibilitychange", onVisible);
   }, []);
 
   async function refreshAll(currentPeriod, wallet = selectedWallet) {
