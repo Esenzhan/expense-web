@@ -73,10 +73,20 @@ export function useSwipeDismiss(sheetRef, onClose) {
       state.armed = false;
       state.pulling = false;
       if (!wasPulling) return;
-      el.style.transition = "transform 0.28s cubic-bezier(0.2, 0.9, 0.3, 1)";
+      el.style.transition = "transform 0.26s cubic-bezier(0.2, 0.9, 0.3, 1)";
       if (state.dy > 130) {
-        el.style.transform = "translateY(105%)";
-        setTimeout(() => onCloseRef.current?.(), 200);
+        el.style.transform = "translateY(110%)";
+        // Unmount exactly when the slide-out finishes — a fixed timeout
+        // shorter than the transition left the sheet's top edge hanging at
+        // the bottom of the screen for a frame or two
+        let closed = false;
+        const close = () => {
+          if (closed) return;
+          closed = true;
+          onCloseRef.current?.();
+        };
+        el.addEventListener("transitionend", close, { once: true });
+        setTimeout(close, 350); // fallback if transitionend never fires
       } else {
         el.style.transform = "translateY(0)";
       }
