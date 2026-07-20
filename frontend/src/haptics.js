@@ -33,6 +33,28 @@ export function haptic() {
   }
 }
 
+// Tick for continuous gestures (drag detents). Two differences from haptic():
+// the switch click is deferred out of the touchmove call stack — WebKit
+// appears to drop toggles fired synchronously mid-drag — and calls are
+// throttled so rapid detents don't coalesce into nothing.
+let lastTickAt = 0;
+export function hapticTick() {
+  const now = Date.now();
+  if (now - lastTickAt < 100) return;
+  lastTickAt = now;
+  if (navigator.vibrate) {
+    navigator.vibrate(8);
+    return;
+  }
+  setTimeout(() => {
+    try {
+      ensureSwitch().click();
+    } catch {
+      // no haptics — fine
+    }
+  }, 0);
+}
+
 export function hapticHeavy() {
   if (navigator.vibrate) {
     navigator.vibrate([15, 40, 20]);
@@ -40,9 +62,11 @@ export function hapticHeavy() {
   }
   try {
     const label = ensureSwitch();
-    label.click();
-    // ~120ms apart reads as a distinct double tick; much closer and iOS
-    // coalesces the two toggles into one buzz
+    // Both clicks deferred: this can be called from inside a touchmove
+    // handler, where synchronous switch toggles get dropped. ~120ms apart
+    // reads as a distinct double tick; much closer and iOS coalesces the
+    // two toggles into one buzz.
+    setTimeout(() => label.click(), 0);
     setTimeout(() => label.click(), 120);
   } catch {
     // no haptics — fine

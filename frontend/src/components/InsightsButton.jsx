@@ -1,5 +1,5 @@
 import { useEffect, useRef } from "react";
-import { haptic, hapticHeavy } from "../haptics";
+import { haptic, hapticHeavy, hapticTick } from "../haptics";
 
 const BASE_HEIGHT = 38; // matches .insights-button padding/font at rest
 const MAX_HEIGHT = 150; // fully stretched blob, like the reference video
@@ -60,10 +60,7 @@ export default function InsightsButton({ onOpen }) {
         }
         if (dy < 8) return; // not enough intent yet
         state.pulling = true;
-        // "Grabbed" cue. Also the only pre-release moment iOS can buzz at:
-        // while the finger is dragging, iOS suppresses web haptics entirely,
-        // so the per-quarter ticks below are Android-only in practice.
-        haptic();
+        hapticTick(); // "grabbed" cue
       }
 
       if (dy <= 0) {
@@ -76,13 +73,12 @@ export default function InsightsButton({ onOpen }) {
       state.progress = progress;
       paint(progress, false);
 
-      // Tick every quarter of the pull, a heavier thump on reaching the top
-      const zone = Math.floor(progress * 4);
-      if (zone > state.zone) {
-        state.zone = zone;
-        if (zone >= 4) hapticHeavy();
-        else haptic();
-      } else if (zone < state.zone) {
+      // Detent tick every eighth of the pull — in both directions, like a
+      // ratchet — with a heavier thump on first reaching the top
+      const zone = Math.floor(progress * 8);
+      if (zone !== state.zone) {
+        if (zone >= 8 && state.zone < 8) hapticHeavy();
+        else hapticTick();
         state.zone = zone;
       }
     }
