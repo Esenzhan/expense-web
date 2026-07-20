@@ -150,8 +150,12 @@ export default function EditExpenseSheet({ expense, defaultWallet, onClose, onSa
     for (const child of row.children) {
       const distance = Math.abs(child.offsetLeft + child.offsetWidth / 2 - middle);
       const step = child.offsetWidth + 10; // tile + flex gap
-      const proximity = Math.max(0, 1 - distance / step); // 1 at center → 0 one slot away
-      child.style.transform = `scale(${1 + 0.4 * proximity})`;
+      // Grow only within 0.8 of a slot from the center: the snap position
+      // can settle a couple px off-center, and without this dead zone the
+      // neighbor tile kept a visible residual enlargement at rest
+      const proximity = Math.max(0, 1 - distance / (step * 0.8));
+      // Unselected rest at 0.9x, the centered tile at 1.4x
+      child.style.transform = `scale(${0.9 + 0.5 * proximity})`;
       child.style.opacity = `${0.65 + 0.35 * proximity}`;
     }
   }

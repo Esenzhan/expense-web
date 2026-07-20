@@ -743,7 +743,8 @@ body {
 
 .keypad {
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
+  /* Narrow square operator column frees the width for the digit keys */
+  grid-template-columns: repeat(3, 1fr) 42px;
   gap: 8px;
 }
 
@@ -755,7 +756,7 @@ body {
   font-weight: 700;
   font-size: 18px;
   /* Flatter keys, like the reference — less vertical travel for the thumb */
-  padding: 12px 0;
+  padding: 10px 0;
   border-radius: 16px;
 }
 
