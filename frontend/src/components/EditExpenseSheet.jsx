@@ -127,9 +127,18 @@ export default function EditExpenseSheet({ expense, defaultWallet, onClose, onSa
   const categoryRef = useRef(category);
   categoryRef.current = category;
 
+  // All carousel geometry uses getBoundingClientRect, NOT offsetLeft:
+  // offsetLeft is measured from the nearest positioned ancestor, and since
+  // the sheet became position:absolute its 18px padding silently shifted
+  // every offsetLeft — the centered tile undershot its full scale and the
+  // left neighbor kept a residual enlargement. Rect centers are also
+  // invariant under the scale transform (transform-origin is the center).
   function centerOf(row, index) {
     const child = row.children[index];
-    return child ? child.offsetLeft - row.clientWidth / 2 + child.offsetWidth / 2 : 0;
+    if (!child) return 0;
+    const rowRect = row.getBoundingClientRect();
+    const childRect = child.getBoundingClientRect();
+    return row.scrollLeft + (childRect.left + childRect.width / 2) - (rowRect.left + rowRect.width / 2);
   }
 
   useEffect(() => {
@@ -137,7 +146,7 @@ export default function EditExpenseSheet({ expense, defaultWallet, onClose, onSa
     const row = categoryRowRef.current;
     if (row) {
       row.scrollLeft = centerOf(row, categoryNames.indexOf(categoryRef.current));
-      applyCarouselScales(row, row.scrollLeft + row.clientWidth / 2);
+      applyCarouselScales(row);
     }
   }, []);
 
@@ -146,10 +155,13 @@ export default function EditExpenseSheet({ expense, defaultWallet, onClose, onSa
   // not with a discrete jump once it snaps. Styles are written directly to
   // the DOM (not through React state) so every scroll event repaints
   // without a re-render.
-  function applyCarouselScales(row, middle) {
+  function applyCarouselScales(row) {
+    const rowRect = row.getBoundingClientRect();
+    const middle = rowRect.left + rowRect.width / 2;
     for (const child of row.children) {
-      const distance = Math.abs(child.offsetLeft + child.offsetWidth / 2 - middle);
-      const step = child.offsetWidth + 10; // tile + flex gap
+      const childRect = child.getBoundingClientRect();
+      const distance = Math.abs(childRect.left + childRect.width / 2 - middle);
+      const step = child.offsetWidth + 10; // unscaled tile + flex gap
       // Grow only within 0.8 of a slot from the center: the snap position
       // can settle a couple px off-center, and without this dead zone the
       // neighbor tile kept a visible residual enlargement at rest
@@ -163,13 +175,14 @@ export default function EditExpenseSheet({ expense, defaultWallet, onClose, onSa
   function onCategoryScroll() {
     const row = categoryRowRef.current;
     if (!row) return;
-    const middle = row.scrollLeft + row.clientWidth / 2;
-    applyCarouselScales(row, middle);
+    applyCarouselScales(row);
+    const rowRect = row.getBoundingClientRect();
+    const middle = rowRect.left + rowRect.width / 2;
     let bestIndex = 0;
     let bestDistance = Infinity;
     for (let i = 0; i < row.children.length; i++) {
-      const child = row.children[i];
-      const distance = Math.abs(child.offsetLeft + child.offsetWidth / 2 - middle);
+      const childRect = row.children[i].getBoundingClientRect();
+      const distance = Math.abs(childRect.left + childRect.width / 2 - middle);
       if (distance < bestDistance) {
         bestDistance = distance;
         bestIndex = i;
