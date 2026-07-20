@@ -34,24 +34,16 @@ export function haptic() {
 }
 
 // Tick for continuous gestures (drag detents), throttled so rapid detents
-// don't coalesce. Fired synchronously: iOS only delivers the switch-toggle
-// haptic from inside a user-gesture handler's own call stack — deferring via
-// setTimeout kills even the taps that otherwise work. (In practice iOS still
-// mutes these mid-drag; Android buzzes via navigator.vibrate.)
+// don't coalesce. Android-only in practice: navigator.vibrate works from any
+// handler, while iOS delivers the switch-toggle haptic exclusively from real
+// click handlers (confirmed on-device) — so no switch fallback here, it
+// would just toggle a checkbox for nothing mid-drag.
 let lastTickAt = 0;
 export function hapticTick() {
   const now = Date.now();
   if (now - lastTickAt < 100) return;
   lastTickAt = now;
-  if (navigator.vibrate) {
-    navigator.vibrate(8);
-    return;
-  }
-  try {
-    ensureSwitch().click();
-  } catch {
-    // no haptics — fine
-  }
+  navigator.vibrate?.(8);
 }
 
 export function hapticHeavy() {

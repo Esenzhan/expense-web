@@ -334,13 +334,12 @@ body {
 }
 
 .mic-button {
-  width: 64px;
-  height: 64px;
+  width: 77px;
+  height: 77px;
   border-radius: 50%;
   border: none;
   background: var(--ink);
   color: #fff;
-  font-size: 24px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -379,7 +378,6 @@ body {
   border: none;
   background: var(--ink);
   color: #fff;
-  font-size: 20px;
   display: flex;
   align-items: center;
   justify-content: center;

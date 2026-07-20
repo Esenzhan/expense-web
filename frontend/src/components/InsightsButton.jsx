@@ -19,7 +19,7 @@ export default function InsightsButton({ onOpen }) {
 
   useEffect(() => {
     const btn = btnRef.current;
-    const state = { armed: false, pulling: false, thumped: false, startY: 0, progress: 0, zone: 0 };
+    const state = { armed: false, pulling: false, startY: 0, progress: 0, zone: 0 };
 
     function paint(progress, springBack) {
       btn.style.transition = springBack
@@ -83,18 +83,6 @@ export default function InsightsButton({ onOpen }) {
       }
     }
 
-    // iOS delivers the switch haptic only inside handlers that carry user
-    // activation — click qualifies, touch events don't (empirically: taps
-    // buzz, touchend never did). A drag suppresses the browser's click, so
-    // pointerup — which fires on release and is an activation-triggering
-    // event per spec — is the remaining candidate for the release thump.
-    function onPointerUp() {
-      if (state.pulling && state.progress >= 0.95 && !state.thumped) {
-        state.thumped = true;
-        hapticHeavy();
-      }
-    }
-
     function onTouchEnd() {
       const wasPulling = state.pulling;
       state.armed = false;
@@ -104,21 +92,21 @@ export default function InsightsButton({ onOpen }) {
       paint(0, true);
       state.progress = 0;
       if (shouldOpen) {
-        if (!state.thumped) hapticHeavy();
+        // Android buzzes here via navigator.vibrate; iOS web can't vibrate
+        // outside real click handlers at all (confirmed on-device), so on
+        // iPhone the swipe stays silent by platform design
+        hapticHeavy();
         onOpenRef.current?.();
       }
-      state.thumped = false;
     }
 
     document.addEventListener("touchstart", onTouchStart, { passive: true });
     document.addEventListener("touchmove", onTouchMove, { passive: false });
-    document.addEventListener("pointerup", onPointerUp);
     document.addEventListener("touchend", onTouchEnd);
     document.addEventListener("touchcancel", onTouchEnd);
     return () => {
       document.removeEventListener("touchstart", onTouchStart);
       document.removeEventListener("touchmove", onTouchMove);
-      document.removeEventListener("pointerup", onPointerUp);
       document.removeEventListener("touchend", onTouchEnd);
       document.removeEventListener("touchcancel", onTouchEnd);
     };

@@ -16,6 +16,48 @@ function pickMimeType() {
   );
 }
 
+// One consistent line-icon set for the bottom dock
+function ScanIcon() {
+  return (
+    <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M4 7V5.5A1.5 1.5 0 0 1 5.5 4H8" />
+      <path d="M16 4h2.5A1.5 1.5 0 0 1 20 5.5V7" />
+      <path d="M20 17v1.5a1.5 1.5 0 0 1-1.5 1.5H16" />
+      <path d="M8 20H5.5A1.5 1.5 0 0 1 4 18.5V17" />
+      <line x1="8" y1="9" x2="16" y2="9" />
+      <line x1="8" y1="12" x2="16" y2="12" />
+      <line x1="8" y1="15" x2="13" y2="15" />
+    </svg>
+  );
+}
+
+function MicIcon() {
+  return (
+    <svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+      <rect x="9" y="3" width="6" height="11" rx="3" />
+      <path d="M5 11a7 7 0 0 0 14 0" />
+      <line x1="12" y1="18" x2="12" y2="21" />
+    </svg>
+  );
+}
+
+function PlusIcon() {
+  return (
+    <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round">
+      <line x1="12" y1="5" x2="12" y2="19" />
+      <line x1="5" y1="12" x2="19" y2="12" />
+    </svg>
+  );
+}
+
+function StopIcon() {
+  return (
+    <svg width="30" height="30" viewBox="0 0 24 24" fill="currentColor">
+      <rect x="7" y="7" width="10" height="10" rx="2.5" />
+    </svg>
+  );
+}
+
 // phase: idle -> listening -> processing -> confirming -> idle
 export default function VoiceRecorder({ onSaved, onManualAdd }) {
   const [phase, setPhase] = useState("idle");
@@ -250,14 +292,28 @@ export default function VoiceRecorder({ onSaved, onManualAdd }) {
 
         {phase === "idle" && (
           <div className="mic-row">
-            <button className="side-button" onClick={onManualAdd} aria-label="Сканировать чек">
-              📷
+            <button
+              className="side-button"
+              onClick={() => {
+                haptic();
+                onManualAdd?.();
+              }}
+              aria-label="Сканировать чек"
+            >
+              <ScanIcon />
             </button>
             <button className="mic-button" onClick={startRecording} aria-label="Начать запись">
-              ●
+              <MicIcon />
             </button>
-            <button className="side-button" onClick={onManualAdd} aria-label="Добавить вручную">
-              +
+            <button
+              className="side-button"
+              onClick={() => {
+                haptic();
+                onManualAdd?.();
+              }}
+              aria-label="Добавить вручную"
+            >
+              <PlusIcon />
             </button>
           </div>
         )}
@@ -269,7 +325,7 @@ export default function VoiceRecorder({ onSaved, onManualAdd }) {
               onClick={stopRecording}
               aria-label="Остановить запись"
             >
-              ■
+              <StopIcon />
             </button>
             <button className="cancel-button" onClick={cancelRecording} aria-label="Отменить запись">
               ✕
