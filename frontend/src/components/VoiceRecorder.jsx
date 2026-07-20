@@ -103,7 +103,19 @@ export default function VoiceRecorder({ onSaved, onManualAdd }) {
         }
       };
     }
-    stopMedia();
+    // Keep the mic streaming ~700ms of trailing silence before stopping:
+    // Deepgram endpoints an utterance after ~500ms of in-stream silence, so
+    // this finalizes the transcript even if the server-side stop handling
+    // is unavailable. The stop marker above then just closes things out.
+    // References are captured here so a recording started within the delay
+    // window keeps its own recorder/stream untouched.
+    const stream = streamRef.current;
+    mediaRecorderRef.current = null;
+    streamRef.current = null;
+    setTimeout(() => {
+      if (recorder && recorder.state !== "inactive") recorder.stop();
+      stream?.getTracks().forEach((track) => track.stop());
+    }, 700);
     setPhase("processing");
     // Socket stays open until the server sends "parsed"/"error" so we don't
     // miss the response while Claude is still parsing. Fallback timeout
