@@ -1,8 +1,9 @@
-import { useReducer, useState } from "react";
+import { useReducer, useRef, useState } from "react";
 import { createExpense, updateExpense, deleteExpense } from "../api";
 import { CATEGORIES, getCategoryIcon } from "../categoryIcons";
 import { WALLETS } from "../wallets";
 import { haptic } from "../haptics";
+import { useBodyScrollLock, useSwipeDismiss } from "../sheetGestures";
 
 function toNumber(raw) {
   return parseFloat(raw.replace(",", ".")) || 0;
@@ -73,6 +74,10 @@ export default function EditExpenseSheet({ expense, onClose, onSaved, onDeleted 
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
 
+  const sheetRef = useRef(null);
+  useBodyScrollLock();
+  useSwipeDismiss(sheetRef, onClose);
+
   function press(action) {
     haptic();
     dispatch(action);
@@ -116,7 +121,7 @@ export default function EditExpenseSheet({ expense, onClose, onSaved, onDeleted 
 
   return (
     <div className="sheet-backdrop" onClick={onClose}>
-      <div className="edit-sheet" onClick={(event) => event.stopPropagation()}>
+      <div className="edit-sheet" ref={sheetRef} onClick={(event) => event.stopPropagation()}>
         <div className="edit-header">
           <button className="icon-button" onClick={onClose} aria-label="Закрыть">
             ✕

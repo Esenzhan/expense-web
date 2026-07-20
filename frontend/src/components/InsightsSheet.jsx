@@ -1,7 +1,8 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { fetchInsights } from "../api";
 import { getCategoryIcon } from "../categoryIcons";
 import InsightsChart from "./InsightsChart";
+import { useBodyScrollLock, useSwipeDismiss } from "../sheetGestures";
 
 const PERIOD_LABELS = { month: "Этот месяц", 7: "7 дней", 30: "30 дней" };
 
@@ -13,6 +14,10 @@ export default function InsightsSheet({ period, walletBalance, onClose }) {
   const [loading, setLoading] = useState(true);
   const [data, setData] = useState(null);
   const [error, setError] = useState("");
+
+  const sheetRef = useRef(null);
+  useBodyScrollLock();
+  useSwipeDismiss(sheetRef, onClose);
 
   useEffect(() => {
     let cancelled = false;
@@ -34,7 +39,7 @@ export default function InsightsSheet({ period, walletBalance, onClose }) {
 
   return (
     <div className="sheet-backdrop" onClick={onClose}>
-      <div className="insights-sheet" onClick={(event) => event.stopPropagation()}>
+      <div className="insights-sheet" ref={sheetRef} onClick={(event) => event.stopPropagation()}>
         <div className="insights-header">
           <div className="wallet-chip">
             <span className="wallet-chip-icon">💳</span>
