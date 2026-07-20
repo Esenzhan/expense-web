@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { fetchInsights } from "../api";
 import { getCategoryIcon } from "../categoryIcons";
 import InsightsChart from "./InsightsChart";
-import { useBodyScrollLock, useSwipeDismiss } from "../sheetGestures";
+import { useSwipeDismiss } from "../sheetGestures";
 
 const PERIOD_LABELS = { month: "Этот месяц", 7: "7 дней", 30: "30 дней" };
 
@@ -16,7 +16,6 @@ export default function InsightsSheet({ period, walletBalance, onClose }) {
   const [error, setError] = useState("");
 
   const sheetRef = useRef(null);
-  useBodyScrollLock();
   useSwipeDismiss(sheetRef, onClose);
 
   useEffect(() => {

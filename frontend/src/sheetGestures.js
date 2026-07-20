@@ -1,28 +1,13 @@
 import { useEffect, useRef } from "react";
 
-// Locks the page behind an open sheet. Deliberately NOT the position:fixed
-// body trick: on iOS that offsets the body by the scroll position and the
-// fixed sheet ends up anchored to the shifted box — a page scrolled by N px
-// showed the sheet floating N px above the bottom edge, with a strip of
-// undimmed page visible below it. overflow:hidden keeps the scroll offset
-// and moves nothing; leaked touch scrolling is stopped by preventDefault on
-// the backdrop (see useSwipeDismiss) + overscroll-behavior on the sheets.
-let lockCount = 0;
-
-export function useBodyScrollLock() {
-  useEffect(() => {
-    if (++lockCount === 1) {
-      document.documentElement.style.overflow = "hidden";
-      document.body.style.overflow = "hidden";
-    }
-    return () => {
-      if (--lockCount === 0) {
-        document.documentElement.style.overflow = "";
-        document.body.style.overflow = "";
-      }
-    };
-  }, []);
-}
+// NOTE on background scroll-locking: both classic tricks are broken here —
+// position:fixed on body makes iOS anchor the fixed sheet to the shifted
+// body box (sheet floats above the bottom edge when the page was scrolled),
+// and overflow:hidden on html resets the scroll position to the top. So the
+// page is never touched at all; instead every touch while a sheet is open is
+// contained at the touch level: the backdrop preventDefaults drags on the
+// dim area (below), and the sheets keep their internal scrolling to
+// themselves via overscroll-behavior: contain.
 
 // Swipe-down-to-dismiss for a bottom sheet. Engages only when the sheet's
 // own scroll is at the top and the drag shows clear downward intent, so

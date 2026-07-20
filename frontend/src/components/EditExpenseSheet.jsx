@@ -3,7 +3,7 @@ import { createExpense, updateExpense, deleteExpense } from "../api";
 import { CATEGORIES, getCategoryIcon } from "../categoryIcons";
 import { WALLETS } from "../wallets";
 import { haptic } from "../haptics";
-import { useBodyScrollLock, useSwipeDismiss } from "../sheetGestures";
+import { useSwipeDismiss } from "../sheetGestures";
 
 function toNumber(raw) {
   return parseFloat(raw.replace(",", ".")) || 0;
@@ -75,7 +75,6 @@ export default function EditExpenseSheet({ expense, onClose, onSaved, onDeleted 
   const [error, setError] = useState("");
 
   const sheetRef = useRef(null);
-  useBodyScrollLock();
   useSwipeDismiss(sheetRef, onClose);
 
   function press(action) {
