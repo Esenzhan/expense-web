@@ -736,7 +736,10 @@ body {
 .insights-sheet {
   width: 100%;
   max-width: 480px;
-  max-height: 92vh;
+  /* Fixed near-full-screen height like the reference — only a sliver of the
+     scaled-down main screen stays visible above the sheet */
+  height: 93vh;
+  height: 93dvh;
   overflow-y: auto;
   overscroll-behavior: contain;
   background: linear-gradient(180deg, #fdf0e4 0%, var(--surface) 260px);

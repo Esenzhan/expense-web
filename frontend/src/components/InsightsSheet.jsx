@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { fetchInsights } from "../api";
 import { getCategoryIcon } from "../categoryIcons";
+import { getWalletIcon } from "../wallets";
 import InsightsChart from "./InsightsChart";
 import { useSwipeDismiss } from "../sheetGestures";
 
@@ -41,7 +42,12 @@ export default function InsightsSheet({ period, wallet, walletBalance, onClose }
       <div className="insights-sheet" ref={sheetRef} onClick={(event) => event.stopPropagation()}>
         <div className="insights-header">
           <div className="wallet-chip">
-            <span className="wallet-chip-icon">💳</span>
+            <span
+              className="wallet-chip-icon"
+              style={wallet ? { background: getWalletIcon(wallet).bg, color: getWalletIcon(wallet).fg } : undefined}
+            >
+              {wallet ? getWalletIcon(wallet).emoji : "💳"}
+            </span>
             <div>
               <div className="wallet-chip-name">{wallet || "Все счета"}</div>
               <div className="wallet-chip-balance">−{walletBalance.toLocaleString("ru-RU")} ₸</div>
