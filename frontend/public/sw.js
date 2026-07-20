@@ -20,6 +20,11 @@ self.addEventListener("fetch", (event) => {
   const url = new URL(request.url);
   if (url.origin !== self.location.origin) return;
 
+  // TEMP DEBUG — remove after diagnosing the offline-shell issue
+  self.clients.matchAll().then((clients) => {
+    clients.forEach((c) => c.postMessage({ __swDebug: true, mode: request.mode, dest: request.destination, url: request.url }));
+  });
+
   // The HTML shell must always be fresh — otherwise a redeploy can get stuck
   // showing a stale build until the cache happens to revalidate in the
   // background. Fall back to cache only when actually offline.
