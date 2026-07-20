@@ -33,10 +33,11 @@ export function haptic() {
   }
 }
 
-// Tick for continuous gestures (drag detents). Two differences from haptic():
-// the switch click is deferred out of the touchmove call stack — WebKit
-// appears to drop toggles fired synchronously mid-drag — and calls are
-// throttled so rapid detents don't coalesce into nothing.
+// Tick for continuous gestures (drag detents), throttled so rapid detents
+// don't coalesce. Fired synchronously: iOS only delivers the switch-toggle
+// haptic from inside a user-gesture handler's own call stack — deferring via
+// setTimeout kills even the taps that otherwise work. (In practice iOS still
+// mutes these mid-drag; Android buzzes via navigator.vibrate.)
 let lastTickAt = 0;
 export function hapticTick() {
   const now = Date.now();
@@ -46,13 +47,11 @@ export function hapticTick() {
     navigator.vibrate(8);
     return;
   }
-  setTimeout(() => {
-    try {
-      ensureSwitch().click();
-    } catch {
-      // no haptics — fine
-    }
-  }, 0);
+  try {
+    ensureSwitch().click();
+  } catch {
+    // no haptics — fine
+  }
 }
 
 export function hapticHeavy() {
@@ -62,11 +61,10 @@ export function hapticHeavy() {
   }
   try {
     const label = ensureSwitch();
-    // Both clicks deferred: this can be called from inside a touchmove
-    // handler, where synchronous switch toggles get dropped. ~120ms apart
-    // reads as a distinct double tick; much closer and iOS coalesces the
-    // two toggles into one buzz.
-    setTimeout(() => label.click(), 0);
+    // First click synchronous — iOS drops toggles deferred out of the
+    // gesture handler's call stack. The 120ms follow-up still lands within
+    // the post-gesture activation window and reads as a distinct double.
+    label.click();
     setTimeout(() => label.click(), 120);
   } catch {
     // no haptics — fine
