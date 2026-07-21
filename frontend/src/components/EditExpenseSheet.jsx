@@ -1,4 +1,4 @@
-import { useEffect, useReducer, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useReducer, useRef, useState } from "react";
 import { createExpense, updateExpense, deleteExpense, isNetworkError } from "../api";
 import { enqueueExpense, updatePendingExpense, removePendingExpense } from "../offlineQueue";
 import { listCategories, getCategoryIcon } from "../categoryIcons";
@@ -30,6 +30,45 @@ function formatDisplay(raw) {
 
 const OPS = ["+", "−", "×", "÷"];
 const isOp = (token) => OPS.includes(token);
+
+// Amount display with reference-style digit entry: a freshly typed digit
+// fades/scales in, and both halves of the line (digits and the ₸ sign)
+// slide apart from the center instead of jumping — a FLIP on each group,
+// with opposite deltas since the whole line stays centered.
+function AnimatedAmount({ text }) {
+  const digitsRef = useRef(null);
+  const tengeRef = useRef(null);
+  const prevWidthRef = useRef(null);
+  const prevLenRef = useRef(text.length);
+  const grew = text.length > prevLenRef.current;
+
+  useLayoutEffect(() => {
+    const digits = digitsRef.current;
+    if (!digits) return;
+    const width = digits.offsetWidth;
+    if (prevWidthRef.current !== null && width !== prevWidthRef.current) {
+      const delta = (width - prevWidthRef.current) / 2;
+      const opts = { duration: 180, easing: "ease-out" };
+      digits.animate([{ transform: `translateX(${delta}px)` }, { transform: "none" }], opts);
+      tengeRef.current?.animate([{ transform: `translateX(${-delta}px)` }, { transform: "none" }], opts);
+    }
+    prevWidthRef.current = width;
+    prevLenRef.current = text.length;
+  }, [text]);
+
+  return (
+    <>
+      <span className="amount-digits" ref={digitsRef}>
+        {[...text].map((ch, i) => (
+          <span key={i} className={grew && i === text.length - 1 ? "digit-in" : undefined}>
+            {ch === " " ? " " : ch}
+          </span>
+        ))}
+      </span>
+      <span ref={tengeRef}>₸</span>
+    </>
+  );
+}
 
 // The calculator works like the reference: the whole chain is kept as
 // tokens ("200", "+", "500", "×", "5", …), evaluated strictly left to right
@@ -102,9 +141,19 @@ function calcReducer(state, action) {
   }
 }
 
-export default function EditExpenseSheet({ expense, defaultWallet, onClose, onSaved, onDeleted }) {
+export default function EditExpenseSheet({ expense, defaultWallet, onClose, onSaved, onDeleted, onCommitted }) {
   const isNew = !expense;
   const isPending = Boolean(expense?.pending);
+  // Slide-down dismissal, like the reference: the sheet animates away while
+  // the (already refreshed) main screen shows through, then unmounts.
+  const [closing, setClosing] = useState(false);
+  const dismissedRef = useRef(false);
+  function dismiss(after) {
+    if (dismissedRef.current) return;
+    dismissedRef.current = true;
+    setClosing(true);
+    setTimeout(after, 300);
+  }
   const [calc, dispatch] = useReducer(calcReducer, {
     tokens: [isNew ? "0" : String(Number(expense.amount)).replace(".", ",")],
   });
@@ -236,7 +285,10 @@ export default function EditExpenseSheet({ expense, defaultWallet, onClose, onSa
       } else {
         saved = await updateExpense(expense.id, payload);
       }
-      onSaved?.(saved);
+      // Refresh the list right away so the new row is already in place
+      // behind the sheet while it slides down, like the reference
+      onCommitted?.();
+      dismiss(() => onSaved?.(saved));
     } catch (err) {
       setError(err.message);
       setSaving(false);
@@ -251,7 +303,8 @@ export default function EditExpenseSheet({ expense, defaultWallet, onClose, onSa
       } else {
         await deleteExpense(expense.id);
       }
-      onDeleted?.();
+      onCommitted?.();
+      dismiss(() => onDeleted?.());
     } catch (err) {
       setError(err.message);
       setSaving(false);
@@ -259,10 +312,14 @@ export default function EditExpenseSheet({ expense, defaultWallet, onClose, onSa
   }
 
   return (
-    <div className="sheet-backdrop" onClick={onClose}>
-      <div className="edit-sheet" ref={sheetRef} onClick={(event) => event.stopPropagation()}>
+    <div className={`sheet-backdrop ${closing ? "closing" : ""}`} onClick={() => dismiss(onClose)}>
+      <div
+        className={`edit-sheet ${closing ? "closing" : ""}`}
+        ref={sheetRef}
+        onClick={(event) => event.stopPropagation()}
+      >
         <div className="edit-header">
-          <button className="icon-button" onClick={onClose} aria-label="Закрыть">
+          <button className="icon-button" onClick={() => dismiss(onClose)} aria-label="Закрыть">
             ✕
           </button>
           <span className="expense-type-badge">↗ Расход</span>
@@ -302,7 +359,11 @@ export default function EditExpenseSheet({ expense, defaultWallet, onClose, onSa
             </div>
           )}
           <div className="edit-amount">
-            {formatDisplay(calc.tokens.length === 1 ? calc.tokens[0] : resultToDisplay(evaluateTokens(calc.tokens)))} ₸
+            <AnimatedAmount
+              text={formatDisplay(
+                calc.tokens.length === 1 ? calc.tokens[0] : resultToDisplay(evaluateTokens(calc.tokens))
+              )}
+            />
           </div>
         </div>
 

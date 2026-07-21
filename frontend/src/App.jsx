@@ -328,14 +328,9 @@ export default function App() {
         <EditExpenseSheet
           expense={editingExpense}
           onClose={() => setEditingExpense(null)}
-          onSaved={() => {
-            setEditingExpense(null);
-            refreshAll(period);
-          }}
-          onDeleted={() => {
-            setEditingExpense(null);
-            refreshAll(period);
-          }}
+          onCommitted={() => refreshAll(period)}
+          onSaved={() => setEditingExpense(null)}
+          onDeleted={() => setEditingExpense(null)}
         />
       )}
 
@@ -343,10 +338,8 @@ export default function App() {
         <EditExpenseSheet
           defaultWallet={selectedWallet}
           onClose={() => setAddingExpense(false)}
-          onSaved={() => {
-            setAddingExpense(false);
-            refreshAll(period);
-          }}
+          onCommitted={() => refreshAll(period)}
+          onSaved={() => setAddingExpense(false)}
         />
       )}
 
