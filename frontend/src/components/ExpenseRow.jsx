@@ -145,7 +145,7 @@ export default function ExpenseRow({ expense, icon, readonly, onSelect, onDelete
         </span>
         <div className="meta">
           <span className="category">{expense.category}</span>
-          <span className="sub">{expense.wallet}</span>
+          {expense.description && <span className="sub">{expense.description}</span>}
         </div>
         <span className="amount">
           −{Number(expense.amount).toLocaleString("ru-RU")} ₸
