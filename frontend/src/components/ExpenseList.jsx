@@ -1,4 +1,3 @@
-import { useState } from "react";
 import { getCategoryIcon } from "../categoryIcons";
 import ExpenseRow from "./ExpenseRow";
 
@@ -41,8 +40,6 @@ function groupByDay(expenses) {
 
 export default function ExpenseList({ expenses, onSelect, onDeleteRequest, currentUserId }) {
   const groups = groupByDay(expenses);
-  // Only one row's delete button revealed at a time, across the whole list.
-  const [openRowId, setOpenRowId] = useState(null);
 
   return (
     <div>
@@ -65,9 +62,6 @@ export default function ExpenseList({ expenses, onSelect, onDeleteRequest, curre
                   expense={expense}
                   icon={icon}
                   readonly={readonly}
-                  isOpen={openRowId === expense.id}
-                  onOpen={() => setOpenRowId(expense.id)}
-                  onClose={() => setOpenRowId((id) => (id === expense.id ? null : id))}
                   onSelect={onSelect}
                   onDeleteRequest={onDeleteRequest}
                 />

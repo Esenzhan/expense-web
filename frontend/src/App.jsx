@@ -20,6 +20,10 @@ import NewWalletSheet from "./components/NewWalletSheet";
 
 const CACHE_KEY = "traty-cache-v4";
 
+// How long a deleted expense can be brought back before the DELETE is
+// actually sent (the reference app's ring takes about this long to drain).
+const UNDO_WINDOW_MS = 4000;
+
 function HeaderIcon({ children }) {
   return (
     <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
@@ -33,6 +37,40 @@ const PERIODS = [
   { value: "7", label: "7 дней" },
   { value: "30", label: "30 дней" },
 ];
+
+// Ring that drains counter-clockwise over the undo window, like the
+// reference app — shows how long is left to hit "Отменить".
+function UndoTimerRing({ durationMs }) {
+  const radius = 7;
+  const circumference = 2 * Math.PI * radius;
+  return (
+    <svg className="undo-banner-timer" viewBox="0 0 18 18">
+      <circle
+        className="undo-banner-timer-track"
+        cx="9"
+        cy="9"
+        r={radius}
+        fill="none"
+        strokeWidth="2"
+      />
+      <circle
+        className="undo-banner-timer-arc"
+        cx="9"
+        cy="9"
+        r={radius}
+        fill="none"
+        strokeWidth="2"
+        strokeLinecap="round"
+        strokeDasharray={circumference}
+        strokeDashoffset="0"
+        style={{
+          animationDuration: `${durationMs}ms`,
+          "--ring-circumference": circumference,
+        }}
+      />
+    </svg>
+  );
+}
 
 // Cache is shared storage on the device but each account's data is private
 // now, so it's tagged with the owning account's email — a cache written by
@@ -100,7 +138,6 @@ export default function App() {
   const [pendingDelete, setPendingDelete] = useState(null);
   const pendingDeleteRef = useRef(null);
   pendingDeleteRef.current = pendingDelete;
-  const UNDO_WINDOW_MS = 4000;
 
   // --- Auth bootstrap ---------------------------------------------------
   useEffect(() => {
@@ -395,7 +432,7 @@ export default function App() {
     <div className={`app ${insightsOpen ? "app-behind" : ""}`}>
       {pendingDelete && (
         <div className="undo-banner">
-          <span className="undo-banner-spinner" />
+          <UndoTimerRing durationMs={UNDO_WINDOW_MS} />
           <span className="undo-banner-text">Операция удалена</span>
           <button className="undo-banner-action" onClick={undoDelete}>
             Отменить

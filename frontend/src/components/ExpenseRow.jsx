@@ -1,7 +1,10 @@
 import { useEffect, useRef } from "react";
 import CategoryGlyph from "./CategoryGlyph";
+import { haptic } from "../haptics";
 
-const REVEAL_WIDTH = 76;
+// Drag past this and releasing deletes; below it the row springs back.
+const COMMIT_DISTANCE = 96;
+const MAX_DRAG = 150;
 
 function TrashIcon() {
   return (
@@ -14,98 +17,128 @@ function TrashIcon() {
   );
 }
 
-// Swipe-left-to-reveal-delete, one row open at a time (isOpen/onOpen/onClose
-// are owned by the parent list so opening one row can close another).
-export default function ExpenseRow({ expense, icon, readonly, isOpen, onOpen, onClose, onSelect, onDeleteRequest }) {
-  const contentRef = useRef(null);
-  const gesture = useRef({ dragging: false, deciding: true, startX: 0, startY: 0, dx: 0 });
+// Swipe-left-to-delete, like the reference app: the red zone grows with the
+// drag and deleting fires on release once past COMMIT_DISTANCE — there's no
+// separate tap on the trash icon.
+export default function ExpenseRow({ expense, icon, readonly, onSelect, onDeleteRequest }) {
+  const rowRef = useRef(null);
+  const zoneRef = useRef(null);
+  const iconRef = useRef(null);
+  const onDeleteRef = useRef(onDeleteRequest);
+  onDeleteRef.current = onDeleteRequest;
 
-  // Snap closed whenever this row stops being the open one — including when
-  // a *different* row opens and this one wasn't dragged at all.
+  // Whether the touch that just ended was a swipe — checked by the click
+  // handler so a swipe doesn't also open the edit sheet.
+  const swipedRef = useRef(false);
+
   useEffect(() => {
-    if (!isOpen && contentRef.current) {
-      contentRef.current.style.transition = "transform 0.22s ease";
-      contentRef.current.style.transform = "translateX(0)";
-    }
-  }, [isOpen]);
+    const el = rowRef.current;
+    if (!el || readonly) return;
 
-  function onTouchStart(event) {
-    gesture.current = {
-      dragging: false,
-      deciding: true,
-      startX: event.touches[0].clientX,
-      startY: event.touches[0].clientY,
-      dx: isOpen ? -REVEAL_WIDTH : 0,
+    // Axis is decided once per touch and then locked: "h" owns the gesture
+    // and suppresses page scroll, "v" hands the touch back to the scroller.
+    const state = { axis: null, startX: 0, startY: 0, dx: 0, armed: false };
+
+    function paint(dx, animate) {
+      const zone = zoneRef.current;
+      el.style.transition = animate ? "transform 0.22s ease" : "none";
+      el.style.transform = `translateX(${dx}px)`;
+      if (zone) {
+        zone.style.transition = animate ? "width 0.22s ease" : "none";
+        zone.style.width = `${Math.abs(dx)}px`;
+        zone.classList.toggle("armed", Math.abs(dx) >= COMMIT_DISTANCE);
+      }
+      if (iconRef.current) {
+        iconRef.current.style.opacity = `${0.3 + 0.7 * Math.min(1, Math.abs(dx) / COMMIT_DISTANCE)}`;
+      }
+    }
+
+    function onTouchStart(event) {
+      state.axis = null;
+      state.startX = event.touches[0].clientX;
+      state.startY = event.touches[0].clientY;
+      state.dx = 0;
+      state.armed = false;
+      swipedRef.current = false;
+    }
+
+    function onTouchMove(event) {
+      const dxRaw = event.touches[0].clientX - state.startX;
+      const dyRaw = event.touches[0].clientY - state.startY;
+
+      if (state.axis === null) {
+        // Not enough movement to tell the axis apart yet
+        if (Math.abs(dxRaw) < 8 && Math.abs(dyRaw) < 8) return;
+        state.axis = Math.abs(dxRaw) > Math.abs(dyRaw) ? "h" : "v";
+      }
+      if (state.axis === "v") return; // vertical scroll owns this touch
+      if (dxRaw >= 0) {
+        // Rightward — nothing to reveal, keep the row closed
+        state.dx = 0;
+        paint(0, false);
+        return;
+      }
+
+      // Horizontal: block the page from scrolling for the rest of this touch
+      if (event.cancelable) event.preventDefault();
+      swipedRef.current = true;
+      const next = Math.max(-MAX_DRAG, dxRaw);
+      state.dx = next;
+      // Buzz exactly when crossing the commit threshold, so the point of no
+      // return is felt without looking
+      const armedNow = Math.abs(next) >= COMMIT_DISTANCE;
+      if (armedNow !== state.armed) {
+        state.armed = armedNow;
+        if (armedNow) haptic();
+      }
+      paint(next, false);
+    }
+
+    function onTouchEnd() {
+      const committed = Math.abs(state.dx) >= COMMIT_DISTANCE;
+      state.axis = null;
+      state.dx = 0;
+      state.armed = false;
+      if (committed) {
+        // The parent hides the row immediately and opens the undo window,
+        // so this node is on its way out — no spring-back animation.
+        onDeleteRef.current?.(expense);
+        return;
+      }
+      paint(0, true);
+    }
+
+    el.addEventListener("touchstart", onTouchStart, { passive: true });
+    // Must be non-passive: React's own onTouchMove is registered as passive,
+    // so preventDefault() (the thing that stops the vertical scroll) is
+    // ignored there — same reason sheetGestures.js binds by hand.
+    el.addEventListener("touchmove", onTouchMove, { passive: false });
+    el.addEventListener("touchend", onTouchEnd);
+    el.addEventListener("touchcancel", onTouchEnd);
+    return () => {
+      el.removeEventListener("touchstart", onTouchStart);
+      el.removeEventListener("touchmove", onTouchMove);
+      el.removeEventListener("touchend", onTouchEnd);
+      el.removeEventListener("touchcancel", onTouchEnd);
     };
-  }
+  }, [expense, readonly]);
 
-  function onTouchMove(event) {
-    const g = gesture.current;
-    const dx = event.touches[0].clientX - g.startX;
-    const dy = event.touches[0].clientY - g.startY;
-    if (g.deciding) {
-      // Vertical scroll intent, or dragging right from an already-closed
-      // row (nothing to reveal) — not ours, let the list scroll normally.
-      if (Math.abs(dy) > Math.abs(dx)) return;
-      if (dx > 4 && g.dx === 0) return;
-      if (Math.abs(dx) < 6) return;
-      g.deciding = false;
-      g.dragging = true;
-      onOpen();
-    }
-    if (!g.dragging) return;
-    event.preventDefault();
-    const base = isOpen ? -REVEAL_WIDTH : 0;
-    g.dx = Math.min(0, Math.max(-REVEAL_WIDTH, base + dx));
-    if (contentRef.current) {
-      contentRef.current.style.transition = "none";
-      contentRef.current.style.transform = `translateX(${g.dx}px)`;
-    }
-  }
-
-  function onTouchEnd() {
-    const g = gesture.current;
-    if (!g.dragging) return;
-    g.dragging = false;
-    const openNow = g.dx < -REVEAL_WIDTH / 2;
-    if (contentRef.current) {
-      contentRef.current.style.transition = "transform 0.22s ease";
-      contentRef.current.style.transform = `translateX(${openNow ? -REVEAL_WIDTH : 0}px)`;
-    }
-    if (openNow) onOpen();
-    else onClose();
-  }
-
-  function handleRowClick() {
-    if (isOpen) {
-      onClose();
-      return;
-    }
+  function handleClick() {
+    if (swipedRef.current) return; // that was a swipe, not a tap
     if (!readonly) onSelect?.(expense);
   }
 
   return (
     <div className="expense-row-wrap">
-      {!readonly && (
-        <button
-          className="expense-row-delete"
-          aria-label="Удалить"
-          onClick={() => {
-            onClose();
-            onDeleteRequest?.(expense);
-          }}
-        >
+      <div className="expense-row-delete" ref={zoneRef} aria-hidden="true">
+        <span className="expense-row-delete-icon" ref={iconRef}>
           <TrashIcon />
-        </button>
-      )}
+        </span>
+      </div>
       <div
         className={`expense-row ${expense.pending ? "pending" : ""} ${readonly ? "readonly" : ""}`}
-        ref={contentRef}
-        onClick={handleRowClick}
-        onTouchStart={readonly ? undefined : onTouchStart}
-        onTouchMove={readonly ? undefined : onTouchMove}
-        onTouchEnd={readonly ? undefined : onTouchEnd}
-        onTouchCancel={readonly ? undefined : onTouchEnd}
+        ref={rowRef}
+        onClick={handleClick}
       >
         <span className="category-icon" style={{ background: icon.bg, color: icon.fg }}>
           <CategoryGlyph emoji={icon.emoji} size={20} />

@@ -70,19 +70,27 @@ body {
   animation: row-in 0.24s ease;
 }
 
-.undo-banner-spinner {
-  width: 14px;
-  height: 14px;
-  min-width: 14px;
-  border-radius: 50%;
-  border: 2px solid rgba(255, 255, 255, 0.35);
-  border-top-color: #fff;
-  animation: undo-spin 0.8s linear infinite;
+/* Countdown ring: a full circle that empties counter-clockwise as the undo
+   window runs out (SVG stroke-dashoffset animated from JS-set duration) */
+.undo-banner-timer {
+  width: 18px;
+  height: 18px;
+  min-width: 18px;
+  transform: rotate(-90deg);
 }
 
-@keyframes undo-spin {
+.undo-banner-timer-track {
+  stroke: rgba(255, 255, 255, 0.25);
+}
+
+.undo-banner-timer-arc {
+  stroke: #fff;
+  animation: undo-countdown linear forwards;
+}
+
+@keyframes undo-countdown {
   to {
-    transform: rotate(360deg);
+    stroke-dashoffset: var(--ring-circumference);
   }
 }
 
@@ -289,18 +297,29 @@ body {
   border-bottom: none;
 }
 
+/* Grows with the swipe (width is written from JS) and deepens once the
+   drag passes the point where releasing deletes */
 .expense-row-delete {
   position: absolute;
   top: 0;
   right: 0;
   bottom: 0;
-  width: 76px;
-  border: none;
+  width: 0;
   background: #fde2e1;
   color: var(--danger);
   display: flex;
   align-items: center;
   justify-content: center;
+  overflow: hidden;
+}
+
+.expense-row-delete.armed {
+  background: #f5a3a3;
+}
+
+.expense-row-delete-icon {
+  display: flex;
+  min-width: 20px;
 }
 
 .expense-row {
