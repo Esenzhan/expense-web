@@ -1,5 +1,5 @@
 import { useEffect, useLayoutEffect, useReducer, useRef, useState } from "react";
-import { createExpense, updateExpense, deleteExpense, isNetworkError } from "../api";
+import { createExpense, updateExpense, isNetworkError } from "../api";
 import { enqueueExpense, updatePendingExpense, removePendingExpense } from "../offlineQueue";
 import { listCategories, getCategoryIcon } from "../categoryIcons";
 import CategoryGlyph from "./CategoryGlyph";
@@ -141,7 +141,15 @@ function calcReducer(state, action) {
   }
 }
 
-export default function EditExpenseSheet({ expense, defaultWallet, onClose, onSaved, onDeleted, onCommitted }) {
+export default function EditExpenseSheet({
+  expense,
+  defaultWallet,
+  onClose,
+  onSaved,
+  onDeleted,
+  onCommitted,
+  onDeleteRequested,
+}) {
   const isNew = !expense;
   const isPending = Boolean(expense?.pending);
   // Slide-down dismissal, like the reference: the sheet animates away while
@@ -302,20 +310,16 @@ export default function EditExpenseSheet({ expense, defaultWallet, onClose, onSa
     }
   }
 
-  async function handleDelete() {
-    setSaving(true);
-    try {
-      if (isPending) {
-        removePendingExpense(expense.id);
-      } else {
-        await deleteExpense(expense.id);
-      }
+  function handleDelete() {
+    if (isPending) {
+      removePendingExpense(expense.id);
       onCommitted?.();
-      dismiss(() => onDeleted?.());
-    } catch (err) {
-      setError(err.message);
-      setSaving(false);
+    } else {
+      // Deferred: onDeleteRequested hides the row and starts the "Отменить"
+      // undo window in App.jsx — no network call happens here.
+      onDeleteRequested?.(expense);
     }
+    dismiss(() => onDeleted?.());
   }
 
   return (

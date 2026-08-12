@@ -1,5 +1,6 @@
+import { useState } from "react";
 import { getCategoryIcon } from "../categoryIcons";
-import CategoryGlyph from "./CategoryGlyph";
+import ExpenseRow from "./ExpenseRow";
 
 function sameDay(a, b) {
   return (
@@ -38,8 +39,10 @@ function groupByDay(expenses) {
   return groups;
 }
 
-export default function ExpenseList({ expenses, onSelect, currentUserId }) {
+export default function ExpenseList({ expenses, onSelect, onDeleteRequest, currentUserId }) {
   const groups = groupByDay(expenses);
+  // Only one row's delete button revealed at a time, across the whole list.
+  const [openRowId, setOpenRowId] = useState(null);
 
   return (
     <div>
@@ -54,30 +57,20 @@ export default function ExpenseList({ expenses, onSelect, currentUserId }) {
             {group.items.map((expense) => {
               const icon = getCategoryIcon(expense.wallet, expense.category);
               // Shared-wallet rows from the other account are visible but
-              // read-only — only whoever logged an expense can edit it.
+              // read-only — only whoever logged an expense can edit/delete it.
               const readonly = expense.user_id != null && expense.user_id !== currentUserId;
               return (
-                <div
-                  className={`expense-row ${expense.pending ? "pending" : ""} ${readonly ? "readonly" : ""}`}
+                <ExpenseRow
                   key={expense.id}
-                  onClick={() => !readonly && onSelect?.(expense)}
-                >
-                  <span className="category-icon" style={{ background: icon.bg, color: icon.fg }}>
-                    <CategoryGlyph emoji={icon.emoji} size={20} />
-                  </span>
-                  <div className="meta">
-                    <span className="category">{expense.category}</span>
-                    <span className="sub">{expense.wallet}</span>
-                  </div>
-                  <span className="amount">
-                    −{Number(expense.amount).toLocaleString("ru-RU")} ₸
-                    {expense.pending && (
-                      <span className="pending-badge" title="Сохранено на телефоне, отправится при подключении к сети">
-                        ⏳
-                      </span>
-                    )}
-                  </span>
-                </div>
+                  expense={expense}
+                  icon={icon}
+                  readonly={readonly}
+                  isOpen={openRowId === expense.id}
+                  onOpen={() => setOpenRowId(expense.id)}
+                  onClose={() => setOpenRowId((id) => (id === expense.id ? null : id))}
+                  onSelect={onSelect}
+                  onDeleteRequest={onDeleteRequest}
+                />
               );
             })}
           </div>

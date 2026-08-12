@@ -58,6 +58,50 @@ body {
   justify-content: space-between;
 }
 
+/* "Отменить" banner shown for a few seconds after deleting an expense */
+.undo-banner {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: var(--ink);
+  color: #fff;
+  border-radius: 14px;
+  padding: 10px 14px;
+  animation: row-in 0.24s ease;
+}
+
+.undo-banner-spinner {
+  width: 14px;
+  height: 14px;
+  min-width: 14px;
+  border-radius: 50%;
+  border: 2px solid rgba(255, 255, 255, 0.35);
+  border-top-color: #fff;
+  animation: undo-spin 0.8s linear infinite;
+}
+
+@keyframes undo-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.undo-banner-text {
+  flex: 1;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.undo-banner-action {
+  border: none;
+  background: none;
+  color: #fff;
+  font-weight: 700;
+  font-size: 14px;
+  padding: 4px 6px;
+  font-family: var(--font-ui);
+}
+
 .wallet-chip {
   display: flex;
   align-items: center;
@@ -235,18 +279,40 @@ body {
   }
 }
 
+.expense-row-wrap {
+  position: relative;
+  overflow: hidden;
+  border-bottom: 1px solid var(--border);
+}
+
+.expense-row-wrap:last-child {
+  border-bottom: none;
+}
+
+.expense-row-delete {
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: 76px;
+  border: none;
+  background: #fde2e1;
+  color: var(--danger);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
 .expense-row {
+  position: relative;
   display: flex;
   align-items: center;
   gap: 12px;
   padding: 12px 14px;
-  border-bottom: 1px solid var(--border);
+  background: var(--surface);
   cursor: pointer;
   animation: row-in 0.3s ease;
-}
-
-.expense-row:last-child {
-  border-bottom: none;
+  touch-action: pan-y;
 }
 
 /* Queued locally while offline, not yet synced to the server */

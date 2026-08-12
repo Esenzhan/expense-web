@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
-import { fetchExpenses, fetchExpensesRange, fetchWalletTotals, fetchSummary, fetchCategories, fetchWallets, fetchMe, warmBackend, createExpense, deleteCategory } from "./api";
+import { fetchExpenses, fetchExpensesRange, fetchWalletTotals, fetchSummary, fetchCategories, fetchWallets, fetchMe, warmBackend, createExpense, deleteExpense, deleteCategory } from "./api";
 import { getToken, setToken } from "./auth";
-import { listPendingExpenses, syncPendingExpenses, hasPendingExpenses } from "./offlineQueue";
+import { listPendingExpenses, syncPendingExpenses, hasPendingExpenses, removePendingExpense } from "./offlineQueue";
 import { computeInsights, periodRange } from "./insights";
 import { hydrateCategories } from "./categoryIcons";
 import { hydrateWallets, getWalletIcon } from "./wallets";
@@ -92,6 +92,15 @@ export default function App() {
   periodRef.current = period;
   const selectedWalletRef = useRef(selectedWallet);
   selectedWalletRef.current = selectedWallet;
+
+  // Deleting is deferred: swiping/tapping delete hides the row and starts a
+  // window to undo before the DELETE actually reaches the server — matches
+  // the reference app's "Операция удалена — Отменить" banner. { expense,
+  // timeoutId } while a deletion is pending, otherwise null.
+  const [pendingDelete, setPendingDelete] = useState(null);
+  const pendingDeleteRef = useRef(null);
+  pendingDeleteRef.current = pendingDelete;
+  const UNDO_WINDOW_MS = 4000;
 
   // --- Auth bootstrap ---------------------------------------------------
   useEffect(() => {
@@ -211,11 +220,22 @@ export default function App() {
     const { exp, wallets, sum, insightsRows } = rawRef.current;
     const pending = listPendingExpenses();
     const pendingForList = wallet ? pending.filter((p) => p.wallet === wallet) : pending;
-    const mergedExpenses = [...pendingForList, ...exp];
+
+    // A deletion in its undo window is hidden from the list/totals as if it
+    // were already gone, even though the DELETE hasn't actually been sent
+    // yet — "Отменить" just cancels the timer and this filter stops applying.
+    const deleting = pendingDeleteRef.current?.expense;
+    const baseExp = deleting ? exp.filter((e) => e.id !== deleting.id) : exp;
+    const baseInsightsRows = deleting ? insightsRows.filter((r) => r.id !== deleting.id) : insightsRows;
+
+    const mergedExpenses = [...pendingForList, ...baseExp];
 
     const pendingByWallet = new Map();
     for (const p of pending) {
       pendingByWallet.set(p.wallet, (pendingByWallet.get(p.wallet) || 0) + Number(p.amount));
+    }
+    if (deleting) {
+      pendingByWallet.set(deleting.wallet, (pendingByWallet.get(deleting.wallet) || 0) - Number(deleting.amount));
     }
     const mergedWallets = wallets.map((w) => ({
       ...w,
@@ -230,12 +250,65 @@ export default function App() {
     // Pending expenses are always "just now", so they fall inside every
     // period (month/7/30 all include today) — safe to add unconditionally.
     const pendingTotal = pendingForList.reduce((s, p) => s + Number(p.amount), 0);
-    const mergedSummary = { ...sum, total: Number(sum.total) + pendingTotal };
+    // The deleted row might predate the current period's start (the "last
+    // 50" list isn't period-bounded) — only touch the period total if it
+    // actually falls inside it.
+    let deletedTotal = 0;
+    if (deleting && (!wallet || deleting.wallet === wallet)) {
+      const { start, end } = periodRange(currentPeriod);
+      const createdAt = new Date(deleting.created_at);
+      if (createdAt >= start && createdAt < end) deletedTotal = Number(deleting.amount);
+    }
+    const mergedSummary = { ...sum, total: Number(sum.total) + pendingTotal - deletedTotal };
 
     setExpenses(mergedExpenses);
     setWalletTotals(mergedWallets);
     setSummary(mergedSummary);
-    setInsights(computeInsights({ period: currentPeriod, rows: [...pendingForList, ...insightsRows] }));
+    setInsights(computeInsights({ period: currentPeriod, rows: [...pendingForList, ...baseInsightsRows] }));
+  }
+
+  function commitDelete(entry) {
+    clearTimeout(entry.timeoutId);
+    deleteExpense(entry.expense.id)
+      .catch(() => {
+        // Offline or the request failed — the row already reads as deleted
+        // locally; the next successful refresh reconciles either way.
+      })
+      .finally(() => refreshAll(periodRef.current, selectedWalletRef.current));
+  }
+
+  // Swipe-delete (ExpenseList) and the edit sheet's delete button both call
+  // this. A row that was never synced (still in the offline queue) has
+  // nothing to undo on the server, so it's removed immediately instead.
+  function requestDeleteExpense(expense) {
+    if (expense.pending) {
+      removePendingExpense(expense.id);
+      refreshAll(periodRef.current, selectedWalletRef.current);
+      return;
+    }
+    if (pendingDeleteRef.current) commitDelete(pendingDeleteRef.current);
+    haptic();
+    const entry = { expense, timeoutId: null };
+    entry.timeoutId = setTimeout(() => {
+      if (pendingDeleteRef.current === entry) {
+        pendingDeleteRef.current = null;
+        setPendingDelete(null);
+        commitDelete(entry);
+      }
+    }, UNDO_WINDOW_MS);
+    pendingDeleteRef.current = entry;
+    setPendingDelete(entry);
+    mergeAndSet(selectedWalletRef.current, periodRef.current);
+  }
+
+  function undoDelete() {
+    const entry = pendingDeleteRef.current;
+    if (!entry) return;
+    clearTimeout(entry.timeoutId);
+    pendingDeleteRef.current = null;
+    setPendingDelete(null);
+    haptic();
+    mergeAndSet(selectedWalletRef.current, periodRef.current);
   }
 
   async function refreshAll(currentPeriod, wallet = selectedWallet) {
@@ -320,6 +393,16 @@ export default function App() {
 
   return (
     <div className={`app ${insightsOpen ? "app-behind" : ""}`}>
+      {pendingDelete && (
+        <div className="undo-banner">
+          <span className="undo-banner-spinner" />
+          <span className="undo-banner-text">Операция удалена</span>
+          <button className="undo-banner-action" onClick={undoDelete}>
+            Отменить
+          </button>
+        </div>
+      )}
+
       <div className="app-header">
         <button
           className="wallet-chip"
@@ -383,7 +466,12 @@ export default function App() {
         <InsightsButton onOpen={() => setInsightsOpen(true)} />
       </div>
 
-      <ExpenseList expenses={expenses} onSelect={setEditingExpense} currentUserId={user.id} />
+      <ExpenseList
+        expenses={expenses}
+        onSelect={setEditingExpense}
+        onDeleteRequest={requestDeleteExpense}
+        currentUserId={user.id}
+      />
 
       <VoiceRecorder onSaved={() => refreshAll(period)} onManualAdd={() => setAddingExpense(true)} />
 
@@ -404,6 +492,7 @@ export default function App() {
           onCommitted={() => refreshAll(period)}
           onSaved={() => setEditingExpense(null)}
           onDeleted={() => setEditingExpense(null)}
+          onDeleteRequested={requestDeleteExpense}
         />
       )}
 
