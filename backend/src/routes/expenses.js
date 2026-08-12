@@ -8,7 +8,7 @@ export const expensesRouter = Router();
 // List expenses: visible if it's mine, OR the wallet is shared (Семья/
 // Бизнес/Ремонт by default) — shared wallets pool both accounts' rows.
 expensesRouter.get("/", async (req, res) => {
-  const { wallet, from, to, limit = 100 } = req.query;
+  const { wallet, from, to, q, limit = 100 } = req.query;
   const shared = await sharedWalletNames();
   const conditions = [];
   const values = [req.user.id];
@@ -31,6 +31,11 @@ expensesRouter.get("/", async (req, res) => {
   if (to) {
     values.push(to);
     conditions.push(`created_at <= $${values.length}`);
+  }
+  if (q) {
+    values.push(`%${q}%`);
+    const i = values.length;
+    conditions.push(`(description ILIKE $${i} OR category ILIKE $${i} OR amount::text ILIKE $${i})`);
   }
 
   values.push(Number(limit));

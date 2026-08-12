@@ -18,6 +18,7 @@ import NewCategorySheet from "./components/NewCategorySheet";
 import WalletsSheet from "./components/WalletsSheet";
 import NewWalletSheet from "./components/NewWalletSheet";
 import PeriodPickerSheet from "./components/PeriodPickerSheet";
+import SearchSheet from "./components/SearchSheet";
 
 const CACHE_KEY = "traty-cache-v4";
 
@@ -131,6 +132,7 @@ export default function App() {
   const [walletTotals, setWalletTotals] = useState([]);
   const [insights, setInsights] = useState(() => computeInsights({ period: "month", rows: [] }));
   const [insightsOpen, setInsightsOpen] = useState(false);
+  const [searchOpen, setSearchOpen] = useState(false);
   const [editingExpense, setEditingExpense] = useState(null);
   const [addingExpense, setAddingExpense] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
@@ -550,7 +552,14 @@ export default function App() {
           </div>
         </button>
         <div className="header-actions">
-          <button className="header-icon" aria-label="Поиск">
+          <button
+            className="header-icon"
+            aria-label="Поиск"
+            onClick={() => {
+              haptic();
+              setSearchOpen(true);
+            }}
+          >
             <HeaderIcon><circle cx="11" cy="11" r="6" /><path d="m16 16 4 4" /></HeaderIcon>
           </button>
           <button className="header-icon" aria-label="Статистика">
@@ -616,6 +625,18 @@ export default function App() {
           wallet={selectedWallet}
           walletBalance={walletBalance}
           onClose={() => setInsightsOpen(false)}
+        />
+      )}
+
+      {searchOpen && (
+        <SearchSheet
+          wallet={selectedWallet}
+          currentUserId={user.id}
+          onClose={() => setSearchOpen(false)}
+          onSelect={(expense) => {
+            setSearchOpen(false);
+            setEditingExpense(expense);
+          }}
         />
       )}
 
@@ -707,6 +728,14 @@ export default function App() {
             setNewWalletOpen(false);
             setEditingWallet(null);
             refreshAll(period);
+          }}
+          onDeleted={async (deletedName) => {
+            await reloadWallets();
+            const wasSelected = selectedWallet === deletedName;
+            if (wasSelected) selectWallet(null);
+            setNewWalletOpen(false);
+            setEditingWallet(null);
+            refreshAll(period, wasSelected ? null : selectedWallet);
           }}
         />
       )}

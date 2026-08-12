@@ -1,5 +1,5 @@
 import { useRef, useState } from "react";
-import { createWallet, updateWallet } from "../api";
+import { createWallet, updateWallet, deleteWallet } from "../api";
 import { haptic, hapticHeavy } from "../haptics";
 import { useSwipeDismiss } from "../sheetGestures";
 
@@ -51,7 +51,7 @@ function suggestionsFor(name) {
 }
 
 // Creates a wallet, or edits `initial` when passed (the pencil flow)
-export default function NewWalletSheet({ initial, onClose, onSaved }) {
+export default function NewWalletSheet({ initial, onClose, onSaved, onDeleted }) {
   const sheetRef = useRef(null);
   useSwipeDismiss(sheetRef, onClose);
 
@@ -63,6 +63,7 @@ export default function NewWalletSheet({ initial, onClose, onSaved }) {
   });
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
+  const [confirmingDelete, setConfirmingDelete] = useState(false);
 
   const color = PALETTE[colorIndex];
   const suggestions = suggestionsFor(name);
@@ -87,6 +88,25 @@ export default function NewWalletSheet({ initial, onClose, onSaved }) {
     } catch (err) {
       setError(err.message);
       setSaving(false);
+    }
+  }
+
+  async function handleDelete() {
+    if (!confirmingDelete) {
+      haptic();
+      setConfirmingDelete(true);
+      return;
+    }
+    setSaving(true);
+    setError("");
+    try {
+      await deleteWallet(initial.name);
+      hapticHeavy();
+      onDeleted(initial.name);
+    } catch (err) {
+      setError(err.message);
+      setSaving(false);
+      setConfirmingDelete(false);
     }
   }
 
@@ -181,6 +201,12 @@ export default function NewWalletSheet({ initial, onClose, onSaved }) {
         <button className="sheet-close" onClick={handleSave} disabled={saving}>
           {saving ? "Сохраняю…" : "Сохранить"}
         </button>
+
+        {initial && initial.name !== "Личные" && (
+          <button className="sheet-delete" onClick={handleDelete} disabled={saving}>
+            {confirmingDelete ? "Точно удалить счёт?" : "Удалить счёт"}
+          </button>
+        )}
       </div>
     </div>
   );

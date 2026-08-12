@@ -42,6 +42,15 @@ export async function fetchExpensesRange(from, to, wallet) {
   return fetchExpenses(params);
 }
 
+// Free-text search over description/category/amount — not period-bounded,
+// searches the account's whole history (within the usual shared-wallet
+// visibility rules).
+export async function searchExpenses(query, wallet) {
+  const params = { q: query, limit: 200 };
+  if (wallet) params.wallet = wallet;
+  return fetchExpenses(params);
+}
+
 // Safari: "Load failed", Chrome: "Failed to fetch", Firefox: "NetworkError
 // when attempting to fetch resource." — fetch throws a plain TypeError with
 // no `.code`, so matching the message is the only reliable signal.
@@ -113,6 +122,14 @@ export async function updateWallet(oldName, payload) {
     throw new Error(body.error || "Не удалось обновить счёт");
   }
   return res.json();
+}
+
+export async function deleteWallet(name) {
+  const res = await apiFetch(`/api/wallets/${encodeURIComponent(name)}`, { method: "DELETE" });
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    throw new Error(body.error || "Не удалось удалить счёт");
+  }
 }
 
 export async function fetchCategories() {
