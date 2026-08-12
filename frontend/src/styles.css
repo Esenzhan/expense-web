@@ -1324,15 +1324,8 @@ body {
 .wallet-tabs {
   display: flex;
   gap: 6px;
-  overflow-x: auto;
-  -webkit-overflow-scrolling: touch;
-  margin: 0 -18px;
-  padding: 0 18px;
-}
-
-.wallet-tabs .period-pill {
-  flex-shrink: 0;
-  white-space: nowrap;
+  flex-wrap: wrap;
+  justify-content: center;
 }
 
 .cats-list {
