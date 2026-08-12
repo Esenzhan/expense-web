@@ -126,6 +126,11 @@ export default function App() {
     sum: { total: 0, categories: [] },
     insightsRows: [],
   });
+  // Per (period, wallet) snapshots for this session — switching back to an
+  // already-visited wallet shows its numbers instantly instead of blocking
+  // on the network again, and still quietly refetches behind it to catch
+  // anything that changed meanwhile.
+  const dataCacheRef = useRef(new Map());
   const periodRef = useRef(period);
   periodRef.current = period;
   const selectedWalletRef = useRef(selectedWallet);
@@ -349,6 +354,18 @@ export default function App() {
   }
 
   async function refreshAll(currentPeriod, wallet = selectedWallet) {
+    // Already-visited (period, wallet) pair this session — paint it
+    // immediately so switching wallets doesn't sit blank/stale while the
+    // network round-trip (Render free tier can be seconds, or tens of
+    // seconds right after a cold start) is still in flight. The fetch
+    // below still runs and quietly replaces it once it lands.
+    const cacheKey = `${currentPeriod}|${wallet || ""}`;
+    const cached = dataCacheRef.current.get(cacheKey);
+    if (cached) {
+      rawRef.current = cached;
+      mergeAndSet(wallet, currentPeriod);
+    }
+
     const expenseParams = { limit: 50 };
     if (wallet) expenseParams.wallet = wallet;
     const { start, end } = periodRange(currentPeriod);
@@ -359,7 +376,9 @@ export default function App() {
         fetchSummary(currentPeriod, wallet),
         fetchExpensesRange(start, end, wallet),
       ]);
-      rawRef.current = { exp, wallets, sum, insightsRows };
+      const fresh = { exp, wallets, sum, insightsRows };
+      rawRef.current = fresh;
+      dataCacheRef.current.set(cacheKey, fresh);
       if (user) saveCache({ expenses: exp, walletTotals: wallets, summary: sum, insightsRows, wallet }, user.email);
     } catch {
       // Offline — nothing fresh from the server, keep the last known data
