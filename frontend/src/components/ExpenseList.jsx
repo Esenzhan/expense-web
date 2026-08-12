@@ -38,7 +38,7 @@ function groupByDay(expenses) {
   return groups;
 }
 
-export default function ExpenseList({ expenses, onSelect }) {
+export default function ExpenseList({ expenses, onSelect, currentUserId }) {
   const groups = groupByDay(expenses);
 
   return (
@@ -53,11 +53,14 @@ export default function ExpenseList({ expenses, onSelect }) {
           <div className="expense-list">
             {group.items.map((expense) => {
               const icon = getCategoryIcon(expense.category);
+              // Shared-wallet rows from the other account are visible but
+              // read-only — only whoever logged an expense can edit it.
+              const readonly = expense.user_id != null && expense.user_id !== currentUserId;
               return (
                 <div
-                  className={`expense-row ${expense.pending ? "pending" : ""}`}
+                  className={`expense-row ${expense.pending ? "pending" : ""} ${readonly ? "readonly" : ""}`}
                   key={expense.id}
-                  onClick={() => onSelect?.(expense)}
+                  onClick={() => !readonly && onSelect?.(expense)}
                 >
                   <span className="category-icon" style={{ background: icon.bg, color: icon.fg }}>
                     <CategoryGlyph emoji={icon.emoji} size={20} />

@@ -373,7 +373,7 @@ export default function App() {
         <InsightsButton onOpen={() => setInsightsOpen(true)} />
       </div>
 
-      <ExpenseList expenses={expenses} onSelect={setEditingExpense} />
+      <ExpenseList expenses={expenses} onSelect={setEditingExpense} currentUserId={user.id} />
 
       <VoiceRecorder onSaved={() => refreshAll(period)} onManualAdd={() => setAddingExpense(true)} />
 
