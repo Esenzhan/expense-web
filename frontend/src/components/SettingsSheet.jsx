@@ -1,7 +1,8 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { fetchExpenses } from "../api";
 import { logout } from "../auth";
 import { haptic } from "../haptics";
+import { useSwipeDismissRight } from "../sheetGestures";
 
 const SETTINGS_KEY = "traty-settings";
 
@@ -90,6 +91,22 @@ function ToggleRow({ icon, label, on, onFlip }) {
 
 export default function SettingsSheet({ user, onClose, onOpenCategories }) {
   const [toggles, setToggles] = useState(loadToggles);
+  const [closing, setClosing] = useState(false);
+  const pageRef = useRef(null);
+
+  useSwipeDismissRight(pageRef, onClose);
+
+  function handleClose() {
+    if (closing) return;
+    haptic();
+    setClosing(true);
+    const el = pageRef.current;
+    if (el) {
+      el.style.transition = "transform 0.26s cubic-bezier(0.2, 0.9, 0.3, 1)";
+      el.style.transform = "translateX(100%)";
+    }
+    setTimeout(onClose, 260);
+  }
 
   function flip(key) {
     haptic();
@@ -119,9 +136,9 @@ export default function SettingsSheet({ user, onClose, onOpenCategories }) {
   }
 
   return (
-    <div className="settings-page">
+    <div ref={pageRef} className="settings-page">
       <div className="settings-header">
-        <button className="icon-button" onClick={onClose} aria-label="Назад">
+        <button className="icon-button" onClick={handleClose} aria-label="Назад">
           ‹
         </button>
         <span className="settings-title">Настройки</span>

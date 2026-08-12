@@ -116,3 +116,72 @@ export function useSwipeDismiss(sheetRef, onClose) {
     };
   }, [sheetRef]);
 }
+
+// Swipe-right-to-dismiss for a full-screen page (e.g. Settings), the
+// horizontal counterpart to useSwipeDismiss above: same idea, but the page
+// slides off to the right instead of down, matching its slide-in-from-right
+// entrance animation.
+export function useSwipeDismissRight(pageRef, onClose) {
+  const onCloseRef = useRef(onClose);
+  onCloseRef.current = onClose;
+
+  useEffect(() => {
+    const el = pageRef.current;
+    if (!el) return;
+    const state = { pulling: false, startX: 0, startY: 0, dx: 0 };
+
+    function onTouchStart(event) {
+      state.pulling = false;
+      state.startX = event.touches[0].clientX;
+      state.startY = event.touches[0].clientY;
+      state.dx = 0;
+    }
+
+    function onTouchMove(event) {
+      const dx = event.touches[0].clientX - state.startX;
+      const dy = event.touches[0].clientY - state.startY;
+      if (!state.pulling) {
+        // Leftward or vertical intent (scrolling the list) — stand down
+        if (dx < -4 || Math.abs(dy) > Math.abs(dx)) return;
+        if (dx < 10) return;
+        state.pulling = true;
+      }
+      state.dx = dx;
+      event.preventDefault();
+      el.style.transition = "none";
+      el.style.transform = `translateX(${Math.max(0, dx)}px)`;
+    }
+
+    function onTouchEnd() {
+      const wasPulling = state.pulling;
+      state.pulling = false;
+      if (!wasPulling) return;
+      el.style.transition = "transform 0.26s cubic-bezier(0.2, 0.9, 0.3, 1)";
+      if (state.dx > 110) {
+        el.style.transform = "translateX(110%)";
+        let closed = false;
+        const close = () => {
+          if (closed) return;
+          closed = true;
+          onCloseRef.current?.();
+        };
+        el.addEventListener("transitionend", close, { once: true });
+        setTimeout(close, 350); // fallback if transitionend never fires
+      } else {
+        el.style.transform = "translateX(0)";
+      }
+      state.dx = 0;
+    }
+
+    el.addEventListener("touchstart", onTouchStart, { passive: true });
+    el.addEventListener("touchmove", onTouchMove, { passive: false });
+    el.addEventListener("touchend", onTouchEnd);
+    el.addEventListener("touchcancel", onTouchEnd);
+    return () => {
+      el.removeEventListener("touchstart", onTouchStart);
+      el.removeEventListener("touchmove", onTouchMove);
+      el.removeEventListener("touchend", onTouchEnd);
+      el.removeEventListener("touchcancel", onTouchEnd);
+    };
+  }, [pageRef]);
+}

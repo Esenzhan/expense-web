@@ -1415,6 +1415,7 @@ body {
   overscroll-behavior: contain;
   padding: calc(env(safe-area-inset-top) + 16px) 16px calc(env(safe-area-inset-bottom) + 30px);
   animation: page-in 0.3s cubic-bezier(0.2, 0.9, 0.3, 1);
+  touch-action: pan-y;
 }
 
 .settings-header {
