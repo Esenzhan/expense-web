@@ -2,6 +2,7 @@ import { useRef, useState } from "react";
 import { createCategory } from "../api";
 import { haptic, hapticHeavy } from "../haptics";
 import { useSwipeDismiss } from "../sheetGestures";
+import CategoryGlyph from "./CategoryGlyph";
 
 // bg = pastel tile, fg = strong accent (shown in the palette swatch)
 const PALETTE = [
@@ -122,7 +123,7 @@ export default function NewCategorySheet({ wallet, onClose, onCreated }) {
             className="category-icon"
             style={emoji ? { background: color.bg, color: color.fg } : { background: "#e9e9ec", color: "#5b5b63" }}
           >
-            {emoji || "⃠"}
+            {emoji ? <CategoryGlyph emoji={emoji} size={20} /> : "⃠"}
           </span>
           <input
             className="note-input newcat-name-input"
@@ -141,16 +142,16 @@ export default function NewCategorySheet({ wallet, onClose, onCreated }) {
 
         {suggestions.length > 0 && (
           <>
-            <p className="newcat-suggestions-label">Suggestions</p>
+            <p className="newcat-suggestions-label">Рекомендации</p>
             <div className="newcat-suggestions">
               {suggestions.map((icon) => (
                 <button
                   key={icon}
                   className={`newcat-icon ${emoji === icon ? "picked" : ""}`}
-                  style={{ background: color.bg }}
+                  style={{ background: color.bg, color: color.fg }}
                   onClick={() => pickEmoji(icon)}
                 >
-                  {icon}
+                  <CategoryGlyph emoji={icon} size={20} />
                 </button>
               ))}
             </div>
@@ -181,9 +182,10 @@ export default function NewCategorySheet({ wallet, onClose, onCreated }) {
                   <button
                     key={icon}
                     className={`newcat-icon ${emoji === icon ? "picked" : ""}`}
+                    style={{ background: color.bg, color: color.fg }}
                     onClick={() => pickEmoji(icon)}
                   >
-                    {icon}
+                    <CategoryGlyph emoji={icon} size={20} />
                   </button>
                 ))}
               </div>
