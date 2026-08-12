@@ -23,12 +23,15 @@ const SEED_CATEGORIES = [
 ];
 
 // Default wallets — the four the Telegram bot used. "Личные" doubles as the
-// voice-parse fallback.
+// voice-parse fallback and is the only private one — its expenses stay
+// scoped to whoever logged them. The other three are shared: visible to
+// and editable by both accounts, pooled in stats, mirrored to both
+// personal Sheets.
 const SEED_WALLETS = [
-  { name: "Личные", emoji: "👛", bg: "#d7f5e9", fg: "#159969", sort: 1 },
-  { name: "Семья", emoji: "👨‍👩‍👧", bg: "#e3ecfd", fg: "#2f5fc2", sort: 2 },
-  { name: "Бизнес", emoji: "💼", bg: "#fde2e1", fg: "#c23b3b", sort: 3 },
-  { name: "Ремонт", emoji: "🔨", bg: "#fff2cf", fg: "#a9790a", sort: 4 },
+  { name: "Личные", emoji: "👛", bg: "#d7f5e9", fg: "#159969", sort: 1, shared: false },
+  { name: "Семья", emoji: "👨‍👩‍👧", bg: "#e3ecfd", fg: "#2f5fc2", sort: 2, shared: true },
+  { name: "Бизнес", emoji: "💼", bg: "#fde2e1", fg: "#c23b3b", sort: 3, shared: true },
+  { name: "Ремонт", emoji: "🔨", bg: "#fff2cf", fg: "#a9790a", sort: 4, shared: true },
 ];
 
 export async function initSchema() {
@@ -106,14 +109,20 @@ export async function initSchema() {
       emoji TEXT NOT NULL,
       bg TEXT NOT NULL,
       fg TEXT NOT NULL,
-      sort_order INT NOT NULL DEFAULT 0
+      sort_order INT NOT NULL DEFAULT 0,
+      shared BOOLEAN NOT NULL DEFAULT true
     );
   `);
+  // Idempotent for wallets tables created before "shared" existed.
+  await pool.query(`ALTER TABLE wallets ADD COLUMN IF NOT EXISTS shared BOOLEAN NOT NULL DEFAULT true`);
   for (const wallet of SEED_WALLETS) {
     await pool.query(
-      `INSERT INTO wallets (name, emoji, bg, fg, sort_order)
-       VALUES ($1, $2, $3, $4, $5) ON CONFLICT (name) DO NOTHING`,
-      [wallet.name, wallet.emoji, wallet.bg, wallet.fg, wallet.sort]
+      `INSERT INTO wallets (name, emoji, bg, fg, sort_order, shared)
+       VALUES ($1, $2, $3, $4, $5, $6) ON CONFLICT (name) DO NOTHING`,
+      [wallet.name, wallet.emoji, wallet.bg, wallet.fg, wallet.sort, wallet.shared]
     );
   }
+  // "Личные" may already exist from before wallets could be private —
+  // force it back to private every boot regardless of ON CONFLICT above.
+  await pool.query(`UPDATE wallets SET shared = false WHERE name = 'Личные'`);
 }

@@ -2,6 +2,7 @@ import { google } from "googleapis";
 import { pool } from "../db.js";
 import { clientForUser } from "./googleAuth.js";
 import { decrypt } from "./crypto.js";
+import { sharedWalletNames } from "../wallets.js";
 
 // Row layout is intentionally identical to what the Telegram bot used to
 // write directly (see expense-bot/bot.py get_wallet_sheet/save_expense) so
@@ -53,16 +54,15 @@ async function getOrCreateWalletTab(sheets, spreadsheetId, wallet) {
   return sheetId;
 }
 
-// "Ремонт" always lands in one designated account's sheet regardless of who
-// logged it (matches the bot's existing RENOVATION_SHEET_ID behavior) so
-// /renovation keeps reporting the combined household total. Every other
-// wallet goes to the logging user's own sheet.
-async function resolveTarget(loggingUser, wallet) {
-  if (wallet !== "Ремонт") return loggingUser;
-  const ownerEmail = process.env.RENOVATION_OWNER_EMAIL;
-  if (!ownerEmail) return loggingUser;
-  const { rows } = await pool.query(`SELECT * FROM users WHERE email = $1`, [ownerEmail]);
-  return rows[0] || loggingUser;
+// Shared wallets (Семья/Бизнес/Ремонт by default) mirror into BOTH
+// accounts' personal Sheets — that's the whole household's shared budget,
+// so either person opening their own Sheet sees the full picture. Private
+// wallets (Личные) only ever go to the logging account's own Sheet.
+async function resolveTargets(loggingUser, wallet) {
+  const shared = await sharedWalletNames();
+  if (!shared.includes(wallet)) return [loggingUser];
+  const { rows } = await pool.query(`SELECT * FROM users WHERE google_refresh_token IS NOT NULL`);
+  return rows.length ? rows : [loggingUser];
 }
 
 function formatDateTime(date) {
@@ -74,40 +74,36 @@ function formatDateTime(date) {
   };
 }
 
-// Best-effort — callers should not let a Sheets failure block the Postgres
-// write, which stays authoritative for the site itself.
-export async function appendExpenseRow(loggingUser, expense) {
+function rowValues(expense, who) {
+  const { date, time } = formatDateTime(expense.created_at);
+  return [date, time, expense.amount, expense.category, expense.description || "", "сайт", who, String(expense.id)];
+}
+
+async function appendToOne(target, expense, who) {
   try {
-    const target = await resolveTarget(loggingUser, expense.wallet);
     if (!target.google_refresh_token) return;
     const spreadsheetId = await ensureUserSheet(target);
     const sheets = sheetsApiFor(decrypt(target.google_refresh_token));
     await getOrCreateWalletTab(sheets, spreadsheetId, expense.wallet);
-
-    const { date, time } = formatDateTime(expense.created_at);
-    const who = expense.wallet === "Ремонт" ? loggingUser.name : "";
     await sheets.spreadsheets.values.append({
       spreadsheetId,
       range: `${expense.wallet}!A1`,
       valueInputOption: "RAW",
       insertDataOption: "INSERT_ROWS",
-      requestBody: {
-        values: [
-          [
-            date,
-            time,
-            expense.amount,
-            expense.category,
-            expense.description || "",
-            "сайт",
-            who,
-            String(expense.id),
-          ],
-        ],
-      },
+      requestBody: { values: [rowValues(expense, who)] },
     });
   } catch (err) {
     console.error("Sheets mirror (append) failed:", err.message);
+  }
+}
+
+// Best-effort — callers should not let a Sheets failure block the Postgres
+// write, which stays authoritative for the site itself.
+export async function appendExpenseRow(loggingUser, expense) {
+  const targets = await resolveTargets(loggingUser, expense.wallet).catch(() => [loggingUser]);
+  const who = targets.length > 1 ? loggingUser.name : "";
+  for (const target of targets) {
+    await appendToOne(target, expense, who);
   }
 }
 
@@ -121,47 +117,47 @@ async function findRow(sheets, spreadsheetId, wallet, expenseId) {
   return idx === -1 ? null : idx + 2; // header is row 1
 }
 
-export async function updateExpenseRow(loggingUser, expense, previousWallet) {
+async function updateOne(target, expense, who) {
   try {
-    const target = await resolveTarget(loggingUser, previousWallet);
     if (!target.google_refresh_token) return;
     const spreadsheetId = await ensureUserSheet(target);
     const sheets = sheetsApiFor(decrypt(target.google_refresh_token));
-
-    // Wallet changed — the row moved sheets entirely: delete from the old
-    // tab, append fresh to the new one (also handles the Ремонт-owner
-    // switching sheets).
-    if (previousWallet !== expense.wallet) {
-      await deleteExpenseRow(loggingUser, { ...expense, wallet: previousWallet });
-      await appendExpenseRow(loggingUser, expense);
-      return;
-    }
-
+    await getOrCreateWalletTab(sheets, spreadsheetId, expense.wallet);
     const row = await findRow(sheets, spreadsheetId, expense.wallet, expense.id);
     if (!row) {
-      await appendExpenseRow(loggingUser, expense);
+      await appendToOne(target, expense, who);
       return;
     }
-    const { date, time } = formatDateTime(expense.created_at);
-    const who = expense.wallet === "Ремонт" ? loggingUser.name : "";
     await sheets.spreadsheets.values.update({
       spreadsheetId,
       range: `${expense.wallet}!A${row}:H${row}`,
       valueInputOption: "RAW",
-      requestBody: {
-        values: [
-          [date, time, expense.amount, expense.category, expense.description || "", "сайт", who, String(expense.id)],
-        ],
-      },
+      requestBody: { values: [rowValues(expense, who)] },
     });
   } catch (err) {
     console.error("Sheets mirror (update) failed:", err.message);
   }
 }
 
-export async function deleteExpenseRow(loggingUser, expense) {
+export async function updateExpenseRow(loggingUser, expense, previousWallet) {
+  // Wallet changed — the set of target sheets may differ (private↔shared,
+  // or a different shared wallet), so just delete the old row everywhere
+  // it lived and append fresh everywhere the new wallet lives.
+  if (previousWallet !== expense.wallet) {
+    await deleteExpenseRow(loggingUser, { ...expense, wallet: previousWallet });
+    await appendExpenseRow(loggingUser, expense);
+    return;
+  }
+
+  const targets = await resolveTargets(loggingUser, expense.wallet).catch(() => [loggingUser]);
+  const who = targets.length > 1 ? loggingUser.name : "";
+  for (const target of targets) {
+    await updateOne(target, expense, who);
+  }
+}
+
+async function deleteOne(target, expense) {
   try {
-    const target = await resolveTarget(loggingUser, expense.wallet);
     if (!target.google_refresh_token) return;
     const spreadsheetId = await ensureUserSheet(target);
     const sheets = sheetsApiFor(decrypt(target.google_refresh_token));
@@ -191,5 +187,12 @@ export async function deleteExpenseRow(loggingUser, expense) {
     });
   } catch (err) {
     console.error("Sheets mirror (delete) failed:", err.message);
+  }
+}
+
+export async function deleteExpenseRow(loggingUser, expense) {
+  const targets = await resolveTargets(loggingUser, expense.wallet).catch(() => [loggingUser]);
+  for (const target of targets) {
+    await deleteOne(target, expense);
   }
 }
