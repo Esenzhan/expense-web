@@ -279,14 +279,24 @@ export default function App() {
         if (syncedAny) refreshAll(periodRef.current, selectedWalletRef.current);
       });
     }
+    // The Telegram bot writes expenses straight to Postgres — there's no
+    // push notification to the site, so pick those up by polling while the
+    // tab is in the foreground (and immediately on regaining it).
+    function pickUpRemoteChanges() {
+      refreshAll(periodRef.current, selectedWalletRef.current);
+    }
     const onVisible = () => {
-      if (document.visibilityState === "visible") trySyncPending();
+      if (document.visibilityState === "visible") {
+        trySyncPending();
+        pickUpRemoteChanges();
+      }
     };
     trySyncPending();
     window.addEventListener("online", trySyncPending);
     document.addEventListener("visibilitychange", onVisible);
     const pollId = setInterval(() => {
       if (hasPendingExpenses()) trySyncPending();
+      if (document.visibilityState === "visible") pickUpRemoteChanges();
     }, 15000);
     return () => {
       window.removeEventListener("online", trySyncPending);
