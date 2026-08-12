@@ -188,13 +188,22 @@ export async function initSchema() {
     }
   }
 
-  for (const wallet of SEED_WALLETS) {
-    for (const cat of SEED_CATEGORIES) {
-      await pool.query(
-        `INSERT INTO categories (name, emoji, bg, fg, sort_order, wallet)
-         VALUES ($1, $2, $3, $4, $5, $6) ON CONFLICT (wallet, name) DO NOTHING`,
-        [cat.name, cat.emoji, cat.bg, cat.fg, cat.sort, wallet.name]
-      );
+  // Only for a genuinely fresh install (categories table completely empty).
+  // This used to run unconditionally on every boot — harmless the first
+  // time, but "ON CONFLICT DO NOTHING" only stops duplicates, it doesn't
+  // know the difference between "never existed" and "user deleted it". So
+  // every server restart (i.e. every deploy) was silently resurrecting any
+  // seed category someone had deliberately removed from a wallet.
+  const { rows: anyCategory } = await pool.query(`SELECT 1 FROM categories LIMIT 1`);
+  if (!anyCategory.length) {
+    for (const wallet of SEED_WALLETS) {
+      for (const cat of SEED_CATEGORIES) {
+        await pool.query(
+          `INSERT INTO categories (name, emoji, bg, fg, sort_order, wallet)
+           VALUES ($1, $2, $3, $4, $5, $6) ON CONFLICT (wallet, name) DO NOTHING`,
+          [cat.name, cat.emoji, cat.bg, cat.fg, cat.sort, wallet.name]
+        );
+      }
     }
   }
 
