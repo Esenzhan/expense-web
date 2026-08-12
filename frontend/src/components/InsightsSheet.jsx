@@ -50,7 +50,9 @@ export default function InsightsSheet({ period, insights: data, wallet, walletBa
 
   // `data` (aliased from the `insights` prop) is computed by App.jsx in the
   // background — already fresh by the time this sheet opens, no fetch here.
-  const biggestIcon = data?.biggestExpense ? getCategoryIcon(data.biggestExpense.category) : null;
+  const biggestIcon = data?.biggestExpense
+    ? getCategoryIcon(data.biggestExpense.wallet, data.biggestExpense.category)
+    : null;
 
   // Портал в body: шторка рендерится внутри .app, который при открытии
   // получает transform (scale) — transform делает предка containing block

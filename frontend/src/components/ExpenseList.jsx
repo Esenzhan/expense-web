@@ -52,7 +52,7 @@ export default function ExpenseList({ expenses, onSelect, currentUserId }) {
           <p className="expense-date-header">{group.header}</p>
           <div className="expense-list">
             {group.items.map((expense) => {
-              const icon = getCategoryIcon(expense.category);
+              const icon = getCategoryIcon(expense.wallet, expense.category);
               // Shared-wallet rows from the other account are visible but
               // read-only — only whoever logged an expense can edit it.
               const readonly = expense.user_id != null && expense.user_id !== currentUserId;

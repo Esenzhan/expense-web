@@ -61,7 +61,7 @@ function suggestionsFor(name) {
   return found.slice(0, 10);
 }
 
-export default function NewCategorySheet({ onClose, onCreated }) {
+export default function NewCategorySheet({ wallet, onClose, onCreated }) {
   const sheetRef = useRef(null);
   useSwipeDismiss(sheetRef, onClose);
 
@@ -91,7 +91,7 @@ export default function NewCategorySheet({ onClose, onCreated }) {
     setSaving(true);
     setError("");
     try {
-      await createCategory({ name: name.trim(), emoji, bg: color.bg, fg: color.fg });
+      await createCategory({ name: name.trim(), emoji, bg: color.bg, fg: color.fg, wallet });
       hapticHeavy();
       onCreated();
     } catch (err) {
@@ -110,6 +110,10 @@ export default function NewCategorySheet({ onClose, onCreated }) {
           <span className="cats-title">Новая категория</span>
           <span className="icon-button-spacer" />
         </div>
+
+        <p className="newcat-suggestions-label" style={{ textAlign: "center" }}>
+          Для счёта «{wallet}»
+        </p>
 
         <button className="parent-category-pill">+ Родительская категория</button>
 

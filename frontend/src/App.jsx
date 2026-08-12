@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { fetchExpenses, fetchExpensesRange, fetchWalletTotals, fetchSummary, fetchCategories, fetchWallets, fetchMe, warmBackend, createExpense } from "./api";
+import { fetchExpenses, fetchExpensesRange, fetchWalletTotals, fetchSummary, fetchCategories, fetchWallets, fetchMe, warmBackend, createExpense, deleteCategory } from "./api";
 import { getToken, setToken } from "./auth";
 import { listPendingExpenses, syncPendingExpenses, hasPendingExpenses } from "./offlineQueue";
 import { computeInsights, periodRange } from "./insights";
@@ -70,7 +70,7 @@ export default function App() {
   const [addingExpense, setAddingExpense] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [categoriesOpen, setCategoriesOpen] = useState(false);
-  const [newCategoryOpen, setNewCategoryOpen] = useState(false);
+  const [newCategoryWallet, setNewCategoryWallet] = useState(null);
   const [walletsOpen, setWalletsOpen] = useState(false);
   const [newWalletOpen, setNewWalletOpen] = useState(false);
   const [editingWallet, setEditingWallet] = useState(null);
@@ -416,17 +416,23 @@ export default function App() {
 
       {categoriesOpen && (
         <CategoriesSheet
+          initialWallet={selectedWallet}
           onClose={() => setCategoriesOpen(false)}
-          onAdd={() => setNewCategoryOpen(true)}
+          onAdd={(wallet) => setNewCategoryWallet(wallet)}
+          onDelete={async (wallet, name) => {
+            await deleteCategory(wallet, name);
+            await reloadCategories();
+          }}
         />
       )}
 
-      {newCategoryOpen && (
+      {newCategoryWallet && (
         <NewCategorySheet
-          onClose={() => setNewCategoryOpen(false)}
+          wallet={newCategoryWallet}
+          onClose={() => setNewCategoryWallet(null)}
           onCreated={async () => {
             await reloadCategories();
-            setNewCategoryOpen(false);
+            setNewCategoryWallet(null);
           }}
         />
       )}

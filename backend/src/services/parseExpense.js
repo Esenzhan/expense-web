@@ -1,43 +1,32 @@
 import { anthropic } from "../anthropicClient.js";
 import { walletNames, fallbackWallet } from "../wallets.js";
-import { pool } from "../db.js";
-
-// Categories now live in the DB (user-creatable), so the parser prompt is
-// built per call from the current list. Cached briefly to keep voice
-// parsing snappy.
-let cachedNames = null;
-let cachedAt = 0;
-
-async function categoryNames() {
-  if (cachedNames && Date.now() - cachedAt < 60000) return cachedNames;
-  const { rows } = await pool.query(`SELECT name FROM categories ORDER BY sort_order, id`);
-  cachedNames = rows.map((r) => r.name);
-  cachedAt = Date.now();
-  return cachedNames;
-}
-
-export function invalidateCategoryCache() {
-  cachedNames = null;
-}
+import { categoryNamesByWallet, isValidCategory } from "../categories.js";
 
 export async function parseExpenseFromText(text) {
-  const categories = await categoryNames();
+  const categoriesByWallet = await categoryNamesByWallet();
   const wallets = await walletNames();
+
+  const walletCategoryList = wallets
+    .map((w) => `- ${w}: ${(categoriesByWallet[w] || []).join(", ")}`)
+    .join("\n");
 
   const systemPrompt = `Ты — парсер голосовых записей о тратах для приложения учёта расходов.
 Пользователь произносит фразу на русском (иногда с казахскими словами), например:
 "Запиши затраты 2500 кофе" или "1200 на такси из бизнеса".
 
+У каждого счёта (кошелька) свой независимый список категорий:
+${walletCategoryList}
+
 Твоя задача — вернуть ТОЛЬКО JSON без markdown-разметки и пояснений, в формате:
 {
   "amount": <число, сумма в тенге>,
-  "category": "<строго одна из: ${categories.join(", ")}>",
-  "description": "<краткое описание, как есть, но чище>",
-  "wallet": "<один из: ${wallets.join(", ")}>"
+  "wallet": "<один из: ${wallets.join(", ")}>",
+  "category": "<строго одна из категорий ВЫБРАННОГО счёта, из списка выше>",
+  "description": "<краткое описание, как есть, но чище>"
 }
 
-Если категория явно не подходит ни под одну из списка — ставь "Прочее".
 Если кошелёк явно не назван, ставь "Личные".
+Если категория явно не подходит ни под одну из списка выбранного счёта — ставь "Прочее".
 Если сумму невозможно распознать — верни amount: null.
 Никогда не добавляй ничего, кроме самого JSON-объекта.`;
 
@@ -66,7 +55,7 @@ export async function parseExpenseFromText(text) {
   if (!wallets.includes(parsed.wallet)) {
     parsed.wallet = await fallbackWallet();
   }
-  if (!categories.includes(parsed.category)) {
+  if (!(await isValidCategory(parsed.wallet, parsed.category))) {
     parsed.category = "Прочее";
   }
 

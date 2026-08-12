@@ -290,7 +290,7 @@ export default function VoiceRecorder({ onSaved, onManualAdd }) {
     }
   }
 
-  const icon = proposal ? getCategoryIcon(proposal.category) : null;
+  const icon = proposal ? getCategoryIcon(proposal.wallet, proposal.category) : null;
 
   return (
     <>

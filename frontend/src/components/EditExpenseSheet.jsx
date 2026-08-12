@@ -159,7 +159,7 @@ export default function EditExpenseSheet({ expense, defaultWallet, onClose, onSa
   });
   const walletNames = listWallets().map((w) => w.name);
   const [wallet, setWallet] = useState(expense?.wallet || defaultWallet || walletNames[0]);
-  const categoryNames = listCategories().map((c) => c.name);
+  const categoryNames = listCategories(wallet).map((c) => c.name);
   const [category, setCategory] = useState(expense?.category || categoryNames[0]);
   const [note, setNote] = useState(expense?.description || "");
   const [menuOpen, setMenuOpen] = useState(false);
@@ -190,14 +190,21 @@ export default function EditExpenseSheet({ expense, defaultWallet, onClose, onSa
     return row.scrollLeft + (childRect.left + childRect.width / 2) - (rowRect.left + rowRect.width / 2);
   }
 
+  // Runs on mount AND whenever the wallet changes — each wallet has its own
+  // category list, so switching wallets must drop a category that no longer
+  // applies and re-center the carousel on whatever replaces it.
   useEffect(() => {
-    // Start with the current category centered (no animation on mount)
     const row = categoryRowRef.current;
-    if (row) {
-      row.scrollLeft = centerOf(row, categoryNames.indexOf(categoryRef.current));
-      applyCarouselScales(row);
+    if (!row) return;
+    const validCategory = categoryNames.includes(categoryRef.current)
+      ? categoryRef.current
+      : categoryNames[0];
+    if (validCategory !== categoryRef.current) {
+      setCategory(validCategory);
     }
-  }, []);
+    row.scrollLeft = centerOf(row, Math.max(0, categoryNames.indexOf(validCategory)));
+    applyCarouselScales(row);
+  }, [wallet]);
 
   // Like the reference: each tile's scale follows the scroll position
   // continuously — full size fades in as the tile approaches the center,
@@ -258,7 +265,7 @@ export default function EditExpenseSheet({ expense, defaultWallet, onClose, onSa
     return evaluateTokens(calc.tokens);
   }
 
-  const icon = getCategoryIcon(category);
+  const icon = getCategoryIcon(wallet, category);
 
   async function handleSave() {
     const amount = finalAmount();
@@ -394,7 +401,7 @@ export default function EditExpenseSheet({ expense, defaultWallet, onClose, onSa
 
         <div className="category-row" ref={categoryRowRef} onScroll={onCategoryScroll}>
           {categoryNames.map((cat, index) => {
-            const catIcon = getCategoryIcon(cat);
+            const catIcon = getCategoryIcon(wallet, cat);
             return (
               <button
                 key={cat}

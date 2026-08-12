@@ -1,7 +1,7 @@
-// Category registry. Starts with the built-in set (mirrors the backend seed)
-// and is replaced by the server's list — which includes user-created
-// categories — once it loads.
-const DEFAULTS = [
+// Category registry — one independent list per wallet. Starts with the
+// built-in set on every wallet (mirrors the backend seed) and is replaced
+// by the server's per-wallet lists once they load.
+const DEFAULT_LIST = [
   { name: "Кафе и рестораны", emoji: "🍴", bg: "#fde2e1", fg: "#c23b3b" },
   { name: "Продукты", emoji: "🛒", bg: "#e1f3e3", fg: "#2f8f4e" },
   { name: "Такси", emoji: "🚕", bg: "#fff2cf", fg: "#a9790a" },
@@ -13,21 +13,29 @@ const DEFAULTS = [
   { name: "Жильё", emoji: "🏠", bg: "#ece3d8", fg: "#8a6a3f" },
   { name: "Прочее", emoji: "💳", bg: "#e9e9ec", fg: "#5b5b63" },
 ];
+const DEFAULT_WALLETS = ["Личные", "Семья", "Бизнес", "Ремонт"];
 
 const FALLBACK = { emoji: "💳", bg: "#e9e9ec", fg: "#5b5b63" };
 
-let categories = DEFAULTS;
+let categories = Object.fromEntries(DEFAULT_WALLETS.map((w) => [w, DEFAULT_LIST]));
 
+// Accepts the flat, wallet-tagged list the API returns (GET /api/categories
+// with no ?wallet= filter — every row has a `wallet` field) and groups it.
 export function hydrateCategories(list) {
-  if (Array.isArray(list) && list.length && list.every((c) => c.name && c.emoji)) {
-    categories = list;
+  if (!Array.isArray(list) || !list.length || !list.every((c) => c.name && c.emoji && c.wallet)) {
+    return;
   }
+  const grouped = {};
+  for (const cat of list) {
+    (grouped[cat.wallet] ??= []).push(cat);
+  }
+  categories = grouped;
 }
 
-export function listCategories() {
-  return categories;
+export function listCategories(wallet) {
+  return categories[wallet] || [];
 }
 
-export function getCategoryIcon(name) {
-  return categories.find((c) => c.name === name) || FALLBACK;
+export function getCategoryIcon(wallet, name) {
+  return listCategories(wallet).find((c) => c.name === name) || FALLBACK;
 }

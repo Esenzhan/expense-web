@@ -1321,6 +1321,12 @@ body {
   color: #c2681f;
 }
 
+.wallet-tabs {
+  display: flex;
+  gap: 6px;
+  overflow-x: auto;
+}
+
 .cats-list {
   display: flex;
   flex-direction: column;
@@ -1346,6 +1352,17 @@ body {
   color: var(--ink-soft);
   font-size: 15px;
   letter-spacing: 2px;
+}
+
+.cat-delete {
+  border: none;
+  background: none;
+  color: var(--ink-soft);
+  font-size: 13px;
+  font-weight: 600;
+  padding: 6px 8px;
+  font-family: var(--font-ui);
+  white-space: nowrap;
 }
 
 .parent-category-pill {

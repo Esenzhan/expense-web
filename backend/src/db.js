@@ -53,6 +53,31 @@ export async function initSchema() {
     );
   `);
 
+  // wallets before categories: categories.wallet references wallets(name).
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS wallets (
+      id SERIAL PRIMARY KEY,
+      name TEXT NOT NULL UNIQUE,
+      emoji TEXT NOT NULL,
+      bg TEXT NOT NULL,
+      fg TEXT NOT NULL,
+      sort_order INT NOT NULL DEFAULT 0,
+      shared BOOLEAN NOT NULL DEFAULT true
+    );
+  `);
+  // Idempotent for wallets tables created before "shared" existed.
+  await pool.query(`ALTER TABLE wallets ADD COLUMN IF NOT EXISTS shared BOOLEAN NOT NULL DEFAULT true`);
+  for (const wallet of SEED_WALLETS) {
+    await pool.query(
+      `INSERT INTO wallets (name, emoji, bg, fg, sort_order, shared)
+       VALUES ($1, $2, $3, $4, $5, $6) ON CONFLICT (name) DO NOTHING`,
+      [wallet.name, wallet.emoji, wallet.bg, wallet.fg, wallet.sort, wallet.shared]
+    );
+  }
+  // "Личные" may already exist from before wallets could be private —
+  // force it back to private every boot regardless of ON CONFLICT above.
+  await pool.query(`UPDATE wallets SET shared = false WHERE name = 'Личные'`);
+
   await pool.query(`
     CREATE TABLE IF NOT EXISTS expenses (
       id SERIAL PRIMARY KEY,
@@ -85,44 +110,68 @@ export async function initSchema() {
     );
     await pool.query(`CREATE INDEX IF NOT EXISTS expenses_user_id_idx ON expenses (user_id)`);
   }
+
+  // categories: used to be one global list (UNIQUE on name alone). Fresh
+  // installs get the per-wallet shape directly; existing tables are
+  // migrated below.
   await pool.query(`
     CREATE TABLE IF NOT EXISTS categories (
       id SERIAL PRIMARY KEY,
-      name TEXT NOT NULL UNIQUE,
-      emoji TEXT NOT NULL,
-      bg TEXT NOT NULL,
-      fg TEXT NOT NULL,
-      sort_order INT NOT NULL DEFAULT 0
-    );
-  `);
-  for (const cat of SEED_CATEGORIES) {
-    await pool.query(
-      `INSERT INTO categories (name, emoji, bg, fg, sort_order)
-       VALUES ($1, $2, $3, $4, $5) ON CONFLICT (name) DO NOTHING`,
-      [cat.name, cat.emoji, cat.bg, cat.fg, cat.sort]
-    );
-  }
-  await pool.query(`
-    CREATE TABLE IF NOT EXISTS wallets (
-      id SERIAL PRIMARY KEY,
-      name TEXT NOT NULL UNIQUE,
+      name TEXT NOT NULL,
       emoji TEXT NOT NULL,
       bg TEXT NOT NULL,
       fg TEXT NOT NULL,
       sort_order INT NOT NULL DEFAULT 0,
-      shared BOOLEAN NOT NULL DEFAULT true
+      wallet TEXT NOT NULL REFERENCES wallets(name) ON DELETE CASCADE ON UPDATE CASCADE,
+      UNIQUE (wallet, name)
     );
   `);
-  // Idempotent for wallets tables created before "shared" existed.
-  await pool.query(`ALTER TABLE wallets ADD COLUMN IF NOT EXISTS shared BOOLEAN NOT NULL DEFAULT true`);
-  for (const wallet of SEED_WALLETS) {
+
+  // Pre-existing prod tables predate the "wallet" column — categories were
+  // global. Migrate by fanning every existing row out to all wallets (each
+  // wallet starts with its own independent copy of the same list, then
+  // diverges from there); nothing is deleted.
+  const { rows: catWalletCol } = await pool.query(`
+    SELECT 1 FROM information_schema.columns
+    WHERE table_name = 'categories' AND column_name = 'wallet'
+  `);
+  if (!catWalletCol.length) {
     await pool.query(
-      `INSERT INTO wallets (name, emoji, bg, fg, sort_order, shared)
-       VALUES ($1, $2, $3, $4, $5, $6) ON CONFLICT (name) DO NOTHING`,
-      [wallet.name, wallet.emoji, wallet.bg, wallet.fg, wallet.sort, wallet.shared]
+      `ALTER TABLE categories ADD COLUMN wallet TEXT
+       REFERENCES wallets(name) ON DELETE CASCADE ON UPDATE CASCADE`
+    );
+    const firstWallet = SEED_WALLETS[0].name;
+    await pool.query(`UPDATE categories SET wallet = $1 WHERE wallet IS NULL`, [firstWallet]);
+    const { rows: existing } = await pool.query(
+      `SELECT name, emoji, bg, fg, sort_order FROM categories WHERE wallet = $1`,
+      [firstWallet]
+    );
+    const { rows: otherWallets } = await pool.query(`SELECT name FROM wallets WHERE name != $1`, [
+      firstWallet,
+    ]);
+    for (const w of otherWallets) {
+      for (const cat of existing) {
+        await pool.query(
+          `INSERT INTO categories (name, emoji, bg, fg, sort_order, wallet)
+           VALUES ($1, $2, $3, $4, $5, $6)`,
+          [cat.name, cat.emoji, cat.bg, cat.fg, cat.sort_order, w.name]
+        );
+      }
+    }
+    await pool.query(`ALTER TABLE categories ALTER COLUMN wallet SET NOT NULL`);
+    await pool.query(`ALTER TABLE categories DROP CONSTRAINT IF EXISTS categories_name_key`);
+    await pool.query(
+      `ALTER TABLE categories ADD CONSTRAINT categories_wallet_name_key UNIQUE (wallet, name)`
     );
   }
-  // "Личные" may already exist from before wallets could be private —
-  // force it back to private every boot regardless of ON CONFLICT above.
-  await pool.query(`UPDATE wallets SET shared = false WHERE name = 'Личные'`);
+
+  for (const wallet of SEED_WALLETS) {
+    for (const cat of SEED_CATEGORIES) {
+      await pool.query(
+        `INSERT INTO categories (name, emoji, bg, fg, sort_order, wallet)
+         VALUES ($1, $2, $3, $4, $5, $6) ON CONFLICT (wallet, name) DO NOTHING`,
+        [cat.name, cat.emoji, cat.bg, cat.fg, cat.sort, wallet.name]
+      );
+    }
+  }
 }

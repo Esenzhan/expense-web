@@ -29,8 +29,9 @@ logger = logging.getLogger(__name__)
 claude = anthropic.Anthropic(api_key=os.getenv("ANTHROPIC_API_KEY"))
 openai_client = openai.OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
-# Fallback categories if the site's API is unreachable, and the fixed list
-# for "Ремонт" (that wallet's categories aren't managed on the site).
+# Offline fallback per wallet, used only if the site's API is unreachable —
+# each wallet's real list now lives on the site (Postgres), independently
+# editable per wallet.
 WALLETS = {
     "Личные": ["Рестораны и кафе", "Заказ еды", "Подарки", "Вкусняшки", "Покупки", "Здоровье и аптека"],
     "Семья": ["Квартира", "Коммуналка", "Продукты", "На ребёнка", "Дом и быт", "Расходы на машину"],
@@ -65,7 +66,7 @@ USER_BOT_KEYS = {
 
 API_BASE_URL = (os.getenv("API_BASE_URL") or "").rstrip("/")
 
-_categories_cache = {"data": None, "at": 0}
+_categories_cache = {}  # wallet -> {"data": [...], "at": ts}
 # expense_id -> last known {id, wallet, amount, category, description} —
 # lets the "✏️ Исправить" flow build a full PUT payload without a
 # get-single-expense endpoint. Lost on bot restart, same as the old
@@ -238,27 +239,27 @@ def build_budget_message(user_id: int, wallet: str, category: str) -> str:
     return "\n".join(lines)
 
 
-# --- Categories now live on the website (Postgres), one shared list used
-# for every wallet except "Ремонт" (which keeps its own fixed set — see
-# WALLETS above). Creating/deleting categories is site-only; the bot just
-# reads the current list to build its Claude prompts. ---
-def get_categories() -> list:
+# --- Categories now live on the website (Postgres), one independent list
+# per wallet. Creating/deleting categories is site-only; the bot just reads
+# the current list for its own wallet to build its Claude prompts. ---
+def get_categories(wallet: str) -> list:
     now = time.time()
-    if _categories_cache["data"] is None or now - _categories_cache["at"] > 60:
+    entry = _categories_cache.get(wallet, {"data": None, "at": 0})
+    if entry["data"] is None or now - entry["at"] > 60:
         try:
-            resp = requests.get(f"{API_BASE_URL}/api/categories", timeout=10)
+            resp = requests.get(
+                f"{API_BASE_URL}/api/categories", params={"wallet": wallet}, timeout=10
+            )
             resp.raise_for_status()
-            _categories_cache["data"] = [c["name"] for c in resp.json()]
-            _categories_cache["at"] = now
+            entry = {"data": [c["name"] for c in resp.json()], "at": now}
+            _categories_cache[wallet] = entry
         except Exception as e:
-            logger.error(f"Не удалось получить категории с сайта: {e}")
-    return _categories_cache["data"] or []
+            logger.error(f"Не удалось получить категории счёта {wallet} с сайта: {e}")
+    return entry["data"] or []
 
 
 def get_user_categories(wallet: str) -> list:
-    if wallet == "Ремонт":
-        return WALLETS["Ремонт"]
-    cats = get_categories()
+    cats = get_categories(wallet)
     return cats if cats else WALLETS.get(wallet, ["Другое"])
 
 

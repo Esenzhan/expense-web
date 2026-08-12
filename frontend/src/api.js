@@ -140,6 +140,17 @@ export async function createCategory(payload) {
   return res.json();
 }
 
+export async function deleteCategory(wallet, name) {
+  const res = await apiFetch(
+    `/api/categories/${encodeURIComponent(wallet)}/${encodeURIComponent(name)}`,
+    { method: "DELETE" }
+  );
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    throw new Error(body.error || "Не удалось удалить категорию");
+  }
+}
+
 // Fire-and-forget ping so Render's free tier starts waking up as soon as the
 // app opens, instead of on the first voice-recording attempt
 export function warmBackend() {

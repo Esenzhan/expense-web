@@ -124,7 +124,7 @@ export function computeInsights({ period, rows, previousTotal = 0, now = new Dat
     previousPeriodTotal: previousTotal,
     avgPerDay,
     biggestExpense: biggestExpense
-      ? { category: biggestExpense.category, amount: Number(biggestExpense.amount) }
+      ? { category: biggestExpense.category, wallet: biggestExpense.wallet, amount: Number(biggestExpense.amount) }
       : null,
     mostExpensiveDay: mostExpensiveDayResult,
     noSpendStreak,
