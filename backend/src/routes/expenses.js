@@ -42,9 +42,10 @@ expensesRouter.get("/", async (req, res) => {
   res.json(rows);
 });
 
-// Create an expense — used both for manual entry and to confirm a voice-parsed proposal
+// Create an expense — used for manual entry, to confirm a voice-parsed
+// proposal, and (with created_at) for backfilling historical expenses.
 expensesRouter.post("/", async (req, res) => {
-  const { wallet, amount, category, description, raw_text } = req.body;
+  const { wallet, amount, category, description, raw_text, created_at } = req.body;
 
   if (!(await isValidWallet(wallet))) {
     return res.status(400).json({ error: "Некорректный кошелёк" });
@@ -52,11 +53,23 @@ expensesRouter.post("/", async (req, res) => {
   if (typeof amount !== "number" || amount <= 0) {
     return res.status(400).json({ error: "Некорректная сумма" });
   }
+  let createdAt = null;
+  if (created_at != null) {
+    createdAt = new Date(created_at);
+    if (Number.isNaN(createdAt.getTime())) {
+      return res.status(400).json({ error: "Некорректная дата" });
+    }
+  }
 
   const { rows } = await pool.query(
-    `INSERT INTO expenses (wallet, amount, category, description, raw_text, user_id)
-     VALUES ($1, $2, $3, $4, $5, $6) RETURNING *`,
-    [wallet, amount, category || "Прочее", description || null, raw_text || null, req.user.id]
+    createdAt
+      ? `INSERT INTO expenses (wallet, amount, category, description, raw_text, user_id, created_at)
+         VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *`
+      : `INSERT INTO expenses (wallet, amount, category, description, raw_text, user_id)
+         VALUES ($1, $2, $3, $4, $5, $6) RETURNING *`,
+    createdAt
+      ? [wallet, amount, category || "Прочее", description || null, raw_text || null, req.user.id, createdAt]
+      : [wallet, amount, category || "Прочее", description || null, raw_text || null, req.user.id]
   );
   appendExpenseRow(req.user, rows[0]);
   res.status(201).json(rows[0]);
