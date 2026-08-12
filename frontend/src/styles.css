@@ -1551,6 +1551,7 @@ body {
 .newcat-icon {
   width: 44px;
   height: 44px;
+  min-width: 44px;
   border-radius: 12px;
   border: 2px solid transparent;
   background: var(--surface);
