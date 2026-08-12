@@ -300,8 +300,13 @@ def update_expense(user_id: int, expense_id: int, wallet: str, amount: float, ca
     return expense
 
 
-def extract_expense(text: str, categories: list) -> dict:
-    cats = "/".join(categories)
+def extract_expense(text: str, categories_by_wallet: dict) -> dict:
+    # Both wallets' category lists go in — the model picks "wallet" AND
+    # "category" together, so it needs the actual list for whichever wallet
+    # it lands on. Passing only "Личные"'s list here used to mean a "Семья"
+    # classification would still get a category from the wrong wallet.
+    lichnye_cats = "/".join(categories_by_wallet.get("Личные", []))
+    semya_cats = "/".join(categories_by_wallet.get("Семья", []))
     response = claude.messages.create(
         model="claude-haiku-4-5-20251001",
         max_tokens=400,
@@ -309,13 +314,14 @@ def extract_expense(text: str, categories: list) -> dict:
             "role": "user",
             "content": f"""Извлеки данные о расходе из текста.
 
-Категории: {cats}
+Категории кошелька «Личные»: {lichnye_cats}
+Категории кошелька «Семья»: {semya_cats}
 
 Верни ТОЛЬКО JSON без пояснений:
 {{
   "amount": число (сумма, только цифры),
   "wallet": "Личные или Семья",
-  "category": "подходящая категория из списка",
+  "category": "подходящая категория ИЗ СПИСКА ВЫБРАННОГО КОШЕЛЬКА",
   "description": "краткое описание"
 }}
 
@@ -355,9 +361,10 @@ def extract_expense_renovation(text: str, categories: list) -> dict:
     return json.loads(raw)
 
 
-def extract_expense_from_image(image_data: bytes, categories: list) -> dict:
+def extract_expense_from_image(image_data: bytes, categories_by_wallet: dict) -> dict:
     image_b64 = base64.standard_b64encode(image_data).decode("utf-8")
-    cats = "/".join(categories)
+    lichnye_cats = "/".join(categories_by_wallet.get("Личные", []))
+    semya_cats = "/".join(categories_by_wallet.get("Семья", []))
     response = claude.messages.create(
         model="claude-haiku-4-5-20251001",
         max_tokens=400,
@@ -376,13 +383,14 @@ def extract_expense_from_image(image_data: bytes, categories: list) -> dict:
                     "type": "text",
                     "text": f"""Это фото чека. Извлеки данные о расходе.
 
-Категории: {cats}
+Категории кошелька «Личные»: {lichnye_cats}
+Категории кошелька «Семья»: {semya_cats}
 
 Верни ТОЛЬКО JSON без пояснений:
 {{
   "amount": число (итоговая сумма),
   "wallet": "Личные или Семья",
-  "category": "подходящая категория",
+  "category": "подходящая категория ИЗ СПИСКА ВЫБРАННОГО КОШЕЛЬКА",
   "description": "название магазина или что куплено"
 }}
 
@@ -640,7 +648,7 @@ async def process_expense(update: Update, text: str, source: str, user_id: int):
         wallet = detect_wallet(text)
 
         if wallet == "Ремонт":
-            cats = WALLETS["Ремонт"]
+            cats = get_user_categories("Ремонт")
             data = extract_expense_renovation(text, cats)
             if "error" in data:
                 return False
@@ -671,8 +679,11 @@ async def process_expense(update: Update, text: str, source: str, user_id: int):
             data["wallet"] = "Бизнес"
 
         else:
-            categories = get_user_categories("Личные")
-            data = extract_expense(text, categories)
+            categories_by_wallet = {
+                "Личные": get_user_categories("Личные"),
+                "Семья": get_user_categories("Семья"),
+            }
+            data = extract_expense(text, categories_by_wallet)
             if "error" in data:
                 return False
 
@@ -762,8 +773,11 @@ async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
         with open(photo_path, "rb") as f:
             image_data = f.read()
         os.unlink(photo_path)
-        categories = get_user_categories("Личные")
-        data = extract_expense_from_image(image_data, categories)
+        categories_by_wallet = {
+            "Личные": get_user_categories("Личные"),
+            "Семья": get_user_categories("Семья"),
+        }
+        data = extract_expense_from_image(image_data, categories_by_wallet)
         if "error" in data:
             await update.message.reply_text("🤔 Не смог прочитать чек. Попробуй сфотографировать ровнее.")
             return
