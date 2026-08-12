@@ -260,6 +260,36 @@ export default function InsightsSheet({ period, insights: data, wallet, walletBa
                 <p className="section-title">Лимиты по категориям</p>
                 {categoryLimitError && <p className="sheet-error">{categoryLimitError}</p>}
                 {!categoryLimitsReady && <div className="sheet-spinner" />}
+                {categoryLimitsReady && (() => {
+                  const totalLimit = Object.values(categoryLimits).reduce((sum, v) => sum + v, 0);
+                  const totalSpent = data.total;
+                  const walletIcon = getWalletIcon(wallet);
+                  return (
+                    <div className="category-limit-row">
+                      <div className="category-limit-body total">
+                        <span className="category-icon" style={{ background: walletIcon.bg, color: walletIcon.fg }}>
+                          {walletIcon.emoji}
+                        </span>
+                        <span className="category-limit-text">
+                          <span className="category-limit-head">
+                            <span className="category-limit-name">Весь кошелёк</span>
+                            <span className="category-limit-amounts">
+                              {totalLimit ? `${tenge(totalSpent)} / ${tenge(totalLimit)}` : tenge(totalSpent)}
+                            </span>
+                          </span>
+                          {totalLimit > 0 && (
+                            <span className="category-limit-bar-track">
+                              <span
+                                className={`category-limit-bar-fill ${totalSpent > totalLimit ? "over" : ""}`}
+                                style={{ width: `${Math.min(100, (totalSpent / totalLimit) * 100)}%` }}
+                              />
+                            </span>
+                          )}
+                        </span>
+                      </div>
+                    </div>
+                  );
+                })()}
                 {categoryLimitsReady &&
                   listCategories(wallet).map((cat) => {
                     const limit = categoryLimits[cat.name] || 0;

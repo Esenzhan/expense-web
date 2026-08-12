@@ -1256,6 +1256,20 @@ body {
   text-align: left;
 }
 
+/* Wallet-wide total row, pinned first above the per-category rows */
+.category-limit-body.total {
+  background: var(--ink);
+}
+
+.category-limit-body.total .category-limit-name,
+.category-limit-body.total .category-limit-amounts {
+  color: #fff;
+}
+
+.category-limit-body.total .category-limit-bar-track {
+  background: rgba(255, 255, 255, 0.25);
+}
+
 .category-limit-text {
   flex: 1;
   min-width: 0;
