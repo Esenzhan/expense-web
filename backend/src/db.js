@@ -197,4 +197,31 @@ export async function initSchema() {
       );
     }
   }
+
+  // Monthly spending limit per (wallet, category). Shared wallets (Семья/
+  // Бизнес/Ремонт) get one limit for both accounts — user_id NULL; the
+  // private "Личные" wallet gets one limit per account, since its spending
+  // itself is already scoped per user. NULL isn't unique-constrainable the
+  // normal way (Postgres treats every NULL as distinct), so the "one shared
+  // row per category" rule needs its own partial index instead of folding
+  // user_id into a single UNIQUE(...).
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS category_limits (
+      id SERIAL PRIMARY KEY,
+      wallet TEXT NOT NULL,
+      category TEXT NOT NULL,
+      user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+      monthly_limit NUMERIC NOT NULL,
+      FOREIGN KEY (wallet, category) REFERENCES categories (wallet, name)
+        ON DELETE CASCADE ON UPDATE CASCADE
+    );
+  `);
+  await pool.query(`
+    CREATE UNIQUE INDEX IF NOT EXISTS category_limits_shared_uidx
+      ON category_limits (wallet, category) WHERE user_id IS NULL;
+  `);
+  await pool.query(`
+    CREATE UNIQUE INDEX IF NOT EXISTS category_limits_private_uidx
+      ON category_limits (wallet, category, user_id) WHERE user_id IS NOT NULL;
+  `);
 }

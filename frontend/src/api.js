@@ -144,6 +144,35 @@ export async function deleteCategory(wallet, name) {
   }
 }
 
+export async function fetchCategoryLimits(wallet) {
+  const res = await apiFetch(`/api/category-limits?wallet=${encodeURIComponent(wallet)}`);
+  return res.json();
+}
+
+export async function setCategoryLimit(wallet, category, monthlyLimit) {
+  const res = await apiFetch(
+    `/api/category-limits/${encodeURIComponent(wallet)}/${encodeURIComponent(category)}`,
+    {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ monthly_limit: monthlyLimit }),
+    }
+  );
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    throw new Error(body.error || "Не удалось сохранить лимит");
+  }
+  return res.json();
+}
+
+export async function deleteCategoryLimit(wallet, category) {
+  const res = await apiFetch(
+    `/api/category-limits/${encodeURIComponent(wallet)}/${encodeURIComponent(category)}`,
+    { method: "DELETE" }
+  );
+  if (!res.ok) throw new Error("Не удалось удалить лимит");
+}
+
 // Fire-and-forget ping so Render's free tier starts waking up as soon as the
 // app opens, instead of on the first voice-recording attempt
 export function warmBackend() {

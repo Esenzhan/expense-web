@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { getCategoryIcon } from "../categoryIcons";
+import { getCategoryIcon, listCategories } from "../categoryIcons";
 import { getWalletIcon } from "../wallets";
+import { fetchCategoryLimits, setCategoryLimit, deleteCategoryLimit } from "../api";
 import CategoryGlyph from "./CategoryGlyph";
 import InsightsChart from "./InsightsChart";
 import { useSwipeDismiss } from "../sheetGestures";
@@ -42,6 +43,53 @@ export default function InsightsSheet({ period, insights: data, wallet, walletBa
     else localStorage.removeItem(limitKey(wallet));
     setMonthlyLimit(value > 0 ? value : 0);
     setEditingLimit(false);
+  }
+
+  // Per-category limits — unlike the overall monthly limit above, these live
+  // on the server (shared wallets need the same limit on both accounts, see
+  // /api/category-limits), fetched fresh whenever the wallet changes.
+  const [categoryLimits, setCategoryLimits] = useState({});
+  const [categoryLimitsReady, setCategoryLimitsReady] = useState(false);
+  const [editingCategory, setEditingCategory] = useState(null);
+  const [categoryLimitDraft, setCategoryLimitDraft] = useState("");
+  const [categoryLimitError, setCategoryLimitError] = useState(null);
+
+  useEffect(() => {
+    setEditingCategory(null);
+    setCategoryLimitError(null);
+    if (!wallet) {
+      setCategoryLimits({});
+      setCategoryLimitsReady(false);
+      return;
+    }
+    setCategoryLimitsReady(false);
+    fetchCategoryLimits(wallet)
+      .then((rows) => {
+        const map = {};
+        for (const row of rows) map[row.category] = Number(row.monthly_limit);
+        setCategoryLimits(map);
+      })
+      .catch(() => setCategoryLimits({}))
+      .finally(() => setCategoryLimitsReady(true));
+  }, [wallet]);
+
+  function saveCategoryLimit(category) {
+    const value = Number(categoryLimitDraft.replace(/[^\d]/g, ""));
+    setCategoryLimitError(null);
+    const request = value > 0
+      ? setCategoryLimit(wallet, category, value)
+      : deleteCategoryLimit(wallet, category);
+    request
+      .then(() => {
+        setCategoryLimits((current) => {
+          const next = { ...current };
+          if (value > 0) next[category] = value;
+          else delete next[category];
+          return next;
+        });
+        setEditingCategory(null);
+      })
+      .catch((err) => setCategoryLimitError(err.message || "Не удалось сохранить лимит"));
   }
 
   const sheetRef = useRef(null);
@@ -206,6 +254,76 @@ export default function InsightsSheet({ period, insights: data, wallet, walletBa
                 <div className="insights-card-value">{data.transactionCount}</div>
               </div>
             </div>
+
+            {wallet && period === "month" && (
+              <div className="category-limits-section">
+                <p className="section-title">Лимиты по категориям</p>
+                {categoryLimitError && <p className="sheet-error">{categoryLimitError}</p>}
+                {!categoryLimitsReady && <div className="sheet-spinner" />}
+                {categoryLimitsReady &&
+                  listCategories(wallet).map((cat) => {
+                    const limit = categoryLimits[cat.name] || 0;
+                    const spent = data.categoryTotals[cat.name] || 0;
+                    const isEditing = editingCategory === cat.name;
+                    return (
+                      <div className="category-limit-row" key={cat.name}>
+                        {isEditing ? (
+                          <div className="limit-editor category-limit-editor">
+                            <input
+                              className="limit-input"
+                              type="text"
+                              inputMode="numeric"
+                              autoFocus
+                              placeholder="Лимит, ₸"
+                              value={categoryLimitDraft}
+                              onChange={(event) => setCategoryLimitDraft(event.target.value)}
+                              onKeyDown={(event) => event.key === "Enter" && saveCategoryLimit(cat.name)}
+                            />
+                            <button className="limit-save" onClick={() => saveCategoryLimit(cat.name)}>
+                              ОК
+                            </button>
+                            <button
+                              className="icon-button"
+                              aria-label="Отмена"
+                              onClick={() => setEditingCategory(null)}
+                            >
+                              ✕
+                            </button>
+                          </div>
+                        ) : (
+                          <button
+                            className="category-limit-body"
+                            onClick={() => {
+                              setEditingCategory(cat.name);
+                              setCategoryLimitDraft(limit ? String(limit) : "");
+                            }}
+                          >
+                            <span className="category-icon" style={{ background: cat.bg, color: cat.fg }}>
+                              <CategoryGlyph emoji={cat.emoji} size={18} />
+                            </span>
+                            <span className="category-limit-text">
+                              <span className="category-limit-head">
+                                <span className="category-limit-name">{cat.name}</span>
+                                <span className="category-limit-amounts">
+                                  {limit ? `${tenge(spent)} / ${tenge(limit)}` : "Лимит не задан"}
+                                </span>
+                              </span>
+                              {limit > 0 && (
+                                <span className="category-limit-bar-track">
+                                  <span
+                                    className={`category-limit-bar-fill ${spent > limit ? "over" : ""}`}
+                                    style={{ width: `${Math.min(100, (spent / limit) * 100)}%` }}
+                                  />
+                                </span>
+                              )}
+                            </span>
+                          </button>
+                        )}
+                      </div>
+                    );
+                  })}
+              </div>
+            )}
           </>
         )}
       </div>

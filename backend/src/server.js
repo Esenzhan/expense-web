@@ -9,6 +9,7 @@ import { expensesRouter } from "./routes/expenses.js";
 import { statsRouter } from "./routes/stats.js";
 import { categoriesRouter } from "./routes/categories.js";
 import { walletsRouter } from "./routes/wallets.js";
+import { categoryLimitsRouter } from "./routes/categoryLimits.js";
 import { authRouter } from "./routes/auth.js";
 import { authMiddleware, verifyToken } from "./middleware/auth.js";
 import { openDeepgramStream } from "./services/deepgramStream.js";
@@ -26,6 +27,7 @@ app.use("/api/stats", authMiddleware, statsRouter);
 // apply authMiddleware themselves on the mutating handlers.
 app.use("/api/categories", categoriesRouter);
 app.use("/api/wallets", walletsRouter);
+app.use("/api/category-limits", authMiddleware, categoryLimitsRouter);
 
 app.get("/api/health", (req, res) => res.json({ ok: true }));
 

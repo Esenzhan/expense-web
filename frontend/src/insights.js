@@ -91,6 +91,14 @@ export function computeInsights({ period, rows, previousTotal = 0, now = new Dat
   const total = rows.reduce((sum, r) => sum + Number(r.amount), 0);
   const transactionCount = rows.length;
 
+  // Spend per category within the period — used for the per-category limit
+  // progress bars (limits themselves live server-side, see
+  // /api/category-limits; this is just "how much of it is spent so far").
+  const categoryTotals = {};
+  for (const row of rows) {
+    categoryTotals[row.category] = (categoryTotals[row.category] || 0) + Number(row.amount);
+  }
+
   // Per-day totals, keyed by day offset within the period (1-based).
   const dayTotals = new Map();
   for (const row of rows) {
@@ -162,5 +170,6 @@ export function computeInsights({ period, rows, previousTotal = 0, now = new Dat
     noSpendStreak,
     weekendPercent,
     transactionCount,
+    categoryTotals,
   };
 }
