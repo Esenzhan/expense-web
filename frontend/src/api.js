@@ -84,13 +84,6 @@ export async function fetchWalletTotals() {
   return res.json();
 }
 
-export async function fetchSummary(period = "month", wallet) {
-  const qs = new URLSearchParams({ period });
-  if (wallet) qs.set("wallet", wallet);
-  const res = await apiFetch(`/api/stats/summary?${qs}`);
-  return res.json();
-}
-
 export async function fetchWallets() {
   const res = await apiFetch(`/api/wallets`);
   return res.json();

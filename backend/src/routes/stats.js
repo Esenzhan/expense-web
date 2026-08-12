@@ -30,41 +30,6 @@ statsRouter.get("/by-wallet", async (req, res) => {
   res.json(rows);
 });
 
-// Total + category breakdown for a period ("month" | "7" | "30"),
-// used for the big spend total and the category chart.
-statsRouter.get("/summary", async (req, res) => {
-  const { period = "month", wallet } = req.query;
-  const values = [];
-  const visibility = await visibilityWhere(req.user.id, values);
-
-  let periodClause;
-  if (period === "month") {
-    periodClause = "created_at >= date_trunc('month', now())";
-  } else {
-    const days = Number(period) || 30;
-    values.push(days);
-    periodClause = `created_at >= now() - ($${values.length} || ' days')::interval`;
-  }
-
-  let walletFilter = "";
-  if (wallet) {
-    values.push(wallet);
-    walletFilter = `AND wallet = $${values.length}`;
-  }
-
-  const { rows } = await pool.query(
-    `SELECT category, COALESCE(SUM(amount), 0) AS total
-     FROM expenses
-     WHERE ${visibility} AND ${periodClause} ${walletFilter}
-     GROUP BY category
-     ORDER BY total DESC`,
-    values
-  );
-
-  const total = rows.reduce((sum, row) => sum + Number(row.total), 0);
-  res.json({ total, categories: rows });
-});
-
 // Daily totals, for the trend line chart
 statsRouter.get("/daily", async (req, res) => {
   const { days = 30 } = req.query;

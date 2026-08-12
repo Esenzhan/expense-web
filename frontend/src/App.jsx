@@ -1,8 +1,8 @@
 import { useEffect, useRef, useState } from "react";
-import { fetchExpenses, fetchExpensesRange, fetchWalletTotals, fetchSummary, fetchCategories, fetchWallets, fetchMe, warmBackend, createExpense, deleteExpense, deleteCategory } from "./api";
+import { fetchExpenses, fetchExpensesRange, fetchWalletTotals, fetchCategories, fetchWallets, fetchMe, warmBackend, createExpense, deleteExpense, deleteCategory } from "./api";
 import { getToken, setToken } from "./auth";
 import { listPendingExpenses, syncPendingExpenses, hasPendingExpenses, removePendingExpense } from "./offlineQueue";
-import { computeInsights, periodRange } from "./insights";
+import { computeInsights, periodRange, formatPeriodLabel } from "./insights";
 import { hydrateCategories } from "./categoryIcons";
 import { hydrateWallets, getWalletIcon } from "./wallets";
 import { haptic } from "./haptics";
@@ -17,6 +17,7 @@ import CategoriesSheet from "./components/CategoriesSheet";
 import NewCategorySheet from "./components/NewCategorySheet";
 import WalletsSheet from "./components/WalletsSheet";
 import NewWalletSheet from "./components/NewWalletSheet";
+import PeriodPickerSheet from "./components/PeriodPickerSheet";
 
 const CACHE_KEY = "traty-cache-v4";
 
@@ -34,8 +35,7 @@ function HeaderIcon({ children }) {
 
 const PERIODS = [
   { value: "month", label: "Этот месяц" },
-  { value: "7", label: "7 дней" },
-  { value: "30", label: "30 дней" },
+  { value: "today", label: "Сегодня" },
 ];
 
 // Ring that drains counter-clockwise over the undo window, like the
@@ -121,9 +121,14 @@ export default function App() {
   const [authError, setAuthError] = useState(null);
 
   const [period, setPeriod] = useState("month");
+  // Last "Выбрать период" selection — kept separately from `period` so the
+  // pill still shows the previously picked range even while "Этот месяц"/
+  // "Сегодня" is the active one, ready to reselect without reopening the
+  // picker.
+  const [customRange, setCustomRange] = useState(null);
+  const [periodPickerOpen, setPeriodPickerOpen] = useState(false);
   const [expenses, setExpenses] = useState([]);
   const [walletTotals, setWalletTotals] = useState([]);
-  const [summary, setSummary] = useState({ total: 0, categories: [] });
   const [insights, setInsights] = useState(() => computeInsights({ period: "month", rows: [] }));
   const [insightsOpen, setInsightsOpen] = useState(false);
   const [editingExpense, setEditingExpense] = useState(null);
@@ -145,7 +150,6 @@ export default function App() {
   const rawRef = useRef({
     exp: [],
     wallets: [],
-    sum: { total: 0, categories: [] },
     insightsRows: [],
   });
   // Per (period, wallet) snapshots for this session — switching back to an
@@ -174,12 +178,10 @@ export default function App() {
     rawRef.current = {
       exp: cached.expenses || [],
       wallets: cached.walletTotals || [],
-      sum: cached.summary || { total: 0, categories: [] },
       insightsRows: cached.insightsRows || [],
     };
     setExpenses(cached.expenses || []);
     setWalletTotals(cached.walletTotals || []);
-    setSummary(cached.summary || { total: 0, categories: [] });
     const pending = listPendingExpenses();
     const wallet = selectedWalletRef.current;
     const pendingForList = wallet ? pending.filter((p) => p.wallet === wallet) : pending;
@@ -307,7 +309,7 @@ export default function App() {
   // no loading spinner, and it works offline since it's pure local
   // arithmetic over whatever rows are cached.
   function mergeAndSet(wallet, currentPeriod) {
-    const { exp, wallets, sum, insightsRows } = rawRef.current;
+    const { exp, wallets, insightsRows } = rawRef.current;
     const pending = listPendingExpenses();
     const pendingForList = wallet ? pending.filter((p) => p.wallet === wallet) : pending;
 
@@ -337,23 +339,12 @@ export default function App() {
       }
     }
 
-    // Pending expenses are always "just now", so they fall inside every
-    // period (month/7/30 all include today) — safe to add unconditionally.
-    const pendingTotal = pendingForList.reduce((s, p) => s + Number(p.amount), 0);
-    // The deleted row might predate the current period's start (the "last
-    // 50" list isn't period-bounded) — only touch the period total if it
-    // actually falls inside it.
-    let deletedTotal = 0;
-    if (deleting && (!wallet || deleting.wallet === wallet)) {
-      const { start, end } = periodRange(currentPeriod);
-      const createdAt = new Date(deleting.created_at);
-      if (createdAt >= start && createdAt < end) deletedTotal = Number(deleting.amount);
-    }
-    const mergedSummary = { ...sum, total: Number(sum.total) + pendingTotal - deletedTotal };
-
     setExpenses(mergedExpenses);
     setWalletTotals(mergedWallets);
-    setSummary(mergedSummary);
+    // The header total ("Расходы за") reads from `insights.total` below —
+    // it's computed from the exact same period-bounded rows, so it's always
+    // in sync instead of duplicating this arithmetic against a separate
+    // backend total.
     setInsights(computeInsights({ period: currentPeriod, rows: [...pendingForList, ...baseInsightsRows] }));
   }
 
@@ -418,16 +409,15 @@ export default function App() {
     if (wallet) expenseParams.wallet = wallet;
     const { start, end } = periodRange(currentPeriod);
     try {
-      const [exp, wallets, sum, insightsRows] = await Promise.all([
+      const [exp, wallets, insightsRows] = await Promise.all([
         fetchExpenses(expenseParams),
         fetchWalletTotals(),
-        fetchSummary(currentPeriod, wallet),
         fetchExpensesRange(start, end, wallet),
       ]);
-      const fresh = { exp, wallets, sum, insightsRows };
+      const fresh = { exp, wallets, insightsRows };
       rawRef.current = fresh;
       dataCacheRef.current.set(cacheKey, fresh);
-      if (user) saveCache({ expenses: exp, walletTotals: wallets, summary: sum, insightsRows, wallet }, user.email);
+      if (user) saveCache({ expenses: exp, walletTotals: wallets, insightsRows, wallet }, user.email);
     } catch {
       // Offline — nothing fresh from the server, keep the last known data
       // and just re-merge whatever's pending below
@@ -494,6 +484,7 @@ export default function App() {
     ? Number(walletTotals.find((w) => w.wallet === selectedWallet)?.total || 0)
     : walletTotals.reduce((sum, w) => sum + Number(w.total), 0);
   const chipIcon = selectedWallet ? getWalletIcon(selectedWallet) : null;
+  const customPeriodValue = customRange ? `custom:${customRange.from}:${customRange.to}` : null;
 
   return (
     <div className={`app ${insightsOpen ? "app-behind" : ""}`}>
@@ -564,9 +555,18 @@ export default function App() {
                 {p.label}
               </button>
             ))}
+            <button
+              className={`period-pill ${customRange && period === customPeriodValue ? "active" : ""}`}
+              onClick={() => {
+                haptic();
+                setPeriodPickerOpen(true);
+              }}
+            >
+              {customRange ? formatPeriodLabel(customPeriodValue) : "Выбрать период"}
+            </button>
           </div>
         </div>
-        <div className="summary-total">−{Number(summary.total).toLocaleString("ru-RU")} ₸</div>
+        <div className="summary-total">−{Number(insights.total).toLocaleString("ru-RU")} ₸</div>
         <InsightsButton onOpen={() => setInsightsOpen(true)} />
       </div>
 
@@ -648,6 +648,19 @@ export default function App() {
           onAdd={() => setNewWalletOpen(true)}
           onEdit={(wallet) => setEditingWallet(wallet)}
           onClose={() => setWalletsOpen(false)}
+        />
+      )}
+
+      {periodPickerOpen && (
+        <PeriodPickerSheet
+          initialFrom={customRange?.from}
+          initialTo={customRange?.to}
+          onClose={() => setPeriodPickerOpen(false)}
+          onApply={(from, to) => {
+            setCustomRange({ from, to });
+            setPeriod(`custom:${from}:${to}`);
+            setPeriodPickerOpen(false);
+          }}
         />
       )}
 

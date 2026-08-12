@@ -30,22 +30,54 @@ function formatDayLabel(date, today) {
   });
 }
 
+// "custom:YYYY-MM-DD:YYYY-MM-DD" (from/to are inclusive Almaty calendar days)
+// is how a user-picked range is encoded into the same `period` string used
+// everywhere else, so it flows through caching/props without a second prop.
 export function periodRange(period, now = new Date()) {
-  if (period === "month") {
-    const a = almaty(now);
-    const start = new Date(Date.UTC(a.getUTCFullYear(), a.getUTCMonth(), 1) - ALMATY_OFFSET_MS);
-    const end = new Date(Date.UTC(a.getUTCFullYear(), a.getUTCMonth() + 1, 1) - ALMATY_OFFSET_MS);
-    const prevEnd = start;
-    const prevStart = new Date(Date.UTC(a.getUTCFullYear(), a.getUTCMonth() - 1, 1) - ALMATY_OFFSET_MS);
-    const daysInPeriod = Math.round((end - start) / 86400000);
-    return { start, end, prevStart, prevEnd, daysInPeriod };
+  if (period === "today") {
+    const start = startOfAlmatyDay(now);
+    const end = addDays(start, 1);
+    return { start, end, prevStart: addDays(start, -1), prevEnd: start, daysInPeriod: 1 };
   }
-  const days = Number(period) || 30;
-  const end = addDays(startOfAlmatyDay(now), 1);
-  const start = addDays(end, -days);
+  if (typeof period === "string" && period.startsWith("custom:")) {
+    const [, fromStr, toStr] = period.split(":");
+    const start = startOfAlmatyDay(new Date(fromStr));
+    const end = addDays(startOfAlmatyDay(new Date(toStr)), 1);
+    const spanMs = end - start;
+    return {
+      start,
+      end,
+      prevStart: new Date(start.getTime() - spanMs),
+      prevEnd: start,
+      daysInPeriod: Math.round(spanMs / 86400000),
+    };
+  }
+  // "month" and any unrecognized value fall back to the current calendar month
+  const a = almaty(now);
+  const start = new Date(Date.UTC(a.getUTCFullYear(), a.getUTCMonth(), 1) - ALMATY_OFFSET_MS);
+  const end = new Date(Date.UTC(a.getUTCFullYear(), a.getUTCMonth() + 1, 1) - ALMATY_OFFSET_MS);
   const prevEnd = start;
-  const prevStart = addDays(start, -days);
-  return { start, end, prevStart, prevEnd, daysInPeriod: days };
+  const prevStart = new Date(Date.UTC(a.getUTCFullYear(), a.getUTCMonth() - 1, 1) - ALMATY_OFFSET_MS);
+  const daysInPeriod = Math.round((end - start) / 86400000);
+  return { start, end, prevStart, prevEnd, daysInPeriod };
+}
+
+const MONTH_SHORT = ["янв", "фев", "мар", "апр", "мая", "июн", "июл", "авг", "сен", "окт", "ноя", "дек"];
+
+function shortDateLabel(dateOnlyStr) {
+  const [, m, d] = dateOnlyStr.split("-").map(Number);
+  return `${d} ${MONTH_SHORT[m - 1]}`;
+}
+
+// Human label for a `period` string — used on both the main screen's pill
+// and the Insights sheet, so the two never drift apart.
+export function formatPeriodLabel(period) {
+  if (period === "today") return "Сегодня";
+  if (typeof period === "string" && period.startsWith("custom:")) {
+    const [, fromStr, toStr] = period.split(":");
+    return fromStr === toStr ? shortDateLabel(fromStr) : `${shortDateLabel(fromStr)} – ${shortDateLabel(toStr)}`;
+  }
+  return "Этот месяц";
 }
 
 export function computeInsights({ period, rows, previousTotal = 0, now = new Date() }) {

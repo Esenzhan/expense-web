@@ -5,8 +5,7 @@ import { getWalletIcon } from "../wallets";
 import CategoryGlyph from "./CategoryGlyph";
 import InsightsChart from "./InsightsChart";
 import { useSwipeDismiss } from "../sheetGestures";
-
-const PERIOD_LABELS = { month: "Этот месяц", 7: "7 дней", 30: "30 дней" };
+import { formatPeriodLabel } from "../insights";
 
 function tenge(value) {
   return `${Math.round(value).toLocaleString("ru-RU")} ₸`;
@@ -82,7 +81,7 @@ export default function InsightsSheet({ period, insights: data, wallet, walletBa
 
         {data && (
           <>
-            <div className="insights-period-pill">{PERIOD_LABELS[period] || PERIOD_LABELS.month}</div>
+            <div className="insights-period-pill">{formatPeriodLabel(period)}</div>
             <div className="insights-total">−{tenge(data.total)}</div>
 
             <InsightsChart
