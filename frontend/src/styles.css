@@ -59,7 +59,16 @@ body {
 }
 
 /* "Отменить" banner shown for a few seconds after deleting an expense */
+/* Fixed to the viewport, not the page flow — otherwise it scrolls away
+   with the rest of .app and stays invisible while scrolled down the list */
 .undo-banner {
+  position: fixed;
+  top: calc(env(safe-area-inset-top) + 16px);
+  left: 16px;
+  right: 16px;
+  max-width: 448px;
+  margin: 0 auto;
+  z-index: 25;
   display: flex;
   align-items: center;
   gap: 10px;
@@ -67,6 +76,7 @@ body {
   color: #fff;
   border-radius: 14px;
   padding: 10px 14px;
+  box-shadow: 0 12px 30px rgba(20, 20, 26, 0.25);
   animation: row-in 0.24s ease;
 }
 
