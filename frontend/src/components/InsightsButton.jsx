@@ -44,10 +44,14 @@ export default function InsightsButton({ onOpen }) {
       state.pulling = false;
       if (window.scrollY > 0) return;
       // Only the main screen owns this gesture — touches inside overlays
-      // (sheets, mic dock, settings page) must scroll/act normally
+      // (sheets, mic dock, settings page) must scroll/act normally. Expense
+      // rows run their own axis-locked horizontal-swipe gesture (see
+      // ExpenseRow.jsx) — without this exclusion a swipe that drifts a few
+      // px vertically gets picked up by BOTH this document-level listener
+      // and the row's own, racing each other for the same touch.
       if (
         event.target.closest?.(
-          ".sheet-backdrop, .recorder-dock, .recorder-backdrop, .settings-page"
+          ".sheet-backdrop, .recorder-dock, .recorder-backdrop, .settings-page, .expense-row-wrap"
         )
       ) {
         return;
