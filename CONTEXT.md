@@ -11,13 +11,21 @@ iPhone («Добавить на экран Домой»), с мгновенны�
 (пользователь присылает скриншоты/видео из него и просит повторять 1:1,
 вплоть до покадрового разбора анимаций).
 
-- Репозиторий: `github.com/Esenzhan/expense-web`
+- Репозиторий: `github.com/Esenzhan/expense-web` — монорепо: `frontend/`,
+  `backend/` **и `bot/`** (Telegram-бот, см. «Telegram-бот» ниже; у бота
+  никогда не было отдельного репозитория — `expense-bot` на GitHub не
+  существует, локальный `.git` в его исходной папке указывал в никуда)
 - Прод фронтенд: `https://expense-web-eosin.vercel.app` (Vercel, аккаунт
   `esenzhan`, scope `tommili1`, проект **`expense-web`** — см. предостережение
   про `vercel link` ниже)
 - Прод бэкенд: `https://expense-web-peo6.onrender.com` (Render free tier,
-  автодеплой из GitHub `main`)
+  автодеплой из GitHub `main`). На Render в том же workspace есть ещё один,
+  **не связанный** сервис с именем `expense-bot` (Python, сломанный деплой,
+  не используется) — не путать при добавлении env-переменных, проверять по
+  URL/типу сервиса, не по названию
 - БД: Neon Postgres (проект `expense-web`)
+- Вход на сайт: Google OAuth, закрытый список из 2 аккаунтов (см. раздел
+  «Мульти-аккаунт» ниже)
 
 ## Стек и архитектура
 
@@ -45,13 +53,19 @@ Claude Haiku (claude-haiku-4-5-20251001) парсит текст → {amount, ca
   когда появится сеть — см. офлайн-раздел ниже)
 ```
 
-- **Backend** (`backend/src`): Express + ws + pg + Anthropic SDK, один процесс.
-  Таблицы: `expenses`, `categories` (seed 10 штук, «Прочее» = sort 999,
-  фолбэк парсера, защищено от удаления), `wallets` (seed: Личные/Семья/
-  Бизнес/Ремонт; «Личные» — фолбэк, защищён). Роуты: `/api/expenses`
-  (GET с `?wallet=&from=&to=&limit=` / POST / PUT / DELETE),
-  `/api/stats/{summary,by-wallet,daily}` (summary принимает `?wallet=`),
-  `/api/categories` (GET/POST/DELETE), `/api/wallets` (GET/POST/PUT/DELETE;
+- **Backend** (`backend/src`): Express + ws + pg + Anthropic SDK + googleapis,
+  один процесс. Таблицы: `users` (по одной строке на Google-аккаунт из
+  allowlist — email/name/google_sub/зашифрованный google_refresh_token/
+  sheet_id/bot_api_key), `expenses` (теперь с `user_id`), `categories`
+  (seed 10 штук, «Прочее» = sort 999, фолбэк парсера, защищено от удаления,
+  ЕДИНЫЙ список на все кошельки), `wallets` (seed: Личные/Семья/Бизнес/
+  Ремонт; «Личные» — фолбэк, защищён; у каждого кошелька теперь есть
+  `shared` — см. «Мульти-аккаунт» ниже). Роуты: `/api/auth/google/{start,
+  callback}` + `/api/auth/me`, `/api/expenses` (GET с
+  `?wallet=&from=&to=&limit=` / POST / PUT / DELETE — все требуют
+  auth), `/api/stats/{summary,by-wallet,daily}` (summary принимает
+  `?wallet=`, тоже требуют auth), `/api/categories` (GET публичный — бот
+  тоже дёргает; POST/DELETE только с логином), `/api/wallets` (аналогично;
   PUT переименовывает и переносит траты транзакцией; DELETE блокируется при
   наличии трат). **`/api/stats/insights` УДАЛЁН** — вся логика Инсайтов
   переехала на фронт (см. ниже), держать две реализации арифметики в синхроне
@@ -62,6 +76,99 @@ Claude Haiku (claude-haiku-4-5-20251001) парсит текст → {amount, ca
   модульные сторы (`categoryIcons.js`, `wallets.js`) с hydrate из API +
   localStorage-кэш. `insights.js` — портированная 1:1 с бэкенда чистая
   арифметика (`computeInsights`, `periodRange`), теперь единственная копия.
+
+## Мульти-аккаунт: Google-логин + шаринг кошельков (добавлено 2026-08-12)
+
+Раньше сайт был однопользовательским (один общий Postgres на всех), а
+Telegram-бот писал напрямую в Google Sheets — **две независимые базы**.
+Теперь всё объединено: закрытый логин на сайте (2 аккаунта), бот пишет
+через API сайта, обе стороны сходятся в одних и тех же данных.
+
+- **Вход**: Google OAuth (`backend/src/routes/auth.js`,
+  `services/googleAuth.js`), allowlist по email в env `ALLOWED_EMAILS`
+  (только вы двое — открытой регистрации нет). Scope запрашивает не только
+  identity, но и `spreadsheets`+`drive.file` — токен нужен бэкенду, чтобы
+  писать в личный Sheet пользователя даже когда его нет на сайте (например
+  когда трату шлёт бот). `prompt=consent` всегда форсит выдачу
+  `refresh_token` (иначе Google отдаёт его только при самом первом
+  согласии). JWT-сессия живёт 180 дней, хранится во фронте в
+  `localStorage` (`traty-token`, см. `frontend/src/auth.js`), шлётся как
+  `Authorization: Bearer`.
+- **Личная Google-таблица**: при первом логине (`ensureUserSheet` в
+  `services/sheets.js`) от имени пользователя создаётся Spreadsheet в ЕГО
+  СОБСТВЕННОМ Google Drive (не в сервисном аккаунте) — `sheet_id`
+  сохраняется в `users`. Формат листов 1:1 с тем, что раньше писал сам бот
+  (`bot.py`'s `get_wallet_sheet`): вкладка на кошелёк, шапка `Дата, Время,
+  Сумма, Категория, Описание, Источник, Кто, ID` — колонка `ID` (Postgres
+  `expenses.id`) добавлена НОВОЙ, бот её не читает, но по ней бэкенд находит
+  строку для update/delete.
+- **Общие vs личные кошельки** (`wallets.shared`, boolean): Семья/Бизнес/
+  Ремонт = `true`, Личные = `false`. Это работает НА ДВУХ уровнях
+  одновременно:
+  - **Сайт** (`routes/expenses.js`, `routes/stats.js`): траты общего
+    кошелька видны и суммируются для ОБОИХ аккаунтов (`WHERE user_id=$me
+    OR wallet = ANY(shared_names)`); личные — только у создателя. НО
+    редактировать/удалять может только тот, кто СОЗДАЛ трату, даже в общем
+    кошельке — чужая строка в `ExpenseList` рендерится с классом
+    `.readonly` (тусклая, `pointer-events` не блокируются CSS, но клик
+    просто не открывает `onSelect`) и бэкенд отдаёт 404 на чужой
+    PUT/DELETE (сделано намеренно так — см. `[[dariya-workflow]]` про
+    итеративные уточнения).
+  - **Sheets**: общая трата зеркалится СРАЗУ в обе личные таблицы (кто бы
+    её ни залогировал), с колонкой «Кто» = имя автора. Личная — только в
+    таблицу автора, «Кто» пусто. Это заменило собой старый
+    `RENOVATION_OWNER_EMAIL`-костыль (принудительная запись Ремонта в одну
+    конкретную таблицу) — теперь это просто частный случай «Ремонт тоже
+    shared», спец-код убран.
+- **Бот** (`bot/bot.py`, живёт в этом же репо, деплой — см. ниже):
+  `/addcategory` и `/deletecategory` УДАЛЕНЫ — категории только с сайта.
+  Бот получает список категорий через `GET /api/categories` (кэш 60с),
+  сохраняет трату через `POST /api/expenses` с заголовком `X-Bot-Key`
+  (постоянный ключ на аккаунт, `users.bot_api_key`, сопоставлен с
+  `USER1_TELEGRAM_ID`/`USER2_TELEGRAM_ID` в `.env` на VM — **однажды уже
+  перепутали местами**, симптом был «сообщения Есенжана улетают в таблицу
+  Дарии и наоборот», чинится свапом `USER1_BOT_KEY`/`USER2_BOT_KEY`).
+  `/budget` и `/renovation` НЕ ТРОГАЛИ — по-прежнему читают Google Sheets
+  напрямую через `gspread`+сервисный аккаунт (`GOOGLE_CREDENTIALS_FILE`),
+  просто теперь эти таблицы заполняет бэкенд сайта, а не сам бот.
+- **Postgres-миграция**: старая (тестовая, однопользовательская) история
+  трат была намеренно стёрта (`TRUNCATE expenses`) при добавлении
+  `user_id NOT NULL` — см. `initSchema()` в `db.js`, идемпотентно проверяет
+  наличие колонки перед труном, повторно не сработает.
+- **Env, которые добавились** (см. `backend/.env.example`):
+  `GOOGLE_OAUTH_CLIENT_ID/SECRET/REDIRECT_URI`, `ALLOWED_EMAILS`,
+  `JWT_SECRET`, `TOKEN_ENCRYPTION_KEY` (шифрует `google_refresh_token` в
+  БД, AES-256-GCM, `services/crypto.js`). `RENOVATION_OWNER_EMAIL` больше
+  не используется кодом (Ремонт и так shared), но может остаться висеть в
+  Render — безвредно.
+- **OAuth consent screen**: проект `adept-parsec-500611-h1` в Google Cloud
+  (тот же, где сервисный аккаунт бота), Publishing status = **Testing**
+  (осознанно — верификация у Google не нужна для 2 тестовых пользователей),
+  оба email добавлены в Test users. Поле для test users в новом UI
+  Google Auth Platform — это chip-input, для нескольких email нужно
+  добавлять по одному с Tab/Enter между ними, а не через запятую одной
+  строкой (иначе примет как один невалидный email).
+
+## Telegram-бот (`bot/`)
+
+Раньше был отдельным проектом на Oracle VM без места в git (см. выше —
+`expense-bot` на GitHub не существовал). Теперь код лежит в этом репозитории
+под `bot/`, но **деплой всё ещё полностью ручной**, ничего не триггерится
+пушем в `main`:
+
+```bash
+scp -i ~/Downloads/ssh-key-2026-07-06.key bot/bot.py bot/requirements.txt \
+  ubuntu@217.142.234.123:~/expense-bot/
+ssh -i ~/Downloads/ssh-key-2026-07-06.key ubuntu@217.142.234.123 \
+  "cd ~/expense-bot && source venv/bin/activate && pip install -r requirements.txt && sudo systemctl restart expense-bot"
+```
+
+Живёт как systemd-сервис `expense-bot` на VM `217.142.234.123` (Oracle Cloud
+Always Free). `.env` и `credentials.json` — только на VM, в git не входят.
+Один хардкод, на который однажды напоролись: `.env` на VM был без
+завершающего перевода строки — дописанные через `>>` переменные слиплись с
+последней строкой в одну (`GOOGLE_CREDENTIALS_FILE=credentials.jsonAPI_BASE_URL=...`)
+и молча не распарсились. Проверять `cat -A .env | tail` после любого append.
 
 ## Экраны и фичи (всё уже на проде)
 
@@ -167,16 +274,22 @@ Claude Haiku (claude-haiku-4-5-20251001) парсит текст → {amount, ca
   обязан случиться в САМОЙ ПЕРВОЙ реакции на `fetch()`, до того как
   потребитель `respondWith` (браузер, рендерящий навигацию) начнёт читать
   тело — иначе гонка и «body is already used», кэш молча не пишется.
-- **Vercel**: аккаунт залогинен в CLI (`esenzhan`). `frontend/.vercel/`
-  привязан к проекту **`expense-web`** — ОПАСНОСТЬ: обычный
-  `npx vercel deploy` без явной привязки может создать/задеплоить в НОВЫЙ
-  проект (однажды случайно возник лишний проект «frontend» в том же
-  scope) — если `vercel ls` показывает не тот проект, перелинковать
-  `npx vercel link --yes --scope tommili1 --project expense-web`. При сбоях
-  GitHub-автодеплоя — деплоить напрямую из `frontend/`. Частый curl на
-  прод-домен ловит Vercel Security Checkpoint (антибот) — проверять через
-  браузер/browser-пейн, не curl-полингом самой HTML-страницы (статические
-  ассеты типа `/icon-512.png` curl'ить можно).
+- **Vercel**: аккаунт залогинен в CLI (`esenzhan`). Проект **`expense-web`**
+  на Vercel настроен с **Root Directory = `frontend`** — значит
+  `npx vercel deploy --prod --yes` нужно запускать из КОРНЯ репозитория, НЕ
+  из `frontend/` (запуск изнутри `frontend/` даёт ошибку
+  «Root Directory "frontend" does not exist», т.к. Vercel тогда ищёт
+  `frontend/frontend`). И корневой `.vercel/project.json`, и
+  `frontend/.vercel/project.json` указывают на один и тот же
+  `projectId`/`expense-web` — привязка не потеряна, дело только в том, откуда
+  запускать команду. ОПАСНОСТЬ: обычный `npx vercel deploy` без явной
+  привязки может создать/задеплоить в НОВЫЙ проект (однажды случайно возник
+  лишний проект «frontend» в том же scope) — если `vercel ls` показывает не
+  тот проект, перелинковать `npx vercel link --yes --scope tommili1
+  --project expense-web`. Частый curl на прод-домен ловит Vercel Security
+  Checkpoint (антибот) — проверять через браузер/browser-пейн, не
+  curl-полингом самой HTML-страницы (статические ассеты типа
+  `/icon-512.png` curl'ить можно).
 - **Render free tier**: холодный старт 30–50с (иногда дольше) — все
   таймауты/буферы (WS-реконнект, fallback-таймеры голоса) это учитывают.
   Фронт шлёт fire-and-forget GET `/api/health` при открытии приложения и по
@@ -228,12 +341,18 @@ Claude Haiku (claude-haiku-4-5-20251001) парсит текст → {amount, ca
    `.gitignore` уже это покрывает), но безобиден; можно закоммитить или
    удалить при следующей уборке.
 
-## Env (см. .env.example)
+## Env (см. .env.example в каждой папке)
 
 - Backend (Render): `DATABASE_URL` (Neon, direct), `ANTHROPIC_API_KEY`,
   `DEEPGRAM_API_KEY`, `FRONTEND_URL` = `https://expense-web-eosin.vercel.app`
-  (со схемой, без слэша — иначе CORS!), `PORT`.
+  (со схемой, без слэша — иначе CORS!), `PORT`, плюс с добавлением логина:
+  `GOOGLE_OAUTH_CLIENT_ID/SECRET/REDIRECT_URI`, `ALLOWED_EMAILS`,
+  `JWT_SECRET`, `TOKEN_ENCRYPTION_KEY` (см. «Мульти-аккаунт» выше).
 - Frontend (Vercel): `VITE_API_URL` = `https://expense-web-peo6.onrender.com`.
+- Bot (только на Oracle VM, `bot/.env.example`): `TELEGRAM_TOKEN`,
+  `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, `USER1_TELEGRAM_ID/SHEET_ID`,
+  `USER2_TELEGRAM_ID/SHEET_ID`, `GOOGLE_CREDENTIALS_FILE`, `API_BASE_URL`,
+  `USER1_BOT_KEY`, `USER2_BOT_KEY`.
 
 ## Стиль работы с пользователем
 
