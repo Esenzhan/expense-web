@@ -1325,6 +1325,14 @@ body {
   display: flex;
   gap: 6px;
   overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  margin: 0 -18px;
+  padding: 0 18px;
+}
+
+.wallet-tabs .period-pill {
+  flex-shrink: 0;
+  white-space: nowrap;
 }
 
 .cats-list {
