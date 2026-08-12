@@ -3,22 +3,26 @@ import { pool } from "../db.js";
 
 export const statsRouter = Router();
 
-function periodWhere(period) {
+function periodWhere(period, dayParamIndex) {
   if (period === "month") {
-    return { where: "created_at >= date_trunc('month', now())", values: [] };
+    return { clause: "created_at >= date_trunc('month', now())", values: [] };
   }
   const days = Number(period) || 30;
-  return { where: "created_at >= now() - ($1 || ' days')::interval", values: [days] };
+  return {
+    clause: `created_at >= now() - ($${dayParamIndex} || ' days')::interval`,
+    values: [days],
+  };
 }
 
 // Totals by wallet for the current month (used for the per-wallet cards)
 statsRouter.get("/by-wallet", async (req, res) => {
-  const { rows } = await pool.query(`
-    SELECT wallet, COALESCE(SUM(amount), 0) AS total
-    FROM expenses
-    WHERE created_at >= date_trunc('month', now())
-    GROUP BY wallet
-  `);
+  const { rows } = await pool.query(
+    `SELECT wallet, COALESCE(SUM(amount), 0) AS total
+     FROM expenses
+     WHERE user_id = $1 AND created_at >= date_trunc('month', now())
+     GROUP BY wallet`,
+    [req.user.id]
+  );
   res.json(rows);
 });
 
@@ -26,7 +30,9 @@ statsRouter.get("/by-wallet", async (req, res) => {
 // used for the big spend total and the category chart.
 statsRouter.get("/summary", async (req, res) => {
   const { period = "month", wallet } = req.query;
-  const { where, values } = periodWhere(period);
+  const values = [req.user.id];
+  const { clause, values: periodValues } = periodWhere(period, 2);
+  values.push(...periodValues);
 
   let walletFilter = "";
   if (wallet) {
@@ -37,7 +43,7 @@ statsRouter.get("/summary", async (req, res) => {
   const { rows } = await pool.query(
     `SELECT category, COALESCE(SUM(amount), 0) AS total
      FROM expenses
-     WHERE ${where} ${walletFilter}
+     WHERE user_id = $1 AND ${clause} ${walletFilter}
      GROUP BY category
      ORDER BY total DESC`,
     values
@@ -51,14 +57,12 @@ statsRouter.get("/summary", async (req, res) => {
 statsRouter.get("/daily", async (req, res) => {
   const { days = 30 } = req.query;
   const { rows } = await pool.query(
-    `
-    SELECT date_trunc('day', created_at) AS day, COALESCE(SUM(amount), 0) AS total
-    FROM expenses
-    WHERE created_at >= now() - ($1 || ' days')::interval
-    GROUP BY day
-    ORDER BY day ASC
-  `,
-    [Number(days)]
+    `SELECT date_trunc('day', created_at) AS day, COALESCE(SUM(amount), 0) AS total
+     FROM expenses
+     WHERE user_id = $1 AND created_at >= now() - ($2 || ' days')::interval
+     GROUP BY day
+     ORDER BY day ASC`,
+    [req.user.id, Number(days)]
   );
   res.json(rows);
 });

@@ -1,14 +1,15 @@
 import { Router } from "express";
 import { pool } from "../db.js";
 import { isValidWallet } from "../wallets.js";
+import { appendExpenseRow, updateExpenseRow, deleteExpenseRow } from "../services/sheets.js";
 
 export const expensesRouter = Router();
 
 // List expenses, optionally filtered by wallet / date range
 expensesRouter.get("/", async (req, res) => {
   const { wallet, from, to, limit = 100 } = req.query;
-  const conditions = [];
-  const values = [];
+  const conditions = ["user_id = $1"];
+  const values = [req.user.id];
 
   if (wallet) {
     values.push(wallet);
@@ -23,11 +24,10 @@ expensesRouter.get("/", async (req, res) => {
     conditions.push(`created_at <= $${values.length}`);
   }
 
-  const where = conditions.length ? `WHERE ${conditions.join(" AND ")}` : "";
   values.push(Number(limit));
 
   const { rows } = await pool.query(
-    `SELECT * FROM expenses ${where} ORDER BY created_at DESC LIMIT $${values.length}`,
+    `SELECT * FROM expenses WHERE ${conditions.join(" AND ")} ORDER BY created_at DESC LIMIT $${values.length}`,
     values
   );
   res.json(rows);
@@ -45,10 +45,11 @@ expensesRouter.post("/", async (req, res) => {
   }
 
   const { rows } = await pool.query(
-    `INSERT INTO expenses (wallet, amount, category, description, raw_text)
-     VALUES ($1, $2, $3, $4, $5) RETURNING *`,
-    [wallet, amount, category || "Прочее", description || null, raw_text || null]
+    `INSERT INTO expenses (wallet, amount, category, description, raw_text, user_id)
+     VALUES ($1, $2, $3, $4, $5, $6) RETURNING *`,
+    [wallet, amount, category || "Прочее", description || null, raw_text || null, req.user.id]
   );
+  appendExpenseRow(req.user, rows[0]);
   res.status(201).json(rows[0]);
 });
 
@@ -63,19 +64,32 @@ expensesRouter.put("/:id", async (req, res) => {
     return res.status(400).json({ error: "Некорректная сумма" });
   }
 
-  const { rows } = await pool.query(
-    `UPDATE expenses SET wallet = $1, amount = $2, category = $3, description = $4
-     WHERE id = $5 RETURNING *`,
-    [wallet, amount, category || "Прочее", description || null, req.params.id]
+  const { rows: existingRows } = await pool.query(
+    `SELECT wallet FROM expenses WHERE id = $1 AND user_id = $2`,
+    [req.params.id, req.user.id]
   );
-
-  if (!rows.length) {
+  if (!existingRows.length) {
     return res.status(404).json({ error: "Трата не найдена" });
   }
+  const previousWallet = existingRows[0].wallet;
+
+  const { rows } = await pool.query(
+    `UPDATE expenses SET wallet = $1, amount = $2, category = $3, description = $4
+     WHERE id = $5 AND user_id = $6 RETURNING *`,
+    [wallet, amount, category || "Прочее", description || null, req.params.id, req.user.id]
+  );
+
+  updateExpenseRow(req.user, rows[0], previousWallet);
   res.json(rows[0]);
 });
 
 expensesRouter.delete("/:id", async (req, res) => {
-  await pool.query(`DELETE FROM expenses WHERE id = $1`, [req.params.id]);
+  const { rows } = await pool.query(
+    `DELETE FROM expenses WHERE id = $1 AND user_id = $2 RETURNING *`,
+    [req.params.id, req.user.id]
+  );
+  if (rows.length) {
+    deleteExpenseRow(req.user, rows[0]);
+  }
   res.status(204).end();
 });

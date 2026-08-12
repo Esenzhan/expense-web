@@ -1496,3 +1496,55 @@ button.wallet-chip {
   display: flex;
   padding: 6px;
 }
+
+.login-screen {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  background: var(--bg);
+}
+
+.login-card {
+  width: 100%;
+  max-width: 340px;
+  background: var(--surface);
+  border-radius: 24px;
+  padding: 32px 24px;
+  text-align: center;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
+}
+
+.login-title {
+  font-size: 22px;
+  font-weight: 800;
+  color: var(--ink);
+}
+
+.login-subtitle {
+  margin-top: 6px;
+  font-size: 14px;
+  color: var(--ink-soft);
+}
+
+.login-error {
+  margin-top: 16px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: #fde2e1;
+  color: var(--danger);
+  font-size: 13px;
+}
+
+.login-google-btn {
+  display: block;
+  margin-top: 24px;
+  padding: 14px 20px;
+  border-radius: 999px;
+  background: var(--ink);
+  color: var(--surface);
+  font-weight: 700;
+  font-size: 15px;
+  text-decoration: none;
+}

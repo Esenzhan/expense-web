@@ -1,9 +1,12 @@
 import { Router } from "express";
 import { pool } from "../db.js";
 import { invalidateCategoryCache } from "../services/parseExpense.js";
+import { authMiddleware } from "../middleware/auth.js";
 
 export const categoriesRouter = Router();
 
+// Readable by anyone (the bot needs the list to build its parse prompt);
+// creating/deleting is site-only, so those two require a logged-in user.
 categoriesRouter.get("/", async (req, res) => {
   const { rows } = await pool.query(
     `SELECT name, emoji, bg, fg FROM categories ORDER BY sort_order, id`
@@ -11,7 +14,7 @@ categoriesRouter.get("/", async (req, res) => {
   res.json(rows);
 });
 
-categoriesRouter.post("/", async (req, res) => {
+categoriesRouter.post("/", authMiddleware, async (req, res) => {
   const { name, emoji, bg, fg } = req.body;
 
   if (typeof name !== "string" || !name.trim() || name.trim().length > 40) {
@@ -44,7 +47,7 @@ categoriesRouter.post("/", async (req, res) => {
   }
 });
 
-categoriesRouter.delete("/:name", async (req, res) => {
+categoriesRouter.delete("/:name", authMiddleware, async (req, res) => {
   // "Прочее" is the fallback for voice parsing and old expenses — keep it
   if (req.params.name === "Прочее") {
     return res.status(400).json({ error: "Эту категорию нельзя удалить" });

@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { fetchExpenses } from "../api";
+import { logout } from "../auth";
 import { haptic } from "../haptics";
 
 const SETTINGS_KEY = "traty-settings";
@@ -61,6 +62,7 @@ const Icons = {
   doc: <I><rect x="6" y="4" width="12" height="16" rx="3" /><path d="M9.5 9h5M9.5 12.5h5M9.5 16h3" /></I>,
   personX: <I><circle cx="10" cy="8" r="3.5" /><path d="M4.5 20a6 6 0 0 1 11 0" /><path d="m16.5 9.5 4 4m0-4-4 4" /></I>,
   chevron: <I><path d="m10 7 5 5-5 5" /></I>,
+  logout: <I><path d="M9 4H6a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h3" /><path d="M15 16l4-4-4-4" /><path d="M19 12H9" /></I>,
 };
 
 function Row({ icon, label, value, badge, danger, onPress }) {
@@ -86,7 +88,7 @@ function ToggleRow({ icon, label, on, onFlip }) {
   );
 }
 
-export default function SettingsSheet({ onClose, onOpenCategories }) {
+export default function SettingsSheet({ user, onClose, onOpenCategories }) {
   const [toggles, setToggles] = useState(loadToggles);
 
   function flip(key) {
@@ -125,6 +127,16 @@ export default function SettingsSheet({ onClose, onOpenCategories }) {
         <span className="settings-title">Настройки</span>
         <span className="icon-button-spacer" />
       </div>
+
+      {user && (
+        <>
+          <p className="settings-section">Аккаунт</p>
+          <div className="settings-group">
+            <Row icon={Icons.mail} label={user.name} value={user.email} />
+            <Row icon={Icons.logout} label="Выйти" onPress={logout} />
+          </div>
+        </>
+      )}
 
       <p className="settings-section">Основные</p>
       <div className="settings-group">

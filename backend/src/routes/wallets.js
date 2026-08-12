@@ -1,6 +1,7 @@
 import { Router } from "express";
 import { pool } from "../db.js";
 import { invalidateWalletCache } from "../wallets.js";
+import { authMiddleware } from "../middleware/auth.js";
 
 export const walletsRouter = Router();
 
@@ -19,6 +20,8 @@ function validate({ name, emoji, bg, fg }) {
   return null;
 }
 
+// Readable by anyone (the bot needs the list too); creating/editing/deleting
+// is site-only, so those require a logged-in user.
 walletsRouter.get("/", async (req, res) => {
   const { rows } = await pool.query(
     `SELECT name, emoji, bg, fg FROM wallets ORDER BY sort_order, id`
@@ -26,7 +29,7 @@ walletsRouter.get("/", async (req, res) => {
   res.json(rows);
 });
 
-walletsRouter.post("/", async (req, res) => {
+walletsRouter.post("/", authMiddleware, async (req, res) => {
   const problem = validate(req.body);
   if (problem) return res.status(400).json({ error: problem });
   const { name, emoji, bg, fg } = req.body;
@@ -50,7 +53,7 @@ walletsRouter.post("/", async (req, res) => {
 
 // A wallet can be deleted only while no expenses reference it; "Личные"
 // stays as the voice-parse fallback
-walletsRouter.delete("/:name", async (req, res) => {
+walletsRouter.delete("/:name", authMiddleware, async (req, res) => {
   const name = req.params.name;
   if (name === "Личные") {
     return res.status(400).json({ error: "Этот счёт нельзя удалить" });
@@ -68,7 +71,7 @@ walletsRouter.delete("/:name", async (req, res) => {
 });
 
 // Edit a wallet; renaming also re-points the expenses that reference it
-walletsRouter.put("/:name", async (req, res) => {
+walletsRouter.put("/:name", authMiddleware, async (req, res) => {
   const problem = validate(req.body);
   if (problem) return res.status(400).json({ error: problem });
   const oldName = req.params.name;

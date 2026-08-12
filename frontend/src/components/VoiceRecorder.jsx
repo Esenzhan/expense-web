@@ -1,5 +1,6 @@
 import { useRef, useState } from "react";
 import { WS_URL, createExpense } from "../api";
+import { getToken } from "../auth";
 import { getCategoryIcon } from "../categoryIcons";
 import CategoryGlyph from "./CategoryGlyph";
 import { haptic, hapticHeavy } from "../haptics";
@@ -145,6 +146,9 @@ export default function VoiceRecorder({ onSaved, onManualAdd }) {
 
       ws.onopen = () => {
         setSlowWake(false);
+        // Auth handshake first — server holds off starting Deepgram until
+        // this validates, so it must land before any audio.
+        ws.send(JSON.stringify({ type: "auth", token: getToken() }));
         // Give the server's Deepgram leg a beat to finish its own handshake
         // before draining the buffer — the first chunk carries the container
         // header and must not be dropped or reordered

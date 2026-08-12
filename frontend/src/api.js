@@ -1,9 +1,35 @@
+import { getToken, clearToken } from "./auth";
+
 const API_BASE = import.meta.env.VITE_API_URL || "http://localhost:3001";
 export const WS_URL = API_BASE.replace(/^http/, "ws") + "/ws/voice";
+export const GOOGLE_LOGIN_URL = `${API_BASE}/api/auth/google/start`;
+
+// Central fetch wrapper — every authenticated call goes through this so the
+// Bearer token only has to be wired up in one place. A 401 means the
+// session's dead (expired/rejected token); broadcast it so App.jsx can drop
+// back to the login screen instead of quietly failing every request.
+async function apiFetch(path, opts = {}) {
+  const token = getToken();
+  const headers = { ...(opts.headers || {}) };
+  if (token) headers.Authorization = `Bearer ${token}`;
+
+  const res = await fetch(`${API_BASE}${path}`, { ...opts, headers });
+  if (res.status === 401) {
+    clearToken();
+    window.dispatchEvent(new Event("traty:unauthorized"));
+  }
+  return res;
+}
+
+export async function fetchMe() {
+  const res = await apiFetch("/api/auth/me");
+  if (!res.ok) throw new Error("Не авторизован");
+  return res.json();
+}
 
 export async function fetchExpenses(params = {}) {
   const qs = new URLSearchParams(params).toString();
-  const res = await fetch(`${API_BASE}/api/expenses${qs ? `?${qs}` : ""}`);
+  const res = await apiFetch(`/api/expenses${qs ? `?${qs}` : ""}`);
   return res.json();
 }
 
@@ -24,7 +50,7 @@ export function isNetworkError(err) {
 }
 
 export async function createExpense(payload) {
-  const res = await fetch(`${API_BASE}/api/expenses`, {
+  const res = await apiFetch(`/api/expenses`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(payload),
@@ -37,7 +63,7 @@ export async function createExpense(payload) {
 }
 
 export async function updateExpense(id, payload) {
-  const res = await fetch(`${API_BASE}/api/expenses/${id}`, {
+  const res = await apiFetch(`/api/expenses/${id}`, {
     method: "PUT",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(payload),
@@ -50,28 +76,28 @@ export async function updateExpense(id, payload) {
 }
 
 export async function deleteExpense(id) {
-  await fetch(`${API_BASE}/api/expenses/${id}`, { method: "DELETE" });
+  await apiFetch(`/api/expenses/${id}`, { method: "DELETE" });
 }
 
 export async function fetchWalletTotals() {
-  const res = await fetch(`${API_BASE}/api/stats/by-wallet`);
+  const res = await apiFetch(`/api/stats/by-wallet`);
   return res.json();
 }
 
 export async function fetchSummary(period = "month", wallet) {
   const qs = new URLSearchParams({ period });
   if (wallet) qs.set("wallet", wallet);
-  const res = await fetch(`${API_BASE}/api/stats/summary?${qs}`);
+  const res = await apiFetch(`/api/stats/summary?${qs}`);
   return res.json();
 }
 
 export async function fetchWallets() {
-  const res = await fetch(`${API_BASE}/api/wallets`);
+  const res = await apiFetch(`/api/wallets`);
   return res.json();
 }
 
 export async function createWallet(payload) {
-  const res = await fetch(`${API_BASE}/api/wallets`, {
+  const res = await apiFetch(`/api/wallets`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(payload),
@@ -84,7 +110,7 @@ export async function createWallet(payload) {
 }
 
 export async function updateWallet(oldName, payload) {
-  const res = await fetch(`${API_BASE}/api/wallets/${encodeURIComponent(oldName)}`, {
+  const res = await apiFetch(`/api/wallets/${encodeURIComponent(oldName)}`, {
     method: "PUT",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(payload),
@@ -97,12 +123,12 @@ export async function updateWallet(oldName, payload) {
 }
 
 export async function fetchCategories() {
-  const res = await fetch(`${API_BASE}/api/categories`);
+  const res = await apiFetch(`/api/categories`);
   return res.json();
 }
 
 export async function createCategory(payload) {
-  const res = await fetch(`${API_BASE}/api/categories`, {
+  const res = await apiFetch(`/api/categories`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(payload),

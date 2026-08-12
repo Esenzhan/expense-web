@@ -1,10 +1,12 @@
 import { useEffect, useRef, useState } from "react";
-import { fetchExpenses, fetchExpensesRange, fetchWalletTotals, fetchSummary, fetchCategories, fetchWallets, warmBackend, createExpense } from "./api";
+import { fetchExpenses, fetchExpensesRange, fetchWalletTotals, fetchSummary, fetchCategories, fetchWallets, fetchMe, warmBackend, createExpense } from "./api";
+import { getToken, setToken } from "./auth";
 import { listPendingExpenses, syncPendingExpenses, hasPendingExpenses } from "./offlineQueue";
 import { computeInsights, periodRange } from "./insights";
 import { hydrateCategories } from "./categoryIcons";
 import { hydrateWallets, getWalletIcon } from "./wallets";
 import { haptic } from "./haptics";
+import LoginScreen from "./components/LoginScreen";
 import VoiceRecorder from "./components/VoiceRecorder";
 import ExpenseList from "./components/ExpenseList";
 import InsightsSheet from "./components/InsightsSheet";
@@ -32,38 +34,37 @@ const PERIODS = [
   { value: "30", label: "30 дней" },
 ];
 
-function loadCache() {
+// Cache is shared storage on the device but each account's data is private
+// now, so it's tagged with the owning account's email — a cache written by
+// a different logged-in account (shared device) is treated as empty rather
+// than flashed on screen.
+function loadCache(email) {
   try {
-    return JSON.parse(localStorage.getItem(CACHE_KEY)) || {};
+    const parsed = JSON.parse(localStorage.getItem(CACHE_KEY));
+    return parsed && parsed.owner === email ? parsed : {};
   } catch {
     return {};
   }
 }
 
-function saveCache(data) {
+function saveCache(data, email) {
   try {
-    localStorage.setItem(CACHE_KEY, JSON.stringify(data));
+    localStorage.setItem(CACHE_KEY, JSON.stringify({ ...data, owner: email }));
   } catch {
     // storage full/unavailable — fine, just skip caching
   }
 }
 
 export default function App() {
-  // Paint instantly from whatever we saw last time (may be empty on first ever run).
-  const cached = loadCache();
+  const [user, setUser] = useState(null);
+  const [authChecked, setAuthChecked] = useState(false);
+  const [authError, setAuthError] = useState(null);
+
   const [period, setPeriod] = useState("month");
-  const [expenses, setExpenses] = useState(cached.expenses || []);
-  const [walletTotals, setWalletTotals] = useState(cached.walletTotals || []);
-  const [summary, setSummary] = useState(cached.summary || { total: 0, categories: [] });
-  // Computed synchronously from whatever was cached last session, so even
-  // the very first render already has something to show — no flash of
-  // "loading" the instant the sheet is opened.
-  const [insights, setInsights] = useState(() => {
-    const initialWallet = localStorage.getItem("traty-wallet") || null;
-    const pending = listPendingExpenses();
-    const pendingForList = initialWallet ? pending.filter((p) => p.wallet === initialWallet) : pending;
-    return computeInsights({ period: "month", rows: [...pendingForList, ...(cached.insightsRows || [])] });
-  });
+  const [expenses, setExpenses] = useState([]);
+  const [walletTotals, setWalletTotals] = useState([]);
+  const [summary, setSummary] = useState({ total: 0, categories: [] });
+  const [insights, setInsights] = useState(() => computeInsights({ period: "month", rows: [] }));
   const [insightsOpen, setInsightsOpen] = useState(false);
   const [editingExpense, setEditingExpense] = useState(null);
   const [addingExpense, setAddingExpense] = useState(false);
@@ -82,15 +83,63 @@ export default function App() {
   // so re-merging after a queue change never double-counts an already
   // merged pending total.
   const rawRef = useRef({
-    exp: cached.expenses || [],
-    wallets: cached.walletTotals || [],
-    sum: cached.summary || { total: 0, categories: [] },
-    insightsRows: cached.insightsRows || [],
+    exp: [],
+    wallets: [],
+    sum: { total: 0, categories: [] },
+    insightsRows: [],
   });
   const periodRef = useRef(period);
   periodRef.current = period;
   const selectedWalletRef = useRef(selectedWallet);
   selectedWalletRef.current = selectedWallet;
+
+  // --- Auth bootstrap ---------------------------------------------------
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const urlToken = params.get("token");
+    const urlError = params.get("authError");
+    if (urlToken) setToken(urlToken);
+    if (urlError) setAuthError(urlError);
+    if (urlToken || urlError) {
+      const url = new URL(window.location.href);
+      url.searchParams.delete("token");
+      url.searchParams.delete("authError");
+      window.history.replaceState({}, "", url);
+    }
+
+    if (!getToken()) {
+      setAuthChecked(true);
+      return;
+    }
+    fetchMe()
+      .then((me) => {
+        const cached = loadCache(me.email);
+        rawRef.current = {
+          exp: cached.expenses || [],
+          wallets: cached.walletTotals || [],
+          sum: cached.summary || { total: 0, categories: [] },
+          insightsRows: cached.insightsRows || [],
+        };
+        setExpenses(cached.expenses || []);
+        setWalletTotals(cached.walletTotals || []);
+        setSummary(cached.summary || { total: 0, categories: [] });
+        const pending = listPendingExpenses();
+        const wallet = selectedWalletRef.current;
+        const pendingForList = wallet ? pending.filter((p) => p.wallet === wallet) : pending;
+        setInsights(
+          computeInsights({ period: "month", rows: [...pendingForList, ...(cached.insightsRows || [])] })
+        );
+        setUser(me);
+      })
+      .catch(() => setUser(null))
+      .finally(() => setAuthChecked(true));
+  }, []);
+
+  useEffect(() => {
+    const onUnauthorized = () => setUser(null);
+    window.addEventListener("traty:unauthorized", onUnauthorized);
+    return () => window.removeEventListener("traty:unauthorized", onUnauthorized);
+  }, []);
 
   function selectWallet(name) {
     setSelectedWallet(name);
@@ -131,9 +180,13 @@ export default function App() {
     } catch {
       // no cached wallets yet
     }
+    // Categories/wallets are shared, not per-account — the bot can read
+    // them unauthenticated — but still gate on `user` so this doesn't fire
+    // (and fail) while the login screen is up.
+    if (!user) return;
     reloadCategories();
     reloadWallets();
-  }, []);
+  }, [user]);
 
   useEffect(() => {
     // Render's free tier sleeps after ~15 min idle and wakes for tens of
@@ -197,7 +250,7 @@ export default function App() {
         fetchExpensesRange(start, end, wallet),
       ]);
       rawRef.current = { exp, wallets, sum, insightsRows };
-      saveCache({ expenses: exp, walletTotals: wallets, summary: sum, insightsRows, wallet });
+      if (user) saveCache({ expenses: exp, walletTotals: wallets, summary: sum, insightsRows, wallet }, user.email);
     } catch {
       // Offline — nothing fresh from the server, keep the last known data
       // and just re-merge whatever's pending below
@@ -206,12 +259,14 @@ export default function App() {
   }
 
   useEffect(() => {
+    if (!user) return;
     // Fires in the background — the UI above already rendered from cache,
     // so this only silently swaps in fresher numbers once they arrive.
     refreshAll(period, selectedWallet);
-  }, [period, selectedWallet]);
+  }, [user, period, selectedWallet]);
 
   useEffect(() => {
+    if (!user) return;
     // Flush any expenses queued while offline. Triggered on reconnect and on
     // returning to the foreground, but neither is trustworthy alone — iOS
     // Safari (especially in standalone/PWA mode) is known to skip the
@@ -238,7 +293,15 @@ export default function App() {
       document.removeEventListener("visibilitychange", onVisible);
       clearInterval(pollId);
     };
-  }, []);
+  }, [user]);
+
+  if (!authChecked) {
+    return <div className="login-screen" />;
+  }
+
+  if (!user) {
+    return <LoginScreen error={authError} />;
+  }
 
   const walletBalance = selectedWallet
     ? Number(walletTotals.find((w) => w.wallet === selectedWallet)?.total || 0)
@@ -345,6 +408,7 @@ export default function App() {
 
       {settingsOpen && (
         <SettingsSheet
+          user={user}
           onClose={() => setSettingsOpen(false)}
           onOpenCategories={() => setCategoriesOpen(true)}
         />

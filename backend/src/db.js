@@ -32,6 +32,24 @@ const SEED_WALLETS = [
 ];
 
 export async function initSchema() {
+  // One row per logged-in Google account (only the two allowlisted emails
+  // in practice — see ALLOWED_EMAILS). google_refresh_token is encrypted
+  // at rest (see services/crypto.js) — needed to write to the user's own
+  // Sheet without them being present (e.g. when the bot posts an expense).
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS users (
+      id SERIAL PRIMARY KEY,
+      email TEXT NOT NULL UNIQUE,
+      name TEXT NOT NULL,
+      google_sub TEXT NOT NULL UNIQUE,
+      avatar_url TEXT,
+      google_refresh_token TEXT,
+      sheet_id TEXT,
+      bot_api_key TEXT UNIQUE,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+    );
+  `);
+
   await pool.query(`
     CREATE TABLE IF NOT EXISTS expenses (
       id SERIAL PRIMARY KEY,
@@ -49,6 +67,21 @@ export async function initSchema() {
   await pool.query(`
     CREATE INDEX IF NOT EXISTS expenses_wallet_idx ON expenses (wallet);
   `);
+
+  // expenses.user_id — added when the app went multi-user. Pre-existing
+  // rows were single-tenant test data with no owner, so they're dropped
+  // rather than migrated (confirmed disposable).
+  const { rows: userIdCol } = await pool.query(`
+    SELECT 1 FROM information_schema.columns
+    WHERE table_name = 'expenses' AND column_name = 'user_id'
+  `);
+  if (!userIdCol.length) {
+    await pool.query(`TRUNCATE expenses`);
+    await pool.query(
+      `ALTER TABLE expenses ADD COLUMN user_id INTEGER NOT NULL REFERENCES users(id)`
+    );
+    await pool.query(`CREATE INDEX IF NOT EXISTS expenses_user_id_idx ON expenses (user_id)`);
+  }
   await pool.query(`
     CREATE TABLE IF NOT EXISTS categories (
       id SERIAL PRIMARY KEY,

@@ -9,6 +9,8 @@ import { expensesRouter } from "./routes/expenses.js";
 import { statsRouter } from "./routes/stats.js";
 import { categoriesRouter } from "./routes/categories.js";
 import { walletsRouter } from "./routes/wallets.js";
+import { authRouter } from "./routes/auth.js";
+import { authMiddleware, verifyToken } from "./middleware/auth.js";
 import { openDeepgramStream } from "./services/deepgramStream.js";
 import { parseExpenseFromText } from "./services/parseExpense.js";
 
@@ -16,8 +18,12 @@ const app = express();
 app.use(cors({ origin: process.env.FRONTEND_URL || "*" }));
 app.use(express.json());
 
-app.use("/api/expenses", expensesRouter);
-app.use("/api/stats", statsRouter);
+app.use("/api/auth", authRouter);
+app.use("/api/expenses", authMiddleware, expensesRouter);
+app.use("/api/stats", authMiddleware, statsRouter);
+// Categories/wallets: readable by anyone (the bot needs the list too), but
+// creating/deleting is site-only — routes/categories.js and routes/wallets.js
+// apply authMiddleware themselves on the mutating handlers.
 app.use("/api/categories", categoriesRouter);
 app.use("/api/wallets", walletsRouter);
 
@@ -27,6 +33,9 @@ const server = http.createServer(app);
 
 // --- Live voice streaming over WebSocket ---
 // Client connects to wss://.../ws/voice, then:
+//  0. sends {type: "auth", token} FIRST — nothing else is processed until
+//     this validates (client already buffers its early audio chunks for the
+//     DG handshake, so holding them a beat longer for auth is free)
 //  1. streams raw MediaRecorder audio chunks (binary frames) as the user speaks
 //  2. receives {type: "partial", text} messages continuously — live transcript
 //  3. receives {type: "final", text} when an utterance ends (silence detected)
@@ -36,34 +45,57 @@ const server = http.createServer(app);
 const wss = new WebSocketServer({ server, path: "/ws/voice" });
 
 wss.on("connection", (clientSocket) => {
-  const dgStream = openDeepgramStream({
-    onPartial: (text) => {
-      clientSocket.send(JSON.stringify({ type: "partial", text }));
-    },
-    onFinal: async (text) => {
-      clientSocket.send(JSON.stringify({ type: "final", text }));
-      if (!text.trim()) return;
+  let dgStream = null;
 
-      try {
-        const parsed = await parseExpenseFromText(text);
-        if (parsed.amount == null) {
-          clientSocket.send(
-            JSON.stringify({ type: "error", message: "Не расслышал сумму, повтори" })
-          );
-          return;
+  const startStream = () => {
+    dgStream = openDeepgramStream({
+      onPartial: (text) => {
+        clientSocket.send(JSON.stringify({ type: "partial", text }));
+      },
+      onFinal: async (text) => {
+        clientSocket.send(JSON.stringify({ type: "final", text }));
+        if (!text.trim()) return;
+
+        try {
+          const parsed = await parseExpenseFromText(text);
+          if (parsed.amount == null) {
+            clientSocket.send(
+              JSON.stringify({ type: "error", message: "Не расслышал сумму, повтори" })
+            );
+            return;
+          }
+
+          clientSocket.send(JSON.stringify({ type: "parsed", proposal: parsed, rawText: text }));
+        } catch (err) {
+          clientSocket.send(JSON.stringify({ type: "error", message: err.message }));
         }
-
-        clientSocket.send(JSON.stringify({ type: "parsed", proposal: parsed, rawText: text }));
-      } catch (err) {
+      },
+      onError: (err) => {
         clientSocket.send(JSON.stringify({ type: "error", message: err.message }));
-      }
-    },
-    onError: (err) => {
-      clientSocket.send(JSON.stringify({ type: "error", message: err.message }));
-    },
-  });
+      },
+    });
+  };
 
-  clientSocket.on("message", (data, isBinary) => {
+  clientSocket.on("message", async (data, isBinary) => {
+    if (!dgStream) {
+      if (isBinary) return; // audio arriving before auth — drop it
+      try {
+        const msg = JSON.parse(data.toString());
+        if (msg.type === "auth") {
+          const user = await verifyToken(msg.token);
+          if (!user) {
+            clientSocket.send(JSON.stringify({ type: "error", message: "Не авторизован" }));
+            clientSocket.close();
+            return;
+          }
+          startStream();
+        }
+      } catch {
+        // ignore malformed control frames
+      }
+      return;
+    }
+
     if (isBinary) {
       dgStream.sendAudioChunk(data);
       return;
@@ -80,7 +112,7 @@ wss.on("connection", (clientSocket) => {
     }
   });
 
-  clientSocket.on("close", () => dgStream.close());
+  clientSocket.on("close", () => dgStream && dgStream.close());
 });
 
 const PORT = process.env.PORT || 3001;
