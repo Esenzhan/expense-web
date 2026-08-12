@@ -4,3 +4,6 @@ dist/
 .DS_Store
 .vercel
 .env*
+bot/venv/
+bot/__pycache__/
+bot/credentials.json

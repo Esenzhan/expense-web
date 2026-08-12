@@ -1,0 +1,7 @@
+python-telegram-bot==21.6
+anthropic
+openai
+gspread
+google-auth
+python-dotenv
+requests
