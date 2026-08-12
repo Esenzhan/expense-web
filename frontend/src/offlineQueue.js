@@ -71,19 +71,34 @@ export function hasPendingExpenses() {
 // Flushes the queue through the real API, oldest first. Stops at the first
 // failure (still offline, or server still asleep) so order is preserved —
 // returns whether anything actually synced, so the caller knows to refresh.
+//
+// Guarded against concurrent calls: App.jsx fires this from four independent
+// triggers (mount, the `online` event, visibilitychange, and a 15s poll)
+// with no coordination between them. A single `createExpense` can take tens
+// of seconds on a cold Render instance, so two triggers easily overlap —
+// without this flag they'd both read the same queue snapshot and both POST
+// the same oldest entry, creating it twice on the server.
+let syncing = false;
+
 export async function syncPendingExpenses(createExpense) {
-  const queue = loadQueue();
-  let syncedAny = false;
-  while (queue.length > 0) {
-    const entry = queue[queue.length - 1]; // oldest is at the end (unshift adds to front)
-    try {
-      await createExpense(entry.payload);
-    } catch {
-      break;
+  if (syncing) return false;
+  syncing = true;
+  try {
+    const queue = loadQueue();
+    let syncedAny = false;
+    while (queue.length > 0) {
+      const entry = queue[queue.length - 1]; // oldest is at the end (unshift adds to front)
+      try {
+        await createExpense(entry.payload);
+      } catch {
+        break;
+      }
+      queue.pop();
+      saveQueue(queue);
+      syncedAny = true;
     }
-    queue.pop();
-    saveQueue(queue);
-    syncedAny = true;
+    return syncedAny;
+  } finally {
+    syncing = false;
   }
-  return syncedAny;
 }

@@ -6,11 +6,11 @@
 // match the user's phone regardless of the device's own timezone.
 const ALMATY_OFFSET_MS = 5 * 60 * 60 * 1000;
 
-function almaty(date) {
+export function almaty(date) {
   return new Date(date.getTime() + ALMATY_OFFSET_MS);
 }
 
-function startOfAlmatyDay(date) {
+export function startOfAlmatyDay(date) {
   const a = almaty(date);
   return new Date(Date.UTC(a.getUTCFullYear(), a.getUTCMonth(), a.getUTCDate()) - ALMATY_OFFSET_MS);
 }

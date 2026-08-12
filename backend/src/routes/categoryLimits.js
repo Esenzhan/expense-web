@@ -37,7 +37,7 @@ categoryLimitsRouter.put("/:wallet/:category", async (req, res) => {
   if (!(await isValidCategory(wallet, category))) {
     return res.status(400).json({ error: "Некорректная категория" });
   }
-  if (typeof monthly_limit !== "number" || monthly_limit <= 0) {
+  if (typeof monthly_limit !== "number" || !Number.isFinite(monthly_limit) || monthly_limit <= 0) {
     return res.status(400).json({ error: "Некорректный лимит" });
   }
 

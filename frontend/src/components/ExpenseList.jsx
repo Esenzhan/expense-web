@@ -1,26 +1,23 @@
 import { getCategoryIcon } from "../categoryIcons";
+import { almaty, startOfAlmatyDay } from "../insights";
 import ExpenseRow from "./ExpenseRow";
 
-function sameDay(a, b) {
-  return (
-    a.getFullYear() === b.getFullYear() &&
-    a.getMonth() === b.getMonth() &&
-    a.getDate() === b.getDate()
-  );
-}
-
+// Both the header label and the day-bucket grouping below are anchored to
+// Asia/Almaty (like everywhere else in insights.js) rather than the
+// device's own timezone — otherwise a device set to a different timezone
+// would group/label rows into a different day than the period pills and
+// Insights sheet agree "today" is.
 function formatDateHeader(dateStr) {
   const date = new Date(dateStr);
-  const today = new Date();
-  const yesterday = new Date();
-  yesterday.setDate(today.getDate() - 1);
+  const diffDays = Math.round((startOfAlmatyDay(new Date()) - startOfAlmatyDay(date)) / 86400000);
 
-  const weekday = date.toLocaleDateString("ru-RU", { weekday: "short" });
-  const dayMonth = date.toLocaleDateString("ru-RU", { day: "2-digit", month: "long" });
+  const shifted = almaty(date);
+  const weekday = shifted.toLocaleDateString("ru-RU", { weekday: "short", timeZone: "UTC" });
+  const dayMonth = shifted.toLocaleDateString("ru-RU", { day: "2-digit", month: "long", timeZone: "UTC" });
   const base = `${weekday.charAt(0).toUpperCase()}${weekday.slice(1)}, ${dayMonth}`;
 
-  if (sameDay(date, today)) return `${base} — Сегодня`;
-  if (sameDay(date, yesterday)) return `${base} — Вчера`;
+  if (diffDays === 0) return `${base} — Сегодня`;
+  if (diffDays === 1) return `${base} — Вчера`;
   return base;
 }
 
@@ -28,7 +25,7 @@ function groupByDay(expenses) {
   const groups = [];
   let lastKey = null;
   for (const expense of expenses) {
-    const key = new Date(expense.created_at).toDateString();
+    const key = startOfAlmatyDay(new Date(expense.created_at)).toISOString();
     if (key !== lastKey) {
       groups.push({ key, header: formatDateHeader(expense.created_at), items: [] });
       lastKey = key;

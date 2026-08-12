@@ -1,6 +1,7 @@
 import { Router } from "express";
 import { pool } from "../db.js";
 import { invalidateWalletCache } from "../wallets.js";
+import { invalidateCategoryCache } from "../categories.js";
 import { authMiddleware } from "../middleware/auth.js";
 
 export const walletsRouter = Router();
@@ -97,6 +98,10 @@ walletsRouter.put("/:name", authMiddleware, async (req, res) => {
     }
     await client.query("COMMIT");
     invalidateWalletCache();
+    // Renaming cascades to categories.wallet (ON UPDATE CASCADE) — the
+    // categories cache is keyed by wallet name, so without this it'd keep
+    // serving the old name's (now stale) entry for up to 60s.
+    invalidateCategoryCache();
     res.json(rows[0]);
   } catch (err) {
     await client.query("ROLLBACK");

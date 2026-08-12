@@ -169,6 +169,15 @@ export default function App() {
   const [pendingDelete, setPendingDelete] = useState(null);
   const pendingDeleteRef = useRef(null);
   pendingDeleteRef.current = pendingDelete;
+  // Expenses whose DELETE is in flight (undo window already elapsed, or
+  // force-committed early by a newer swipe) but not yet confirmed by
+  // refreshAll — kept separate from pendingDeleteRef, which only ever
+  // tracks the single MOST RECENT swipe. Without this, swiping a second row
+  // within another's undo window force-commits the first but then only
+  // hides the second from the merged list, so the first flashes back into
+  // view for as long as its DELETE round-trip takes (can be tens of
+  // seconds on a cold Render instance).
+  const committingRef = useRef(new Map()); // id -> { wallet, amount }
 
   // Paints straight from this account's last cached snapshot — used both
   // by the offline-first bootstrap below and, once fetchMe() actually
@@ -313,12 +322,17 @@ export default function App() {
     const pending = listPendingExpenses();
     const pendingForList = wallet ? pending.filter((p) => p.wallet === wallet) : pending;
 
-    // A deletion in its undo window is hidden from the list/totals as if it
-    // were already gone, even though the DELETE hasn't actually been sent
-    // yet — "Отменить" just cancels the timer and this filter stops applying.
-    const deleting = pendingDeleteRef.current?.expense;
-    const baseExp = deleting ? exp.filter((e) => e.id !== deleting.id) : exp;
-    const baseInsightsRows = deleting ? insightsRows.filter((r) => r.id !== deleting.id) : insightsRows;
+    // A deletion in its undo window (or already force-committed by a newer
+    // swipe, DELETE still in flight) is hidden from the list/totals as if
+    // it were already gone — "Отменить" just cancels the timer for the
+    // undo-window one, and this filter stops applying to it.
+    const excluded = new Map(committingRef.current);
+    if (pendingDeleteRef.current) {
+      const { expense } = pendingDeleteRef.current;
+      excluded.set(expense.id, { wallet: expense.wallet, amount: expense.amount });
+    }
+    const baseExp = excluded.size ? exp.filter((e) => !excluded.has(e.id)) : exp;
+    const baseInsightsRows = excluded.size ? insightsRows.filter((r) => !excluded.has(r.id)) : insightsRows;
 
     const mergedExpenses = [...pendingForList, ...baseExp];
 
@@ -326,8 +340,8 @@ export default function App() {
     for (const p of pending) {
       pendingByWallet.set(p.wallet, (pendingByWallet.get(p.wallet) || 0) + Number(p.amount));
     }
-    if (deleting) {
-      pendingByWallet.set(deleting.wallet, (pendingByWallet.get(deleting.wallet) || 0) - Number(deleting.amount));
+    for (const { wallet: excludedWallet, amount: excludedAmount } of excluded.values()) {
+      pendingByWallet.set(excludedWallet, (pendingByWallet.get(excludedWallet) || 0) - Number(excludedAmount));
     }
     const mergedWallets = wallets.map((w) => ({
       ...w,
@@ -344,18 +358,34 @@ export default function App() {
     // The header total ("Расходы за") reads from `insights.total` below —
     // it's computed from the exact same period-bounded rows, so it's always
     // in sync instead of duplicating this arithmetic against a separate
-    // backend total.
-    setInsights(computeInsights({ period: currentPeriod, rows: [...pendingForList, ...baseInsightsRows] }));
+    // backend total. Pending rows keep their real `created_at` (set once,
+    // at the moment they were queued) — an item added offline "today" that
+    // hasn't synced by tomorrow shouldn't still count toward tomorrow's
+    // "Сегодня"/a custom range that excludes it, so it's period-bounded here
+    // the same way server rows already are.
+    const { start: periodStart, end: periodEnd } = periodRange(currentPeriod);
+    const pendingInPeriod = pendingForList.filter((p) => {
+      const createdAt = new Date(p.created_at);
+      return createdAt >= periodStart && createdAt < periodEnd;
+    });
+    setInsights(computeInsights({ period: currentPeriod, rows: [...pendingInPeriod, ...baseInsightsRows] }));
   }
 
   function commitDelete(entry) {
     clearTimeout(entry.timeoutId);
+    committingRef.current.set(entry.expense.id, {
+      wallet: entry.expense.wallet,
+      amount: entry.expense.amount,
+    });
     deleteExpense(entry.expense.id)
       .catch(() => {
         // Offline or the request failed — the row already reads as deleted
         // locally; the next successful refresh reconciles either way.
       })
-      .finally(() => refreshAll(periodRef.current, selectedWalletRef.current));
+      .finally(() => {
+        committingRef.current.delete(entry.expense.id);
+        refreshAll(periodRef.current, selectedWalletRef.current);
+      });
   }
 
   // Swipe-delete (ExpenseList) and the edit sheet's delete button both call

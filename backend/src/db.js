@@ -67,12 +67,19 @@ export async function initSchema() {
   `);
   // Idempotent for wallets tables created before "shared" existed.
   await pool.query(`ALTER TABLE wallets ADD COLUMN IF NOT EXISTS shared BOOLEAN NOT NULL DEFAULT true`);
-  for (const wallet of SEED_WALLETS) {
-    await pool.query(
-      `INSERT INTO wallets (name, emoji, bg, fg, sort_order, shared)
-       VALUES ($1, $2, $3, $4, $5, $6) ON CONFLICT (name) DO NOTHING`,
-      [wallet.name, wallet.emoji, wallet.bg, wallet.fg, wallet.sort, wallet.shared]
-    );
+  // Only for a genuinely fresh install (same reasoning as the categories
+  // seed below): this used to run unconditionally on every boot, which
+  // meant deleting a built-in wallet (e.g. "Ремонт" once a renovation is
+  // done) got silently undone — empty and back — on the next deploy.
+  const { rows: anyWallet } = await pool.query(`SELECT 1 FROM wallets LIMIT 1`);
+  if (!anyWallet.length) {
+    for (const wallet of SEED_WALLETS) {
+      await pool.query(
+        `INSERT INTO wallets (name, emoji, bg, fg, sort_order, shared)
+         VALUES ($1, $2, $3, $4, $5, $6) ON CONFLICT (name) DO NOTHING`,
+        [wallet.name, wallet.emoji, wallet.bg, wallet.fg, wallet.sort, wallet.shared]
+      );
+    }
   }
   // "Личные" may already exist from before wallets could be private —
   // force it back to private every boot regardless of ON CONFLICT above.
