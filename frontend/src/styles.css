@@ -1270,6 +1270,17 @@ body {
   background: rgba(255, 255, 255, 0.25);
 }
 
+/* The default fill color (var(--ink)) is the same as this row's own dark
+   background — invisible on it. Use white instead; over-limit stays red,
+   which still reads fine against black. */
+.category-limit-body.total .category-limit-bar-fill {
+  background: #fff;
+}
+
+.category-limit-body.total .category-limit-bar-fill.over {
+  background: var(--danger);
+}
+
 .category-limit-text {
   flex: 1;
   min-width: 0;
