@@ -130,39 +130,62 @@ export async function initSchema() {
   // Pre-existing prod tables predate the "wallet" column — categories were
   // global. Migrate by fanning every existing row out to all wallets (each
   // wallet starts with its own independent copy of the same list, then
-  // diverges from there); nothing is deleted.
+  // diverges from there); nothing is deleted. Detected by the column being
+  // nullable — NOT NULL is only ever set once migration fully completes,
+  // so this also catches (and safely retries) a boot that died mid-way.
+  // Runs in one transaction: if any step fails, everything here rolls
+  // back so the next boot retries cleanly instead of getting stuck half
+  // migrated.
   const { rows: catWalletCol } = await pool.query(`
-    SELECT 1 FROM information_schema.columns
+    SELECT is_nullable FROM information_schema.columns
     WHERE table_name = 'categories' AND column_name = 'wallet'
   `);
-  if (!catWalletCol.length) {
-    await pool.query(
-      `ALTER TABLE categories ADD COLUMN wallet TEXT
-       REFERENCES wallets(name) ON DELETE CASCADE ON UPDATE CASCADE`
-    );
-    const firstWallet = SEED_WALLETS[0].name;
-    await pool.query(`UPDATE categories SET wallet = $1 WHERE wallet IS NULL`, [firstWallet]);
-    const { rows: existing } = await pool.query(
-      `SELECT name, emoji, bg, fg, sort_order FROM categories WHERE wallet = $1`,
-      [firstWallet]
-    );
-    const { rows: otherWallets } = await pool.query(`SELECT name FROM wallets WHERE name != $1`, [
-      firstWallet,
-    ]);
-    for (const w of otherWallets) {
-      for (const cat of existing) {
-        await pool.query(
-          `INSERT INTO categories (name, emoji, bg, fg, sort_order, wallet)
-           VALUES ($1, $2, $3, $4, $5, $6)`,
-          [cat.name, cat.emoji, cat.bg, cat.fg, cat.sort_order, w.name]
-        );
+  if (!catWalletCol.length || catWalletCol[0].is_nullable === "YES") {
+    const client = await pool.connect();
+    try {
+      await client.query("BEGIN");
+      await client.query(
+        `ALTER TABLE categories ADD COLUMN IF NOT EXISTS wallet TEXT
+         REFERENCES wallets(name) ON DELETE CASCADE ON UPDATE CASCADE`
+      );
+      // Old single-column uniqueness has to go BEFORE fanning categories
+      // out to other wallets below, or the second wallet's copy of any
+      // name collides with the first wallet's row.
+      await client.query(`ALTER TABLE categories DROP CONSTRAINT IF EXISTS categories_name_key`);
+      await client.query(
+        `ALTER TABLE categories DROP CONSTRAINT IF EXISTS categories_wallet_name_key`
+      );
+      await client.query(
+        `ALTER TABLE categories ADD CONSTRAINT categories_wallet_name_key UNIQUE (wallet, name)`
+      );
+
+      const firstWallet = SEED_WALLETS[0].name;
+      await client.query(`UPDATE categories SET wallet = $1 WHERE wallet IS NULL`, [firstWallet]);
+      const { rows: existing } = await client.query(
+        `SELECT name, emoji, bg, fg, sort_order FROM categories WHERE wallet = $1`,
+        [firstWallet]
+      );
+      const { rows: otherWallets } = await client.query(
+        `SELECT name FROM wallets WHERE name != $1`,
+        [firstWallet]
+      );
+      for (const w of otherWallets) {
+        for (const cat of existing) {
+          await client.query(
+            `INSERT INTO categories (name, emoji, bg, fg, sort_order, wallet)
+             VALUES ($1, $2, $3, $4, $5, $6) ON CONFLICT (wallet, name) DO NOTHING`,
+            [cat.name, cat.emoji, cat.bg, cat.fg, cat.sort_order, w.name]
+          );
+        }
       }
+      await client.query(`ALTER TABLE categories ALTER COLUMN wallet SET NOT NULL`);
+      await client.query("COMMIT");
+    } catch (err) {
+      await client.query("ROLLBACK");
+      throw err;
+    } finally {
+      client.release();
     }
-    await pool.query(`ALTER TABLE categories ALTER COLUMN wallet SET NOT NULL`);
-    await pool.query(`ALTER TABLE categories DROP CONSTRAINT IF EXISTS categories_name_key`);
-    await pool.query(
-      `ALTER TABLE categories ADD CONSTRAINT categories_wallet_name_key UNIQUE (wallet, name)`
-    );
   }
 
   for (const wallet of SEED_WALLETS) {
