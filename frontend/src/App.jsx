@@ -93,6 +93,28 @@ function saveCache(data, email) {
   }
 }
 
+// Who was logged in last, saved locally so the app can paint straight from
+// cache on the next open without waiting on fetchMe() first — that's the
+// one request with no per-wallet fallback, so on a cold Render instance
+// (or genuinely offline) it used to leave the whole app blank.
+const LAST_USER_KEY = "traty-last-user";
+
+function loadLastUser() {
+  try {
+    return JSON.parse(localStorage.getItem(LAST_USER_KEY));
+  } catch {
+    return null;
+  }
+}
+
+function saveLastUser(me) {
+  try {
+    localStorage.setItem(LAST_USER_KEY, JSON.stringify(me));
+  } catch {
+    // storage full/unavailable — fine, just skip caching
+  }
+}
+
 export default function App() {
   const [user, setUser] = useState(null);
   const [authChecked, setAuthChecked] = useState(false);
@@ -144,6 +166,28 @@ export default function App() {
   const pendingDeleteRef = useRef(null);
   pendingDeleteRef.current = pendingDelete;
 
+  // Paints straight from this account's last cached snapshot — used both
+  // by the offline-first bootstrap below and, once fetchMe() actually
+  // resolves, for a brand new device that had no cached session yet.
+  function applyCachedSession(me) {
+    const cached = loadCache(me.email);
+    rawRef.current = {
+      exp: cached.expenses || [],
+      wallets: cached.walletTotals || [],
+      sum: cached.summary || { total: 0, categories: [] },
+      insightsRows: cached.insightsRows || [],
+    };
+    setExpenses(cached.expenses || []);
+    setWalletTotals(cached.walletTotals || []);
+    setSummary(cached.summary || { total: 0, categories: [] });
+    const pending = listPendingExpenses();
+    const wallet = selectedWalletRef.current;
+    const pendingForList = wallet ? pending.filter((p) => p.wallet === wallet) : pending;
+    setInsights(
+      computeInsights({ period: "month", rows: [...pendingForList, ...(cached.insightsRows || [])] })
+    );
+  }
+
   // --- Auth bootstrap ---------------------------------------------------
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -162,27 +206,31 @@ export default function App() {
       setAuthChecked(true);
       return;
     }
+
+    // Paint from the last known session immediately — no network wait, and
+    // it works fully offline. fetchMe() below still runs to confirm/refresh
+    // it, but the app is already usable well before that lands (which, on
+    // Render's free tier waking from sleep, can take tens of seconds).
+    const lastUser = loadLastUser();
+    if (lastUser) {
+      applyCachedSession(lastUser);
+      setUser(lastUser);
+      setAuthChecked(true);
+    }
+
     fetchMe()
       .then((me) => {
-        const cached = loadCache(me.email);
-        rawRef.current = {
-          exp: cached.expenses || [],
-          wallets: cached.walletTotals || [],
-          sum: cached.summary || { total: 0, categories: [] },
-          insightsRows: cached.insightsRows || [],
-        };
-        setExpenses(cached.expenses || []);
-        setWalletTotals(cached.walletTotals || []);
-        setSummary(cached.summary || { total: 0, categories: [] });
-        const pending = listPendingExpenses();
-        const wallet = selectedWalletRef.current;
-        const pendingForList = wallet ? pending.filter((p) => p.wallet === wallet) : pending;
-        setInsights(
-          computeInsights({ period: "month", rows: [...pendingForList, ...(cached.insightsRows || [])] })
-        );
+        saveLastUser(me);
+        if (!lastUser) applyCachedSession(me);
         setUser(me);
       })
-      .catch(() => setUser(null))
+      .catch(() => {
+        // A real 401 already logs out via the "traty:unauthorized" event
+        // (apiFetch below) — this catch only fires for network/offline/
+        // cold-start failures, which shouldn't kick out an already-showing
+        // cached session.
+        if (!lastUser) setUser(null);
+      })
       .finally(() => setAuthChecked(true));
   }, []);
 
