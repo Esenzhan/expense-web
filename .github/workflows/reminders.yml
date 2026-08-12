@@ -1,0 +1,14 @@
+name: Expense reminders tick
+
+on:
+  schedule:
+    - cron: "*/10 * * * *"
+  workflow_dispatch: {}
+
+jobs:
+  tick:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Trigger reminder tick
+        run: |
+          curl -fsS -X POST "https://expense-web-peo6.onrender.com/api/reminders/tick?key=${{ secrets.REMINDER_CRON_SECRET }}"

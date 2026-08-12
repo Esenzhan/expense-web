@@ -3,6 +3,7 @@ import { fetchExpenses } from "../api";
 import { logout } from "../auth";
 import { haptic } from "../haptics";
 import { useSwipeDismissRight } from "../sheetGestures";
+import { REMINDERS_ENABLED_KEY } from "./RemindersSheet";
 
 const SETTINGS_KEY = "traty-settings";
 
@@ -19,6 +20,14 @@ function loadToggles() {
     return { ...TOGGLE_DEFAULTS, ...JSON.parse(localStorage.getItem(SETTINGS_KEY)) };
   } catch {
     return { ...TOGGLE_DEFAULTS };
+  }
+}
+
+function loadRemindersEnabled() {
+  try {
+    return JSON.parse(localStorage.getItem(REMINDERS_ENABLED_KEY)) === true;
+  } catch {
+    return false;
   }
 }
 
@@ -89,7 +98,7 @@ function ToggleRow({ icon, label, on, onFlip }) {
   );
 }
 
-export default function SettingsSheet({ user, onClose, onOpenCategories }) {
+export default function SettingsSheet({ user, onClose, onOpenCategories, onOpenReminders }) {
   const [toggles, setToggles] = useState(loadToggles);
   const [closing, setClosing] = useState(false);
   const pageRef = useRef(null);
@@ -161,7 +170,12 @@ export default function SettingsSheet({ user, onClose, onOpenCategories }) {
         <Row icon={Icons.currency} label="Валюта по умолчанию" value="KZT" />
         <Row icon={Icons.globe} label="Язык интерфейса" value="русский" />
         <Row icon={Icons.voice} label="Язык голоса" value="русский (Казахстан)" />
-        <Row icon={Icons.bell} label="Напоминания" value="Выключены" />
+        <Row
+          icon={Icons.bell}
+          label="Напоминания"
+          value={loadRemindersEnabled() ? "Включены" : "Выключены"}
+          onPress={onOpenReminders}
+        />
         <Row icon={Icons.calendar} label="Первый день недели" value="Понедельник" />
         <Row icon={Icons.palette} label="Тема" value="Системная" />
       </div>

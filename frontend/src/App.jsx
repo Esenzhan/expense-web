@@ -13,6 +13,7 @@ import InsightsSheet from "./components/InsightsSheet";
 import InsightsButton from "./components/InsightsButton";
 import EditExpenseSheet from "./components/EditExpenseSheet";
 import SettingsSheet from "./components/SettingsSheet";
+import RemindersSheet from "./components/RemindersSheet";
 import CategoriesSheet from "./components/CategoriesSheet";
 import NewCategorySheet from "./components/NewCategorySheet";
 import WalletsSheet from "./components/WalletsSheet";
@@ -137,6 +138,7 @@ export default function App() {
   const [addingExpense, setAddingExpense] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [categoriesOpen, setCategoriesOpen] = useState(false);
+  const [remindersOpen, setRemindersOpen] = useState(false);
   const [newCategoryWallet, setNewCategoryWallet] = useState(null);
   const [walletsOpen, setWalletsOpen] = useState(false);
   const [newWalletOpen, setNewWalletOpen] = useState(false);
@@ -665,8 +667,11 @@ export default function App() {
           user={user}
           onClose={() => setSettingsOpen(false)}
           onOpenCategories={() => setCategoriesOpen(true)}
+          onOpenReminders={() => setRemindersOpen(true)}
         />
       )}
+
+      {remindersOpen && <RemindersSheet onClose={() => setRemindersOpen(false)} />}
 
       {categoriesOpen && (
         <CategoriesSheet

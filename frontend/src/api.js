@@ -190,6 +190,44 @@ export async function deleteCategoryLimit(wallet, category) {
   if (!res.ok) throw new Error("Не удалось удалить лимит");
 }
 
+export async function fetchReminderSettings() {
+  const res = await apiFetch(`/api/reminders`);
+  return res.json();
+}
+
+export async function saveReminderSettings(payload) {
+  const res = await apiFetch(`/api/reminders`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    throw new Error(body.error || "Не удалось сохранить напоминание");
+  }
+  return res.json();
+}
+
+export async function subscribeReminderPush(subscription) {
+  const res = await apiFetch(`/api/reminders/subscribe`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ subscription }),
+  });
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    throw new Error(body.error || "Не удалось подписаться на уведомления");
+  }
+}
+
+export async function unsubscribeReminderPush(endpoint) {
+  await apiFetch(`/api/reminders/subscribe`, {
+    method: "DELETE",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ endpoint }),
+  });
+}
+
 // Fire-and-forget ping so Render's free tier starts waking up as soon as the
 // app opens, instead of on the first voice-recording attempt
 export function warmBackend() {

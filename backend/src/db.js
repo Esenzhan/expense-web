@@ -240,4 +240,34 @@ export async function initSchema() {
     CREATE UNIQUE INDEX IF NOT EXISTS category_limits_private_uidx
       ON category_limits (wallet, category, user_id) WHERE user_id IS NOT NULL;
   `);
+
+  // Daily reminder ("did you forget to log an expense") settings — one row
+  // per account. days uses ISO weekday numbers (1=Пн..7=Вс) to match "Первый
+  // день недели: Понедельник" elsewhere in the app. last_sent_date dedupes
+  // the cron tick (see routes/reminders.js) so a 10-minute poll interval
+  // never double-sends within the same Almaty-local day.
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS reminder_settings (
+      user_id INTEGER PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+      enabled BOOLEAN NOT NULL DEFAULT false,
+      days SMALLINT[] NOT NULL DEFAULT '{1,2,3,4,5,6,7}',
+      time TEXT NOT NULL DEFAULT '22:00',
+      text TEXT NOT NULL DEFAULT 'Пора внести расходы и доходы.',
+      last_sent_date DATE,
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+    );
+  `);
+
+  // One row per subscribed device (Web Push endpoint). A user could in
+  // theory have more than one (e.g. re-added to Home Screen) — send to all.
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS push_subscriptions (
+      id SERIAL PRIMARY KEY,
+      user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      endpoint TEXT NOT NULL UNIQUE,
+      p256dh TEXT NOT NULL,
+      auth TEXT NOT NULL,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+    );
+  `);
 }

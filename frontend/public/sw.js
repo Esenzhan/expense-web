@@ -63,3 +63,33 @@ self.addEventListener("fetch", (event) => {
     })()
   );
 });
+
+// Daily reminder push — payload is {title, body}, sent by the backend's
+// /api/reminders/tick (see backend/src/services/webPush.js).
+self.addEventListener("push", (event) => {
+  let data = { title: "Траты", body: "Не забыли внести расходы?" };
+  try {
+    if (event.data) data = { ...data, ...event.data.json() };
+  } catch {
+    // non-JSON payload — fall back to the default text above
+  }
+  event.waitUntil(
+    self.registration.showNotification(data.title, {
+      body: data.body,
+      icon: "/icon-192.png",
+      badge: "/icon-192.png",
+    })
+  );
+});
+
+self.addEventListener("notificationclick", (event) => {
+  event.notification.close();
+  event.waitUntil(
+    (async () => {
+      const clientsList = await self.clients.matchAll({ type: "window", includeUncontrolled: true });
+      const existing = clientsList.find((c) => "focus" in c);
+      if (existing) return existing.focus();
+      return self.clients.openWindow("/");
+    })()
+  );
+});
