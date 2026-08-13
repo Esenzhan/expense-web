@@ -1,10 +1,9 @@
 import { useState } from "react";
 import { haptic, hapticHeavy } from "../haptics";
 
-// "Деньги на счету" — tap the number to correct it against your real bank
-// balance. `editable` is false for the "Все счета" aggregate (nothing
-// single to edit there). `balance` null means no baseline has been set yet
-// for this wallet.
+// "Баланс" — tap the number to correct it against your real bank balance.
+// `editable` is false for the "Все счета" aggregate (nothing single to edit
+// there). `balance` null means no baseline has been set yet for this wallet.
 export default function AccountBalanceRow({ balance, editable, onSave }) {
   const [editing, setEditing] = useState(false);
   const [value, setValue] = useState("");
@@ -36,7 +35,7 @@ export default function AccountBalanceRow({ balance, editable, onSave }) {
   if (editing) {
     return (
       <div className="balance-row">
-        <span className="balance-label">Деньги на счету</span>
+        <span className="balance-label">Баланс</span>
         <input
           className="balance-input"
           type="number"

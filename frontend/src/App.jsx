@@ -133,6 +133,13 @@ export default function App() {
   const [expenses, setExpenses] = useState([]);
   const [walletTotals, setWalletTotals] = useState([]);
   const [walletBalances, setWalletBalances] = useState([]);
+  // Per-wallet net delta between what the last server fetch said and what's
+  // showing right now (offline-queued expenses not yet synced = positive,
+  // an in-flight/undo-window delete = negative) — same numbers `mergeAndSet`
+  // already applies to `walletTotals`, kept here too so "Баланс" updates in
+  // the same instant as the rest of the card instead of lagging behind
+  // until the undo window's real DELETE lands and refreshAll() re-fetches.
+  const [pendingWalletDeltas, setPendingWalletDeltas] = useState(new Map());
   const [insights, setInsights] = useState(() => computeInsights({ period: "month", rows: [] }));
   const [insightsOpen, setInsightsOpen] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
@@ -376,6 +383,7 @@ export default function App() {
       return createdAt >= periodStart && createdAt < periodEnd;
     });
     setInsights(computeInsights({ period: currentPeriod, rows: [...pendingInPeriod, ...baseInsightsRows] }));
+    setPendingWalletDeltas(pendingByWallet);
   }
 
   function commitDelete(entry) {
@@ -525,20 +533,27 @@ export default function App() {
   const chipIcon = selectedWallet ? getWalletIcon(selectedWallet) : null;
   const customPeriodValue = customRange ? `custom:${customRange.from}:${customRange.to}` : null;
 
-  // "Деньги на счету" — the real bank balance, separate from walletBalance
-  // above (which is spend-in-period, not what's left). null = not set up
-  // for the relevant wallet(s) yet. Selecting "Все счета" sums whatever
-  // wallets DO have a balance configured — editing is disabled there since
-  // there's no single wallet to write the correction back to.
+  // "Баланс" — the real bank balance, separate from walletBalance above
+  // (which is spend-in-period, not what's left). null = not set up for the
+  // relevant wallet(s) yet. Selecting "Все счета" sums whatever wallets DO
+  // have a balance configured — editing is disabled there since there's no
+  // single wallet to write the correction back to. Subtracting
+  // pendingWalletDeltas mirrors what mergeAndSet already does to
+  // walletTotals, so a delete's undo window (or an offline-queued add)
+  // shows up here in the same instant as everywhere else on the card,
+  // instead of only after its real server round-trip lands.
   const accountBalanceEntry = selectedWallet
     ? walletBalances.find((b) => b.wallet === selectedWallet)
     : null;
   const accountBalance = selectedWallet
     ? accountBalanceEntry
-      ? Number(accountBalanceEntry.current_balance)
+      ? Number(accountBalanceEntry.current_balance) - (pendingWalletDeltas.get(selectedWallet) || 0)
       : null
     : walletBalances.length
-    ? walletBalances.reduce((sum, b) => sum + Number(b.current_balance), 0)
+    ? walletBalances.reduce(
+        (sum, b) => sum + Number(b.current_balance) - (pendingWalletDeltas.get(b.wallet) || 0),
+        0
+      )
     : null;
 
   async function saveAccountBalance(amount) {
