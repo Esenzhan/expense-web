@@ -1,5 +1,5 @@
 import { useRef, useState } from "react";
-import { WS_URL, createExpense } from "../api";
+import { WS_URL, createExpense, scanReceipt } from "../api";
 import { getToken } from "../auth";
 import { getCategoryIcon } from "../categoryIcons";
 import CategoryGlyph from "./CategoryGlyph";
@@ -16,6 +16,30 @@ function pickMimeType() {
     CANDIDATE_MIME_TYPES.find((type) => window.MediaRecorder?.isTypeSupported?.(type)) ||
     ""
   );
+}
+
+// Phone camera photos can be several MB — downscale/recompress client-side
+// before it ever hits the wire (faster upload, and keeps well under both
+// the backend's body-size limit and Claude's recommended image size).
+function resizeImageFile(file, maxDim = 1600, quality = 0.82) {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    const url = URL.createObjectURL(file);
+    img.onload = () => {
+      const scale = Math.min(1, maxDim / Math.max(img.width, img.height));
+      const canvas = document.createElement("canvas");
+      canvas.width = Math.round(img.width * scale);
+      canvas.height = Math.round(img.height * scale);
+      canvas.getContext("2d").drawImage(img, 0, 0, canvas.width, canvas.height);
+      URL.revokeObjectURL(url);
+      resolve(canvas.toDataURL("image/jpeg", quality));
+    };
+    img.onerror = () => {
+      URL.revokeObjectURL(url);
+      reject(new Error("Не удалось прочитать фото"));
+    };
+    img.src = url;
+  });
 }
 
 // One consistent line-icon set for the bottom dock
@@ -64,7 +88,7 @@ function StopIcon() {
 const WS_RETRY_WINDOW_MS = 80000;
 
 // phase: idle -> listening -> processing -> confirming -> idle
-export default function VoiceRecorder({ onSaved, onManualAdd }) {
+export default function VoiceRecorder({ onSaved, onManualAdd, onScanned }) {
   const [phase, setPhase] = useState("idle");
   const [transcript, setTranscript] = useState("");
   const [proposal, setProposal] = useState(null);
@@ -73,6 +97,11 @@ export default function VoiceRecorder({ onSaved, onManualAdd }) {
   // Shows the "waking the server" hint when the socket takes suspiciously
   // long to open (Render free tier cold start)
   const [slowWake, setSlowWake] = useState(false);
+  // Receipt scan: its own tiny state machine, independent of `phase` above
+  // (that one's owned by the voice websocket flow) — idle whenever it's not
+  // actively uploading/parsing a photo.
+  const [scanning, setScanning] = useState(false);
+  const fileInputRef = useRef(null);
 
   const wsRef = useRef(null);
   const sessionRef = useRef(null);
@@ -80,6 +109,24 @@ export default function VoiceRecorder({ onSaved, onManualAdd }) {
   const streamRef = useRef(null);
   const fallbackTimerRef = useRef(null);
   const transmitRef = useRef(null);
+
+  async function handleScanFile(event) {
+    const file = event.target.files?.[0];
+    event.target.value = ""; // lets the same photo be picked again later
+    if (!file) return;
+    haptic();
+    setErrorMessage("");
+    setScanning(true);
+    try {
+      const imageDataUrl = await resizeImageFile(file);
+      const proposal = await scanReceipt(imageDataUrl);
+      onScanned?.(proposal);
+    } catch (err) {
+      setErrorMessage(err.message || "Не удалось распознать чек");
+    } finally {
+      setScanning(false);
+    }
+  }
 
   function stopMedia() {
     const recorder = mediaRecorderRef.current;
@@ -294,7 +341,7 @@ export default function VoiceRecorder({ onSaved, onManualAdd }) {
 
   return (
     <>
-      {phase !== "idle" && <div className="recorder-backdrop" />}
+      {(phase !== "idle" || scanning) && <div className="recorder-backdrop" />}
 
       <div className="recorder-dock">
         {(phase === "listening" || phase === "processing") && (
@@ -307,6 +354,13 @@ export default function VoiceRecorder({ onSaved, onManualAdd }) {
                   : "Я вас слушаю…"}
             </span>
             {phase === "processing" && <span className="spinner" />}
+          </div>
+        )}
+
+        {scanning && (
+          <div className="listen-pill">
+            <span>Распознаю чек…</span>
+            <span className="spinner" />
           </div>
         )}
 
@@ -344,22 +398,30 @@ export default function VoiceRecorder({ onSaved, onManualAdd }) {
           </div>
         )}
 
-        {phase === "idle" && errorMessage && (
+        {phase === "idle" && !scanning && errorMessage && (
           <div className="status-line error">{errorMessage}</div>
         )}
 
-        {phase === "idle" && (
+        {phase === "idle" && !scanning && (
           <div className="mic-row">
             <button
               className="side-button"
               onClick={() => {
                 haptic();
-                onManualAdd?.();
+                fileInputRef.current?.click();
               }}
               aria-label="Сканировать чек"
             >
               <ScanIcon />
             </button>
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="image/*"
+              capture="environment"
+              style={{ display: "none" }}
+              onChange={handleScanFile}
+            />
             <button className="mic-button" onClick={startRecording} aria-label="Начать запись">
               <MicIcon />
             </button>

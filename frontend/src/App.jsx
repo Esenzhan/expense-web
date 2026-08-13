@@ -153,6 +153,9 @@ export default function App() {
   const [searchOpen, setSearchOpen] = useState(false);
   const [editingExpense, setEditingExpense] = useState(null);
   const [addingExpense, setAddingExpense] = useState(false);
+  // Receipt scan result, prefilling a new (not-yet-saved) expense — separate
+  // from `addingExpense` since it carries data instead of being a flag.
+  const [scanExpense, setScanExpense] = useState(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [categoriesOpen, setCategoriesOpen] = useState(false);
   const [remindersOpen, setRemindersOpen] = useState(false);
@@ -705,7 +708,11 @@ export default function App() {
         }}
       />
 
-      <VoiceRecorder onSaved={() => refreshAll(period)} onManualAdd={() => setAddingExpense(true)} />
+      <VoiceRecorder
+        onSaved={() => refreshAll(period)}
+        onManualAdd={() => setAddingExpense(true)}
+        onScanned={(proposal) => setScanExpense(proposal)}
+      />
 
       {insightsOpen && (
         <InsightsSheet
@@ -740,12 +747,19 @@ export default function App() {
         />
       )}
 
-      {addingExpense && (
+      {(addingExpense || scanExpense) && (
         <EditExpenseSheet
           defaultWallet={selectedWallet}
-          onClose={() => setAddingExpense(false)}
+          initial={scanExpense}
+          onClose={() => {
+            setAddingExpense(false);
+            setScanExpense(null);
+          }}
           onCommitted={() => refreshAll(period)}
-          onSaved={() => setAddingExpense(false)}
+          onSaved={() => {
+            setAddingExpense(false);
+            setScanExpense(null);
+          }}
         />
       )}
 

@@ -2,6 +2,7 @@ import { Router } from "express";
 import { pool } from "../db.js";
 import { isValidWallet, sharedWalletNames } from "../wallets.js";
 import { appendExpenseRow, updateExpenseRow, deleteExpenseRow } from "../services/sheets.js";
+import { parseReceiptFromImage } from "../services/parseReceipt.js";
 
 export const expensesRouter = Router();
 
@@ -78,6 +79,23 @@ expensesRouter.post("/", async (req, res) => {
   );
   appendExpenseRow(req.user, rows[0]);
   res.status(201).json(rows[0]);
+});
+
+// Photo → Claude Vision → a proposal, same contract as the voice flow's
+// "parsed" message: NOT saved here, the client shows it for confirmation/
+// editing and only actually creates the expense via a plain POST / above.
+expensesRouter.post("/scan", async (req, res) => {
+  const match = /^data:(image\/[a-zA-Z0-9.+-]+);base64,(.+)$/.exec(req.body.image || "");
+  if (!match) {
+    return res.status(400).json({ error: "Некорректное изображение" });
+  }
+  const [, mediaType, base64Data] = match;
+  try {
+    const proposal = await parseReceiptFromImage(base64Data, mediaType);
+    res.json({ proposal });
+  } catch (err) {
+    res.status(422).json({ error: err.message });
+  }
 });
 
 // Edit an existing expense (amount/category/wallet/note) from the edit sheet.

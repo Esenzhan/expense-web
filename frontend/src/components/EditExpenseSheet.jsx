@@ -144,6 +144,10 @@ function calcReducer(state, action) {
 export default function EditExpenseSheet({
   expense,
   defaultWallet,
+  // Prefills a NEW expense (unlike `expense`, which edits an existing one) —
+  // used by receipt scanning to seed the form with what Claude Vision read
+  // off the photo, still fully editable before it's actually saved.
+  initial,
   onClose,
   onSaved,
   onDeleted,
@@ -163,13 +167,19 @@ export default function EditExpenseSheet({
     setTimeout(after, 300);
   }
   const [calc, dispatch] = useReducer(calcReducer, {
-    tokens: [isNew ? "0" : String(Number(expense.amount)).replace(".", ",")],
+    tokens: [
+      !isNew
+        ? String(Number(expense.amount)).replace(".", ",")
+        : initial?.amount != null
+          ? String(initial.amount).replace(".", ",")
+          : "0",
+    ],
   });
   const walletNames = listWallets().map((w) => w.name);
-  const [wallet, setWallet] = useState(expense?.wallet || defaultWallet || walletNames[0]);
+  const [wallet, setWallet] = useState(expense?.wallet || initial?.wallet || defaultWallet || walletNames[0]);
   const categoryNames = listCategories(wallet).map((c) => c.name);
-  const [category, setCategory] = useState(expense?.category || categoryNames[0]);
-  const [note, setNote] = useState(expense?.description || "");
+  const [category, setCategory] = useState(expense?.category || initial?.category || categoryNames[0]);
+  const [note, setNote] = useState(expense?.description || initial?.description || "");
   const [menuOpen, setMenuOpen] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [saving, setSaving] = useState(false);

@@ -19,7 +19,10 @@ import { parseExpenseFromText } from "./services/parseExpense.js";
 
 const app = express();
 app.use(cors({ origin: process.env.FRONTEND_URL || "*" }));
-app.use(express.json());
+// Default 100kb is fine for everything except the receipt-scan photo
+// (base64-encoded, resized client-side but still a couple MB) — raised
+// globally rather than per-route since express.json() is mounted once.
+app.use(express.json({ limit: "5mb" }));
 
 app.use("/api/auth", authRouter);
 app.use("/api/expenses", authMiddleware, expensesRouter);

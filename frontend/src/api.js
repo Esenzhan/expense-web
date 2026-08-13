@@ -71,6 +71,21 @@ export async function createExpense(payload) {
   return res.json();
 }
 
+// imageDataUrl: a data: URL (e.g. from canvas.toDataURL), not a raw file —
+// the caller resizes/compresses client-side before this ever hits the wire.
+export async function scanReceipt(imageDataUrl) {
+  const res = await apiFetch(`/api/expenses/scan`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ image: imageDataUrl }),
+  });
+  const body = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    throw new Error(body.error || "Не удалось распознать чек");
+  }
+  return body.proposal;
+}
+
 export async function updateExpense(id, payload) {
   const res = await apiFetch(`/api/expenses/${id}`, {
     method: "PUT",
