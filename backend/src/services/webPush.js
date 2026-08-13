@@ -9,7 +9,9 @@ webpush.setVapidDetails(
 
 // Sends one push notification. A 404/410 means the subscription is dead
 // (user revoked permission, uninstalled the PWA, etc.) — clean it up so
-// future ticks stop trying it.
+// future ticks stop trying it. A push service that's unreachable/hanging
+// (not a clean 404/410) must not be allowed to stall the whole /tick request
+// past Render's gateway timeout — 10s is generous for a push send.
 export async function sendPush(subscription, payload) {
   try {
     await webpush.sendNotification(
@@ -17,7 +19,8 @@ export async function sendPush(subscription, payload) {
         endpoint: subscription.endpoint,
         keys: { p256dh: subscription.p256dh, auth: subscription.auth },
       },
-      JSON.stringify(payload)
+      JSON.stringify(payload),
+      { timeout: 10000 }
     );
   } catch (err) {
     if (err.statusCode === 404 || err.statusCode === 410) {

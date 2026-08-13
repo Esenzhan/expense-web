@@ -127,10 +127,10 @@ remindersRouter.post("/tick", async (req, res) => {
       `SELECT endpoint, p256dh, auth FROM push_subscriptions WHERE user_id = $1`,
       [row.user_id]
     );
-    for (const sub of subs) {
-      await sendPush(sub, { title: "Траты", body: row.text });
-      sent++;
-    }
+    // In parallel, not sequential — one slow/unreachable endpoint (bounded
+    // by sendPush's own 10s timeout) must not delay the others.
+    await Promise.all(subs.map((sub) => sendPush(sub, { title: "Траты", body: row.text })));
+    sent += subs.length;
     await pool.query(`UPDATE reminder_settings SET last_sent_date = $2 WHERE user_id = $1`, [
       row.user_id,
       date,
