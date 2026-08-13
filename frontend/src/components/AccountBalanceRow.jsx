@@ -52,7 +52,7 @@ export default function AccountBalanceRow({ balance, editable, onSave }) {
 
   return (
     <button className={`balance-row ${editable ? "" : "readonly"}`} onClick={startEdit}>
-      <span className="balance-label">Деньги на счету</span>
+      <span className="balance-label">Баланс</span>
       <span className="balance-value">
         {balance != null
           ? `${Math.round(balance).toLocaleString("ru-RU")} ₸`
