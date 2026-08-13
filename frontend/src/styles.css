@@ -300,6 +300,29 @@ body {
   margin: 0 0 10px;
 }
 
+.section-title-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.section-title-row .section-title {
+  margin: 0;
+}
+
+.mine-toggle {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: none;
+  border: none;
+  padding: 0 0 10px;
+  font-size: 13px;
+  color: var(--ink-soft);
+  cursor: pointer;
+}
+
 .empty-hint {
   color: var(--ink-soft);
   font-size: 14px;
@@ -1572,6 +1595,22 @@ body {
 
 .switch.on .switch-knob {
   transform: translateX(19px);
+}
+
+.switch-sm {
+  width: 34px;
+  height: 20px;
+  min-width: 34px;
+  padding: 2px;
+}
+
+.switch-sm .switch-knob {
+  width: 16px;
+  height: 16px;
+}
+
+.switch-sm.on .switch-knob {
+  transform: translateX(14px);
 }
 
 /* Reminders page */

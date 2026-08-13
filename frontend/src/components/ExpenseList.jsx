@@ -35,12 +35,30 @@ function groupByDay(expenses) {
   return groups;
 }
 
-export default function ExpenseList({ expenses, onSelect, onDeleteRequest, currentUserId }) {
+export default function ExpenseList({
+  expenses,
+  onSelect,
+  onDeleteRequest,
+  currentUserId,
+  showMineToggle,
+  onlyMine,
+  onToggleOnlyMine,
+}) {
   const groups = groupByDay(expenses);
 
   return (
     <div>
-      <p className="section-title">Последние траты</p>
+      <div className="section-title-row">
+        <p className="section-title">Последние траты</p>
+        {showMineToggle && (
+          <button className="mine-toggle" onClick={onToggleOnlyMine}>
+            <span>Только мои</span>
+            <span className={`switch switch-sm ${onlyMine ? "on" : ""}`}>
+              <span className="switch-knob" />
+            </span>
+          </button>
+        )}
+      </div>
       {expenses.length === 0 && (
         <p className="empty-hint">Пока пусто — скажи что-нибудь вроде «500 на такси».</p>
       )}

@@ -140,6 +140,14 @@ export default function App() {
   // the same instant as the rest of the card instead of lagging behind
   // until the undo window's real DELETE lands and refreshAll() re-fetches.
   const [pendingWalletDeltas, setPendingWalletDeltas] = useState(new Map());
+  // "Только мои" — hides the other account's rows on a shared wallet
+  // (Семья/Бизнес/Ремонт). Whether to even show the toggle is derived from
+  // the loaded data itself (any row with a foreign user_id) rather than a
+  // wallet.shared flag, so it needs no extra fetch/registry.
+  const [onlyMine, setOnlyMine] = useState(false);
+  const onlyMineRef = useRef(onlyMine);
+  onlyMineRef.current = onlyMine;
+  const [hasOtherAuthor, setHasOtherAuthor] = useState(false);
   const [insights, setInsights] = useState(() => computeInsights({ period: "month", rows: [] }));
   const [insightsOpen, setInsightsOpen] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
@@ -345,8 +353,22 @@ export default function App() {
       const { expense } = pendingDeleteRef.current;
       excluded.set(expense.id, { wallet: expense.wallet, amount: expense.amount });
     }
-    const baseExp = excluded.size ? exp.filter((e) => !excluded.has(e.id)) : exp;
-    const baseInsightsRows = excluded.size ? insightsRows.filter((r) => !excluded.has(r.id)) : insightsRows;
+    let baseExp = excluded.size ? exp.filter((e) => !excluded.has(e.id)) : exp;
+    let baseInsightsRows = excluded.size ? insightsRows.filter((r) => !excluded.has(r.id)) : insightsRows;
+
+    // The toggle only makes sense (and only shows) once there's actually a
+    // foreign row loaded — checked against the unfiltered data so it stays
+    // available even while the filter itself is hiding those rows.
+    const otherAuthor =
+      !!user &&
+      (baseExp.some((e) => e.user_id != null && e.user_id !== user.id) ||
+        baseInsightsRows.some((r) => r.user_id != null && r.user_id !== user.id));
+    setHasOtherAuthor(otherAuthor);
+
+    if (onlyMineRef.current && user) {
+      baseExp = baseExp.filter((e) => e.user_id === user.id);
+      baseInsightsRows = baseInsightsRows.filter((r) => r.user_id === user.id);
+    }
 
     const mergedExpenses = [...pendingForList, ...baseExp];
 
@@ -478,6 +500,19 @@ export default function App() {
     // so this only silently swaps in fresher numbers once they arrive.
     refreshAll(period, selectedWallet);
   }, [user, period, selectedWallet]);
+
+  // Switching wallets drops the filter — otherwise it silently keeps hiding
+  // rows on a wallet the user never toggled it on for.
+  useEffect(() => {
+    setOnlyMine(false);
+  }, [selectedWallet]);
+
+  // No network round-trip needed — same cached rows, just re-merged with the
+  // filter flipped.
+  useEffect(() => {
+    if (!user) return;
+    mergeAndSet(selectedWalletRef.current, periodRef.current);
+  }, [onlyMine]);
 
   useEffect(() => {
     if (!user) return;
@@ -662,6 +697,12 @@ export default function App() {
         onSelect={setEditingExpense}
         onDeleteRequest={requestDeleteExpense}
         currentUserId={user.id}
+        showMineToggle={hasOtherAuthor}
+        onlyMine={onlyMine}
+        onToggleOnlyMine={() => {
+          haptic();
+          setOnlyMine((v) => !v);
+        }}
       />
 
       <VoiceRecorder onSaved={() => refreshAll(period)} onManualAdd={() => setAddingExpense(true)} />
