@@ -3,6 +3,7 @@ import { createCategory, updateCategory } from "../api";
 import { haptic, hapticHeavy } from "../haptics";
 import { useSwipeDismiss } from "../sheetGestures";
 import CategoryGlyph from "./CategoryGlyph";
+import { catIconVars } from "../catIconVars";
 
 // bg = pastel tile, fg = strong accent (shown in the palette swatch)
 const PALETTE = [
@@ -134,7 +135,7 @@ export default function NewCategorySheet({ wallet, initial, onClose, onCreated }
         <div className="newcat-name-row">
           <span
             className="category-icon"
-            style={emoji ? { background: color.bg, color: color.fg } : { background: "#e9e9ec", color: "#5b5b63" }}
+            style={emoji ? catIconVars(color.bg, color.fg) : { background: "var(--surface-soft)", color: "var(--ink-soft)" }}
           >
             {emoji ? <CategoryGlyph emoji={emoji} size={20} /> : "⃠"}
           </span>
@@ -162,7 +163,7 @@ export default function NewCategorySheet({ wallet, initial, onClose, onCreated }
                 <button
                   key={icon}
                   className={`newcat-icon ${emoji === icon ? "picked" : ""}`}
-                  style={{ background: color.bg, color: color.fg }}
+                  style={catIconVars(color.bg, color.fg)}
                   onClick={() => pickEmoji(icon)}
                 >
                   <CategoryGlyph emoji={icon} size={20} />
@@ -196,7 +197,7 @@ export default function NewCategorySheet({ wallet, initial, onClose, onCreated }
                   <button
                     key={icon}
                     className={`newcat-icon ${emoji === icon ? "picked" : ""}`}
-                    style={{ background: color.bg, color: color.fg }}
+                    style={catIconVars(color.bg, color.fg)}
                     onClick={() => pickEmoji(icon)}
                   >
                     <CategoryGlyph emoji={icon} size={20} />

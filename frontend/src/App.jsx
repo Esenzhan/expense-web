@@ -1,11 +1,13 @@
 import { useEffect, useRef, useState } from "react";
-import { fetchExpenses, fetchExpensesRange, fetchWalletTotals, fetchWalletBalances, setWalletBalance, fetchCategories, fetchWallets, fetchMe, warmBackend, createExpense, deleteExpense, deleteCategory } from "./api";
+import { fetchExpenses, fetchExpensesRange, fetchWalletTotals, fetchWalletBalances, setWalletBalance, fetchCategories, fetchWallets, fetchMe, warmBackend, createExpense, deleteExpense, deleteCategory, saveThemeSetting } from "./api";
+import { loadLocalTheme, setLocalTheme } from "./theme";
 import { getToken, setToken } from "./auth";
 import { listPendingExpenses, syncPendingExpenses, hasPendingExpenses, removePendingExpense } from "./offlineQueue";
 import { computeInsights, periodRange, formatPeriodLabel } from "./insights";
 import { hydrateCategories } from "./categoryIcons";
 import { hydrateWallets, getWalletIcon } from "./wallets";
 import { haptic } from "./haptics";
+import { catIconVars } from "./catIconVars";
 import CategoryGlyph from "./components/CategoryGlyph";
 import LoginScreen from "./components/LoginScreen";
 import VoiceRecorder from "./components/VoiceRecorder";
@@ -15,6 +17,7 @@ import InsightsButton from "./components/InsightsButton";
 import EditExpenseSheet from "./components/EditExpenseSheet";
 import SettingsSheet from "./components/SettingsSheet";
 import RemindersSheet from "./components/RemindersSheet";
+import ThemeSheet from "./components/ThemeSheet";
 import CategoriesSheet from "./components/CategoriesSheet";
 import NewCategorySheet from "./components/NewCategorySheet";
 import WalletsSheet from "./components/WalletsSheet";
@@ -160,6 +163,9 @@ export default function App() {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [categoriesOpen, setCategoriesOpen] = useState(false);
   const [remindersOpen, setRemindersOpen] = useState(false);
+  const [themeOpen, setThemeOpen] = useState(false);
+  const [theme, setTheme] = useState(loadLocalTheme);
+  const themeSyncedRef = useRef(false);
   const [newCategoryWallet, setNewCategoryWallet] = useState(null);
   const [editingCategory, setEditingCategory] = useState(null);
   const [walletsOpen, setWalletsOpen] = useState(false);
@@ -276,6 +282,29 @@ export default function App() {
     window.addEventListener("traty:unauthorized", onUnauthorized);
     return () => window.removeEventListener("traty:unauthorized", onUnauthorized);
   }, []);
+
+  // Pulls the account's saved theme in once, on first login on this device
+  // (e.g. this browser has never touched the local "traty-theme" mirror) —
+  // not on every user refresh, so it can't clobber a change made locally
+  // later in the same session while a stale fetchMe() is still in flight.
+  useEffect(() => {
+    if (!user || themeSyncedRef.current) return;
+    themeSyncedRef.current = true;
+    if (user.theme && user.theme !== theme) {
+      setTheme(user.theme);
+      setLocalTheme(user.theme);
+    }
+  }, [user]);
+
+  function changeTheme(value) {
+    setTheme(value);
+    setLocalTheme(value);
+    saveThemeSetting(value).catch(() => {
+      // Best-effort account sync — the local choice (already applied above)
+      // is what matters for this device; a failed PUT just means another
+      // device won't see the change until it succeeds later.
+    });
+  }
 
   function selectWallet(name) {
     setSelectedWallet(name);
@@ -622,7 +651,7 @@ export default function App() {
         >
           <span
             className="wallet-chip-icon"
-            style={chipIcon ? { background: chipIcon.bg, color: chipIcon.fg } : undefined}
+            style={chipIcon ? catIconVars(chipIcon.bg, chipIcon.fg) : undefined}
           >
             <CategoryGlyph emoji={chipIcon ? chipIcon.emoji : "💳"} size={20} />
           </span>
@@ -767,13 +796,17 @@ export default function App() {
       {settingsOpen && (
         <SettingsSheet
           user={user}
+          theme={theme}
           onClose={() => setSettingsOpen(false)}
           onOpenCategories={() => setCategoriesOpen(true)}
           onOpenReminders={() => setRemindersOpen(true)}
+          onOpenTheme={() => setThemeOpen(true)}
         />
       )}
 
       {remindersOpen && <RemindersSheet onClose={() => setRemindersOpen(false)} />}
+
+      {themeOpen && <ThemeSheet theme={theme} onChange={changeTheme} onClose={() => setThemeOpen(false)} />}
 
       {categoriesOpen && (
         <CategoriesSheet

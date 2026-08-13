@@ -4,6 +4,7 @@ import { logout } from "../auth";
 import { haptic } from "../haptics";
 import { useSwipeDismissRight } from "../sheetGestures";
 import { REMINDERS_ENABLED_KEY } from "./RemindersSheet";
+import { THEME_LABELS } from "./ThemeSheet";
 
 const SETTINGS_KEY = "traty-settings";
 
@@ -98,7 +99,7 @@ function ToggleRow({ icon, label, on, onFlip }) {
   );
 }
 
-export default function SettingsSheet({ user, onClose, onOpenCategories, onOpenReminders }) {
+export default function SettingsSheet({ user, theme, onClose, onOpenCategories, onOpenReminders, onOpenTheme }) {
   const [toggles, setToggles] = useState(loadToggles);
   const [closing, setClosing] = useState(false);
   const pageRef = useRef(null);
@@ -177,7 +178,7 @@ export default function SettingsSheet({ user, onClose, onOpenCategories, onOpenR
           onPress={onOpenReminders}
         />
         <Row icon={Icons.calendar} label="Первый день недели" value="Понедельник" />
-        <Row icon={Icons.palette} label="Тема" value="Системная" />
+        <Row icon={Icons.palette} label="Тема" value={THEME_LABELS[theme] || THEME_LABELS.system} onPress={onOpenTheme} />
       </div>
 
       <p className="settings-section">Персонализация</p>

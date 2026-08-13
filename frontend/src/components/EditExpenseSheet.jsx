@@ -6,6 +6,7 @@ import CategoryGlyph from "./CategoryGlyph";
 import { listWallets } from "../wallets";
 import { haptic, hapticTick } from "../haptics";
 import { useSwipeDismiss } from "../sheetGestures";
+import { catIconVars } from "../catIconVars";
 
 function toNumber(raw) {
   return parseFloat(raw.replace(",", ".")) || 0;
@@ -389,7 +390,7 @@ export default function EditExpenseSheet({
         </div>
 
         <div className="edit-wallet-row">
-          <span className="category-icon" style={{ background: icon.bg, color: icon.fg }}>
+          <span className="category-icon" style={catIconVars(icon.bg, icon.fg)}>
             <CategoryGlyph emoji={icon.emoji} size={20} />
           </span>
           <select
@@ -420,7 +421,7 @@ export default function EditExpenseSheet({
               <button
                 key={cat}
                 className="category-pick"
-                style={{ background: catIcon.bg, color: catIcon.fg }}
+                style={catIconVars(catIcon.bg, catIcon.fg)}
                 onClick={() => scrollCategoryTo(index)}
                 aria-label={cat}
               >

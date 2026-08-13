@@ -52,6 +52,10 @@ export async function initSchema() {
       created_at TIMESTAMPTZ NOT NULL DEFAULT now()
     );
   `);
+  // Idempotent for tables created before theme support existed. "system"
+  // means "follow the OS" — the frontend resolves that case itself via
+  // prefers-color-scheme, this column only matters for "light"/"dark".
+  await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS theme TEXT NOT NULL DEFAULT 'system'`);
 
   // wallets before categories: categories.wallet references wallets(name).
   await pool.query(`
@@ -296,5 +300,21 @@ export async function initSchema() {
       auth TEXT NOT NULL,
       created_at TIMESTAMPTZ NOT NULL DEFAULT now()
     );
+  `);
+
+  // One row per receipt photo sent to Claude Vision — logged regardless of
+  // whether it turns out to be a real receipt, since the API call (and its
+  // token cost) already happened. Used by services/receiptScans.js to cap
+  // scans per user per Almaty-local day.
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS receipt_scans (
+      id SERIAL PRIMARY KEY,
+      user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      scan_date DATE NOT NULL,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+    );
+  `);
+  await pool.query(`
+    CREATE INDEX IF NOT EXISTS receipt_scans_user_date_idx ON receipt_scans (user_id, scan_date);
   `);
 }

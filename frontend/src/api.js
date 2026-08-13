@@ -257,6 +257,19 @@ export async function saveReminderSettings(payload) {
   return res.json();
 }
 
+export async function saveThemeSetting(theme) {
+  const res = await apiFetch(`/api/auth/theme`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ theme }),
+  });
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    throw new Error(body.error || "Не удалось сохранить тему");
+  }
+  return res.json();
+}
+
 export async function subscribeReminderPush(subscription) {
   const res = await apiFetch(`/api/reminders/subscribe`, {
     method: "POST",

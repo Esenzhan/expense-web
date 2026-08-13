@@ -79,6 +79,17 @@ authRouter.get("/google/callback", async (req, res) => {
 });
 
 authRouter.get("/me", authMiddleware, (req, res) => {
-  const { id, email, name, avatar_url } = req.user;
-  res.json({ id, email, name, avatar_url });
+  const { id, email, name, avatar_url, theme } = req.user;
+  res.json({ id, email, name, avatar_url, theme });
+});
+
+const THEMES = ["system", "light", "dark"];
+
+authRouter.put("/theme", authMiddleware, async (req, res) => {
+  const { theme } = req.body;
+  if (!THEMES.includes(theme)) {
+    return res.status(400).json({ error: "Некорректная тема" });
+  }
+  await pool.query(`UPDATE users SET theme = $1 WHERE id = $2`, [theme, req.user.id]);
+  res.json({ theme });
 });

@@ -3,6 +3,7 @@ import { pool } from "../db.js";
 import { isValidWallet, sharedWalletNames } from "../wallets.js";
 import { appendExpenseRow, updateExpenseRow, deleteExpenseRow } from "../services/sheets.js";
 import { parseReceiptFromImage } from "../services/parseReceipt.js";
+import { tryLogScan, DAILY_SCAN_LIMIT } from "../services/receiptScans.js";
 
 export const expensesRouter = Router();
 
@@ -89,6 +90,13 @@ expensesRouter.post("/scan", async (req, res) => {
   if (!match) {
     return res.status(400).json({ error: "Некорректное изображение" });
   }
+  const allowed = await tryLogScan(req.user.id);
+  if (!allowed) {
+    return res.status(429).json({
+      error: `Лимит ${DAILY_SCAN_LIMIT} фото в сутки исчерпан — попробуй завтра`,
+    });
+  }
+
   const [, mediaType, base64Data] = match;
   try {
     const proposal = await parseReceiptFromImage(base64Data, mediaType);

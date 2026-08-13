@@ -4,6 +4,7 @@ import { getToken } from "../auth";
 import { getCategoryIcon } from "../categoryIcons";
 import CategoryGlyph from "./CategoryGlyph";
 import { haptic, hapticHeavy } from "../haptics";
+import { catIconVars } from "../catIconVars";
 
 const CANDIDATE_MIME_TYPES = [
   "audio/webm;codecs=opus",
@@ -376,7 +377,7 @@ export default function VoiceRecorder({ onSaved, onManualAdd, onScanned }) {
               — Сегодня
             </div>
             <div className="confirm-row">
-              <span className="category-icon" style={{ background: icon.bg, color: icon.fg }}>
+              <span className="category-icon" style={catIconVars(icon.bg, icon.fg)}>
                 <CategoryGlyph emoji={icon.emoji} size={20} />
               </span>
               <div className="confirm-meta">

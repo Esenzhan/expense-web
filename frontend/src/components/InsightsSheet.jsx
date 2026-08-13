@@ -5,6 +5,7 @@ import { getWalletIcon } from "../wallets";
 import { fetchCategoryLimits, setCategoryLimit, deleteCategoryLimit } from "../api";
 import CategoryGlyph from "./CategoryGlyph";
 import InsightsChart from "./InsightsChart";
+import { catIconVars } from "../catIconVars";
 import { useSwipeDismiss } from "../sheetGestures";
 import { formatPeriodLabel } from "../insights";
 
@@ -111,7 +112,7 @@ export default function InsightsSheet({ period, insights: data, wallet, walletBa
           <div className="wallet-chip">
             <span
               className="wallet-chip-icon"
-              style={wallet ? { background: getWalletIcon(wallet).bg, color: getWalletIcon(wallet).fg } : undefined}
+              style={wallet ? catIconVars(getWalletIcon(wallet).bg, getWalletIcon(wallet).fg) : undefined}
             >
               <CategoryGlyph emoji={wallet ? getWalletIcon(wallet).emoji : "💳"} size={20} />
             </span>
@@ -185,7 +186,9 @@ export default function InsightsSheet({ period, insights: data, wallet, walletBa
                 className="insights-card"
                 style={
                   biggestIcon
-                    ? { background: `linear-gradient(135deg, ${biggestIcon.bg}, var(--surface-soft))` }
+                    ? {
+                        background: `linear-gradient(135deg, color-mix(in srgb, ${biggestIcon.fg} 22%, var(--surface-soft)), var(--surface-soft))`,
+                      }
                     : undefined
                 }
               >
@@ -194,7 +197,7 @@ export default function InsightsSheet({ period, insights: data, wallet, walletBa
                 </div>
                 {data.biggestExpense ? (
                   <>
-                    <span className="insights-card-icon-badge" style={{ background: "#fff", color: biggestIcon.fg }}>
+                    <span className="insights-card-icon-badge" style={catIconVars("#fff", biggestIcon.fg)}>
                       <CategoryGlyph emoji={biggestIcon.emoji} size={20} />
                     </span>
                     <div className="insights-card-sub">{data.biggestExpense.category}</div>
@@ -267,7 +270,7 @@ export default function InsightsSheet({ period, insights: data, wallet, walletBa
                   return (
                     <div className="category-limit-row">
                       <div className="category-limit-body total">
-                        <span className="category-icon" style={{ background: walletIcon.bg, color: walletIcon.fg }}>
+                        <span className="category-icon" style={catIconVars(walletIcon.bg, walletIcon.fg)}>
                           <CategoryGlyph emoji={walletIcon.emoji} size={20} />
                         </span>
                         <span className="category-limit-text">
@@ -328,7 +331,7 @@ export default function InsightsSheet({ period, insights: data, wallet, walletBa
                               setCategoryLimitDraft(limit ? String(limit) : "");
                             }}
                           >
-                            <span className="category-icon" style={{ background: cat.bg, color: cat.fg }}>
+                            <span className="category-icon" style={catIconVars(cat.bg, cat.fg)}>
                               <CategoryGlyph emoji={cat.emoji} size={18} />
                             </span>
                             <span className="category-limit-text">

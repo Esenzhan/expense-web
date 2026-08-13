@@ -1,6 +1,7 @@
 import { useEffect, useRef } from "react";
 import CategoryGlyph from "./CategoryGlyph";
 import { haptic } from "../haptics";
+import { catIconVars } from "../catIconVars";
 
 // Drag past this and releasing deletes; below it the row springs back.
 const COMMIT_DISTANCE = 96;
@@ -140,7 +141,7 @@ export default function ExpenseRow({ expense, icon, readonly, onSelect, onDelete
         ref={rowRef}
         onClick={handleClick}
       >
-        <span className="category-icon" style={{ background: icon.bg, color: icon.fg }}>
+        <span className="category-icon" style={catIconVars(icon.bg, icon.fg)}>
           <CategoryGlyph emoji={icon.emoji} size={20} />
         </span>
         <div className="meta">

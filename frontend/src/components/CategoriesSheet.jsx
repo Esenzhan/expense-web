@@ -4,6 +4,7 @@ import { listWallets } from "../wallets";
 import { haptic, hapticHeavy } from "../haptics";
 import { useSwipeDismiss } from "../sheetGestures";
 import CategoryGlyph from "./CategoryGlyph";
+import { catIconVars } from "../catIconVars";
 
 export default function CategoriesSheet({ initialWallet, onClose, onAdd, onEdit, onDelete }) {
   const sheetRef = useRef(null);
@@ -72,7 +73,7 @@ export default function CategoriesSheet({ initialWallet, onClose, onAdd, onEdit,
         <div className="cats-list">
           {categories.map((cat) => (
             <div className="cat-row" key={cat.name}>
-              <span className="category-icon" style={{ background: cat.bg, color: cat.fg }}>
+              <span className="category-icon" style={catIconVars(cat.bg, cat.fg)}>
                 <CategoryGlyph emoji={cat.emoji} size={20} />
               </span>
               <span className="cat-name">{cat.name}</span>

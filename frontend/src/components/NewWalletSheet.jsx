@@ -3,6 +3,7 @@ import { createWallet, updateWallet, deleteWallet } from "../api";
 import { haptic, hapticHeavy } from "../haptics";
 import { useSwipeDismiss } from "../sheetGestures";
 import CategoryGlyph from "./CategoryGlyph";
+import { catIconVars } from "../catIconVars";
 
 const PALETTE = [
   { bg: "#e9e9ec", fg: "#3a3a40" },
@@ -125,7 +126,7 @@ export default function NewWalletSheet({ initial, onClose, onSaved, onDeleted })
         <div className="newcat-name-row">
           <span
             className="category-icon"
-            style={emoji ? { background: color.bg, color: color.fg } : { background: "#e9e9ec", color: "#5b5b63" }}
+            style={emoji ? catIconVars(color.bg, color.fg) : { background: "var(--surface-soft)", color: "var(--ink-soft)" }}
           >
             {emoji ? <CategoryGlyph emoji={emoji} size={20} /> : "⃠"}
           </span>
@@ -147,7 +148,7 @@ export default function NewWalletSheet({ initial, onClose, onSaved, onDeleted })
                 <button
                   key={icon}
                   className={`newcat-icon ${emoji === icon ? "picked" : ""}`}
-                  style={{ background: color.bg }}
+                  style={{ "--cat-bg": color.bg }}
                   onClick={() => {
                     haptic();
                     setEmoji(icon);

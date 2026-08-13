@@ -3,6 +3,7 @@ import { listWallets } from "../wallets";
 import { haptic } from "../haptics";
 import { useSwipeDismiss } from "../sheetGestures";
 import CategoryGlyph from "./CategoryGlyph";
+import { catIconVars } from "../catIconVars";
 
 // «Счета»: pick the wallet the whole main screen is scoped to, add new ones,
 // or edit an existing one via the pencil.
@@ -60,7 +61,7 @@ export default function WalletsSheet({ totals, selected, onSelect, onAdd, onEdit
               key={wallet.name}
               onClick={() => choose(wallet.name)}
             >
-              <span className="category-icon" style={{ background: wallet.bg, color: wallet.fg }}>
+              <span className="category-icon" style={catIconVars(wallet.bg, wallet.fg)}>
                 <CategoryGlyph emoji={wallet.emoji} size={20} />
               </span>
               <span className="cat-name">{wallet.name}</span>

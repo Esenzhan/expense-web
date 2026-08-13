@@ -4,6 +4,7 @@ import { getCategoryIcon } from "../categoryIcons";
 import { almaty } from "../insights";
 import CategoryGlyph from "./CategoryGlyph";
 import { useSwipeDismiss } from "../sheetGestures";
+import { catIconVars } from "../catIconVars";
 
 const SEARCH_DEBOUNCE_MS = 300;
 const MIN_QUERY_LENGTH = 1;
@@ -95,7 +96,7 @@ export default function SearchSheet({ wallet, currentUserId, onSelect, onClose }
                     key={expense.id}
                     onClick={() => !readonly && onSelect(expense)}
                   >
-                    <span className="category-icon" style={{ background: icon.bg, color: icon.fg }}>
+                    <span className="category-icon" style={catIconVars(icon.bg, icon.fg)}>
                       <CategoryGlyph emoji={icon.emoji} size={18} />
                     </span>
                     <span className="search-result-text">
