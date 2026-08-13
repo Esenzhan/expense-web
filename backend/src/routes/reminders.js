@@ -107,10 +107,17 @@ remindersRouter.post("/tick", async (req, res) => {
   }
 
   const { date, time, weekday } = almatyNow();
+  // ?force=1 skips the once-a-day dedup — for manually re-testing delivery
+  // the same calendar day, still gated by the same secret as the rest of
+  // /tick, and still respects enabled/day/time.
+  const force = req.query.force === "1";
   const { rows: due } = await pool.query(
-    `SELECT user_id, text FROM reminder_settings
-     WHERE enabled = true AND $1 = ANY(days) AND time <= $2
-       AND (last_sent_date IS NULL OR last_sent_date <> $3::date)`,
+    force
+      ? `SELECT user_id, text FROM reminder_settings
+         WHERE enabled = true AND $1 = ANY(days) AND time <= $2`
+      : `SELECT user_id, text FROM reminder_settings
+         WHERE enabled = true AND $1 = ANY(days) AND time <= $2
+           AND (last_sent_date IS NULL OR last_sent_date <> $3::date)`,
     [weekday, time, date]
   );
 
