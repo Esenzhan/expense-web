@@ -54,8 +54,19 @@ export function useSwipeDismiss(sheetRef, onClose) {
       const dy = event.touches[0].clientY - state.startY;
       if (!state.pulling) {
         // Horizontal intent (e.g. the category carousel) or an internal
-        // scroll — stand down for this touch
+        // scroll — stand down for this touch and let the sheet handle it
+        // natively.
         if (dy < -4 || el.scrollTop > 0 || Math.abs(dx) > Math.abs(dy)) {
+          // ...unless there's nothing to actually scroll (a short sheet
+          // like Wallets/New wallet, content shorter than the 92vh card).
+          // An un-prevented upward drag then has no internal scroll to
+          // consume it, and iOS resolves it by scrolling the nearest
+          // scrollable ancestor it CAN find — the list behind the sheet —
+          // fixed backdrop or not. Only for upward/vertical drags: a
+          // horizontal one must stay untouched for carousels.
+          if (dy < -4 && el.scrollHeight <= el.clientHeight && Math.abs(dx) <= Math.abs(dy)) {
+            event.preventDefault();
+          }
           state.armed = false;
           return;
         }
