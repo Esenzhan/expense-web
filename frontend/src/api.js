@@ -93,6 +93,24 @@ export async function fetchWalletTotals() {
   return res.json();
 }
 
+export async function fetchWalletBalances() {
+  const res = await apiFetch(`/api/wallet-balances`);
+  return res.json();
+}
+
+export async function setWalletBalance(wallet, amount) {
+  const res = await apiFetch(`/api/wallet-balances/${encodeURIComponent(wallet)}`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ amount }),
+  });
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    throw new Error(body.error || "Не удалось сохранить баланс");
+  }
+  return res.json();
+}
+
 export async function fetchWallets() {
   const res = await apiFetch(`/api/wallets`);
   return res.json();

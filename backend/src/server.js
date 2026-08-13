@@ -10,6 +10,7 @@ import { statsRouter } from "./routes/stats.js";
 import { categoriesRouter } from "./routes/categories.js";
 import { walletsRouter } from "./routes/wallets.js";
 import { categoryLimitsRouter } from "./routes/categoryLimits.js";
+import { walletBalancesRouter } from "./routes/walletBalances.js";
 import { remindersRouter } from "./routes/reminders.js";
 import { authRouter } from "./routes/auth.js";
 import { authMiddleware, verifyToken } from "./middleware/auth.js";
@@ -29,6 +30,7 @@ app.use("/api/stats", authMiddleware, statsRouter);
 app.use("/api/categories", categoriesRouter);
 app.use("/api/wallets", walletsRouter);
 app.use("/api/category-limits", authMiddleware, categoryLimitsRouter);
+app.use("/api/wallet-balances", authMiddleware, walletBalancesRouter);
 // Not wrapped in authMiddleware at this level — /tick is called by the
 // GitHub Actions cron (no user session), the rest apply authMiddleware
 // themselves per-route (see routes/reminders.js).

@@ -241,6 +241,33 @@ export async function initSchema() {
       ON category_limits (wallet, category, user_id) WHERE user_id IS NOT NULL;
   `);
 
+  // "Money actually on this account" — a user-entered anchor (base_amount at
+  // base_at), not a running total mutated on every expense CRUD (that would
+  // need matching code in create/edit/delete/undo/offline-sync/bot-insert,
+  // all separate paths into `expenses`). Instead the live balance is always
+  // computed as base_amount minus the sum of this wallet's expenses created
+  // AFTER base_at (see routes/walletBalances.js) — self-consistent no matter
+  // how those expenses got there. Same shared/private split as
+  // category_limits above, for the same reason (Личные is one row per
+  // account, the rest are one shared row).
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS wallet_balances (
+      id SERIAL PRIMARY KEY,
+      wallet TEXT NOT NULL REFERENCES wallets(name) ON DELETE CASCADE ON UPDATE CASCADE,
+      user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+      base_amount NUMERIC NOT NULL,
+      base_at TIMESTAMPTZ NOT NULL DEFAULT now()
+    );
+  `);
+  await pool.query(`
+    CREATE UNIQUE INDEX IF NOT EXISTS wallet_balances_shared_uidx
+      ON wallet_balances (wallet) WHERE user_id IS NULL;
+  `);
+  await pool.query(`
+    CREATE UNIQUE INDEX IF NOT EXISTS wallet_balances_private_uidx
+      ON wallet_balances (wallet, user_id) WHERE user_id IS NOT NULL;
+  `);
+
   // Daily reminder ("did you forget to log an expense") settings — one row
   // per account. days uses ISO weekday numbers (1=Пн..7=Вс) to match "Первый
   // день недели: Понедельник" elsewhere in the app. last_sent_date dedupes

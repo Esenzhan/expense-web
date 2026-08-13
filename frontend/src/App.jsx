@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { fetchExpenses, fetchExpensesRange, fetchWalletTotals, fetchCategories, fetchWallets, fetchMe, warmBackend, createExpense, deleteExpense, deleteCategory } from "./api";
+import { fetchExpenses, fetchExpensesRange, fetchWalletTotals, fetchWalletBalances, setWalletBalance, fetchCategories, fetchWallets, fetchMe, warmBackend, createExpense, deleteExpense, deleteCategory } from "./api";
 import { getToken, setToken } from "./auth";
 import { listPendingExpenses, syncPendingExpenses, hasPendingExpenses, removePendingExpense } from "./offlineQueue";
 import { computeInsights, periodRange, formatPeriodLabel } from "./insights";
@@ -20,6 +20,7 @@ import WalletsSheet from "./components/WalletsSheet";
 import NewWalletSheet from "./components/NewWalletSheet";
 import PeriodPickerSheet from "./components/PeriodPickerSheet";
 import SearchSheet from "./components/SearchSheet";
+import AccountBalanceRow from "./components/AccountBalanceRow";
 
 const CACHE_KEY = "traty-cache-v4";
 
@@ -131,6 +132,7 @@ export default function App() {
   const [periodPickerOpen, setPeriodPickerOpen] = useState(false);
   const [expenses, setExpenses] = useState([]);
   const [walletTotals, setWalletTotals] = useState([]);
+  const [walletBalances, setWalletBalances] = useState([]);
   const [insights, setInsights] = useState(() => computeInsights({ period: "month", rows: [] }));
   const [insightsOpen, setInsightsOpen] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
@@ -444,14 +446,16 @@ export default function App() {
     if (wallet) expenseParams.wallet = wallet;
     const { start, end } = periodRange(currentPeriod);
     try {
-      const [exp, wallets, insightsRows] = await Promise.all([
+      const [exp, wallets, insightsRows, balances] = await Promise.all([
         fetchExpenses(expenseParams),
         fetchWalletTotals(),
         fetchExpensesRange(start, end, wallet),
+        fetchWalletBalances(),
       ]);
       const fresh = { exp, wallets, insightsRows };
       rawRef.current = fresh;
       dataCacheRef.current.set(cacheKey, fresh);
+      setWalletBalances(balances);
       if (user) saveCache({ expenses: exp, walletTotals: wallets, insightsRows, wallet }, user.email);
     } catch {
       // Offline — nothing fresh from the server, keep the last known data
@@ -520,6 +524,27 @@ export default function App() {
     : walletTotals.reduce((sum, w) => sum + Number(w.total), 0);
   const chipIcon = selectedWallet ? getWalletIcon(selectedWallet) : null;
   const customPeriodValue = customRange ? `custom:${customRange.from}:${customRange.to}` : null;
+
+  // "Деньги на счету" — the real bank balance, separate from walletBalance
+  // above (which is spend-in-period, not what's left). null = not set up
+  // for the relevant wallet(s) yet. Selecting "Все счета" sums whatever
+  // wallets DO have a balance configured — editing is disabled there since
+  // there's no single wallet to write the correction back to.
+  const accountBalanceEntry = selectedWallet
+    ? walletBalances.find((b) => b.wallet === selectedWallet)
+    : null;
+  const accountBalance = selectedWallet
+    ? accountBalanceEntry
+      ? Number(accountBalanceEntry.current_balance)
+      : null
+    : walletBalances.length
+    ? walletBalances.reduce((sum, b) => sum + Number(b.current_balance), 0)
+    : null;
+
+  async function saveAccountBalance(amount) {
+    await setWalletBalance(selectedWallet, amount);
+    setWalletBalances(await fetchWalletBalances());
+  }
 
   return (
     <div className={`app ${insightsOpen ? "app-behind" : ""}`}>
@@ -609,6 +634,11 @@ export default function App() {
           </div>
         </div>
         <div className="summary-total">−{Number(insights.total).toLocaleString("ru-RU")} ₸</div>
+        <AccountBalanceRow
+          balance={accountBalance}
+          editable={!!selectedWallet}
+          onSave={saveAccountBalance}
+        />
         <InsightsButton onOpen={() => setInsightsOpen(true)} />
       </div>
 
