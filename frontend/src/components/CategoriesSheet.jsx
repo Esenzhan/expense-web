@@ -5,7 +5,7 @@ import { haptic, hapticHeavy } from "../haptics";
 import { useSwipeDismiss } from "../sheetGestures";
 import CategoryGlyph from "./CategoryGlyph";
 
-export default function CategoriesSheet({ initialWallet, onClose, onAdd, onDelete }) {
+export default function CategoriesSheet({ initialWallet, onClose, onAdd, onEdit, onDelete }) {
   const sheetRef = useRef(null);
   useSwipeDismiss(sheetRef, onClose);
 
@@ -75,6 +75,18 @@ export default function CategoriesSheet({ initialWallet, onClose, onAdd, onDelet
                 <CategoryGlyph emoji={cat.emoji} size={20} />
               </span>
               <span className="cat-name">{cat.name}</span>
+              <button
+                className="wallet-edit"
+                aria-label="Редактировать категорию"
+                onClick={() => {
+                  haptic();
+                  onEdit(activeWallet, cat);
+                }}
+              >
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M15.5 5.5 18.5 8.5 8 19l-4 1 1-4L15.5 5.5Z" />
+                </svg>
+              </button>
               {cat.name !== "Прочее" && (
                 <button
                   className="cat-delete"

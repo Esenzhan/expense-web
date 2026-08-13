@@ -1781,6 +1781,10 @@ body {
   flex: 1;
 }
 
+.newcat-name-input:disabled {
+  opacity: 0.55;
+}
+
 .newcat-suggestions-label {
   color: var(--ink-soft);
   font-size: 13px;

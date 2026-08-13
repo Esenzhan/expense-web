@@ -150,6 +150,22 @@ export async function createCategory(payload) {
   return res.json();
 }
 
+export async function updateCategory(wallet, name, payload) {
+  const res = await apiFetch(
+    `/api/categories/${encodeURIComponent(wallet)}/${encodeURIComponent(name)}`,
+    {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    }
+  );
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    throw new Error(body.error || "Не удалось обновить категорию");
+  }
+  return res.json();
+}
+
 export async function deleteCategory(wallet, name) {
   const res = await apiFetch(
     `/api/categories/${encodeURIComponent(wallet)}/${encodeURIComponent(name)}`,

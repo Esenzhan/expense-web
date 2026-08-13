@@ -1,5 +1,5 @@
 import { useRef, useState } from "react";
-import { createCategory } from "../api";
+import { createCategory, updateCategory } from "../api";
 import { haptic, hapticHeavy } from "../haptics";
 import { useSwipeDismiss } from "../sheetGestures";
 import CategoryGlyph from "./CategoryGlyph";
@@ -62,18 +62,27 @@ function suggestionsFor(name) {
   return found.slice(0, 10);
 }
 
-export default function NewCategorySheet({ wallet, onClose, onCreated }) {
+// `initial` (existing category {name, emoji, bg, fg}) switches this into
+// edit mode: color/icon only, name is locked — renaming isn't offered here.
+// Expenses reference a category by name and look up its look-up-by-name
+// bg/fg/emoji at render time (see categoryIcons.js), so saving here updates
+// every expense that uses this category everywhere in the app, automatically.
+export default function NewCategorySheet({ wallet, initial, onClose, onCreated }) {
   const sheetRef = useRef(null);
   useSwipeDismiss(sheetRef, onClose);
 
-  const [name, setName] = useState("");
-  const [emoji, setEmoji] = useState("");
-  const [colorIndex, setColorIndex] = useState(1);
+  const [name, setName] = useState(initial?.name || "");
+  const [emoji, setEmoji] = useState(initial?.emoji || "");
+  const [colorIndex, setColorIndex] = useState(() => {
+    if (!initial) return 1;
+    const found = PALETTE.findIndex((p) => p.bg === initial.bg && p.fg === initial.fg);
+    return found === -1 ? 0 : found;
+  });
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
 
   const color = PALETTE[colorIndex];
-  const suggestions = suggestionsFor(name);
+  const suggestions = initial ? [] : suggestionsFor(name);
 
   function pickEmoji(icon) {
     haptic();
@@ -81,7 +90,7 @@ export default function NewCategorySheet({ wallet, onClose, onCreated }) {
   }
 
   async function handleSave() {
-    if (!name.trim()) {
+    if (!initial && !name.trim()) {
       setError("Введи название категории");
       return;
     }
@@ -92,7 +101,11 @@ export default function NewCategorySheet({ wallet, onClose, onCreated }) {
     setSaving(true);
     setError("");
     try {
-      await createCategory({ name: name.trim(), emoji, bg: color.bg, fg: color.fg, wallet });
+      if (initial) {
+        await updateCategory(wallet, initial.name, { emoji, bg: color.bg, fg: color.fg });
+      } else {
+        await createCategory({ name: name.trim(), emoji, bg: color.bg, fg: color.fg, wallet });
+      }
       hapticHeavy();
       onCreated();
     } catch (err) {
@@ -108,7 +121,7 @@ export default function NewCategorySheet({ wallet, onClose, onCreated }) {
           <button className="icon-button" onClick={onClose} aria-label="Закрыть">
             ✕
           </button>
-          <span className="cats-title">Новая категория</span>
+          <span className="cats-title">{initial ? "Редактировать категорию" : "Новая категория"}</span>
           <span className="icon-button-spacer" />
         </div>
 
@@ -131,6 +144,7 @@ export default function NewCategorySheet({ wallet, onClose, onCreated }) {
             placeholder="Название категории"
             value={name}
             maxLength={40}
+            disabled={!!initial}
             onChange={(event) => setName(event.target.value)}
           />
         </div>

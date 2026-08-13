@@ -64,6 +64,34 @@ categoriesRouter.post("/", authMiddleware, async (req, res) => {
   }
 });
 
+// Color/icon only — renaming isn't offered here. Expenses reference a
+// category by name only (expenses.category is plain text, no bg/fg/emoji
+// duplicated per row), so every past and future expense picks up the new
+// look automatically via the same (wallet, name) lookup the frontend
+// already does — nothing to migrate.
+categoriesRouter.put("/:wallet/:name", authMiddleware, async (req, res) => {
+  const { wallet, name } = req.params;
+  const { emoji, bg, fg } = req.body;
+
+  if (typeof emoji !== "string" || !emoji || emoji.length > 8) {
+    return res.status(400).json({ error: "Выбери иконку" });
+  }
+  const isColor = (v) => typeof v === "string" && /^#[0-9a-fA-F]{6}$/.test(v);
+  if (!isColor(bg) || !isColor(fg)) {
+    return res.status(400).json({ error: "Некорректный цвет" });
+  }
+
+  const { rows } = await pool.query(
+    `UPDATE categories SET emoji = $1, bg = $2, fg = $3
+     WHERE wallet = $4 AND name = $5
+     RETURNING name, emoji, bg, fg, wallet`,
+    [emoji, bg, fg, wallet, name]
+  );
+  if (!rows.length) return res.status(404).json({ error: "Категория не найдена" });
+  invalidateCategoryCache();
+  res.json(rows[0]);
+});
+
 categoriesRouter.delete("/:wallet/:name", authMiddleware, async (req, res) => {
   // "Прочее" is the fallback for voice parsing and old expenses — keep it
   if (req.params.name === "Прочее") {

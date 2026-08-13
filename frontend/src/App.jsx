@@ -140,6 +140,7 @@ export default function App() {
   const [categoriesOpen, setCategoriesOpen] = useState(false);
   const [remindersOpen, setRemindersOpen] = useState(false);
   const [newCategoryWallet, setNewCategoryWallet] = useState(null);
+  const [editingCategory, setEditingCategory] = useState(null);
   const [walletsOpen, setWalletsOpen] = useState(false);
   const [newWalletOpen, setNewWalletOpen] = useState(false);
   const [editingWallet, setEditingWallet] = useState(null);
@@ -678,6 +679,7 @@ export default function App() {
           initialWallet={selectedWallet}
           onClose={() => setCategoriesOpen(false)}
           onAdd={(wallet) => setNewCategoryWallet(wallet)}
+          onEdit={(wallet, cat) => setEditingCategory({ wallet, ...cat })}
           onDelete={async (wallet, name) => {
             await deleteCategory(wallet, name);
             await reloadCategories();
@@ -685,13 +687,18 @@ export default function App() {
         />
       )}
 
-      {newCategoryWallet && (
+      {(newCategoryWallet || editingCategory) && (
         <NewCategorySheet
-          wallet={newCategoryWallet}
-          onClose={() => setNewCategoryWallet(null)}
+          wallet={editingCategory?.wallet || newCategoryWallet}
+          initial={editingCategory}
+          onClose={() => {
+            setNewCategoryWallet(null);
+            setEditingCategory(null);
+          }}
           onCreated={async () => {
             await reloadCategories();
             setNewCategoryWallet(null);
+            setEditingCategory(null);
           }}
         />
       )}
