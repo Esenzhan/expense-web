@@ -420,6 +420,43 @@ Always Free). `.env` и `credentials.json` — только на VM, в git не
   transitionend. Скролл фона глушится НА УРОВНЕ КАСАНИЙ (preventDefault на
   затемнении + overscroll-behavior) — position:fixed на body ломает iOS
   (шторка всплывает над низом), overflow:hidden сбрасывает скролл.
+  Full-screen СТРАНИЦЫ (не шторки) — `SettingsSheet`/`RemindersSheet` —
+  свайпом ВПРАВО через `useSwipeDismissRight` (тот же файл, горизонтальный
+  аналог), плюс кнопка «‹» тоже теперь проигрывает анимацию отъезда вправо
+  перед вызовом `onClose` (было мгновенное размонтирование, добавлено
+  2026-08-13).
+- **Напоминания** (добавлено 2026-08-13, `RemindersSheet.jsx` +
+  `backend/src/routes/reminders.js`): реальные ежедневные push-уведомления
+  («не забыл внести расходы»), UI 1:1 с референсом Qalta (тумблер, дни
+  недели Пн–Вс, время, свой текст). Настоящий Web Push (VAPID) — на iOS это
+  работает ТОЛЬКО для PWA, установленного на экран «Домой» (обычная вкладка
+  Safari не может), `RemindersSheet` это проверяет
+  (`push.js` → `isStandalone()`) и показывает понятную подсказку вместо
+  тихого отказа. `Notification.requestPermission()` вызывается ПЕРВЫМ
+  действием в обработчике тумблера (без await до него) — iOS требует прямой
+  синхронной связи с жестом пользователя.
+  - Таблицы: `reminder_settings` (по одной строке на юзера — enabled/days
+    `SMALLINT[]` 1=Пн..7=Вс/time "HH:MM"/text/`last_sent_date` для дедупа),
+    `push_subscriptions` (endpoint/p256dh/auth, может быть несколько на
+    юзера — по устройству).
+  - **Render free tier засыпает** — внутренний `setInterval` не сработает,
+    пока бэкенд спит. Будильник — GitHub Actions `.github/workflows/
+    reminders.yml`, cron `*/10 * * * *`, дёргает
+    `POST /api/reminders/tick?key=$REMINDER_CRON_SECRET` (секрет одинаковый
+    в GitHub repo secrets и в env Render). Тик сравнивает время Алматы
+    (UTC+5 круглый год, без DST — просто сдвиг `Date.now()+5ч`, Intl не
+    нужен) с сохранённым `time`, шлёт если `time <= сейчас` и сегодня ещё не
+    слали — терпит опоздания/повторные тики без дублей.
+  - **Render — env переменные добавлены вручную пользователем** (нет
+    CLI/API-доступа к Render из сессии, в отличие от Vercel/GitHub, которые
+    настраиваются самим Claude Code): `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`,
+    `VAPID_SUBJECT`, `REMINDER_CRON_SECRET`. Если после деплоя `/api/
+    reminders/tick` отвечает 401 или push не приходит — первым делом
+    проверить, что эти 4 переменные реально стоят на Render (самое вероятное
+    место, где ручной шаг могли пропустить).
+  - Push НЕЛЬЗЯ протестировать в браузер-пейне (APNs не эмулируется, см.
+    «Как тестировать без телефона» ниже) — только на реальном iPhone,
+    приложение должно быть добавлено на «Домой».
 - **Офлайн-режим** (новое, весь стек продуман под «убил PWA в самолётном
   режиме → открыл → пользуется»):
   - `public/sw.js` кэширует HTML-shell network-first (иначе редеплой залипает
@@ -627,6 +664,13 @@ Always Free). `.env` и `credentials.json` — только на VM, в git не
    независимые системы лимитов, не синхронизированы (см. «Лимиты по
    категориям» выше). Не баг, но если пользователь захочет их объединить —
    решить, какая из двух остаётся источником правды.
+9. Напоминания (добавлено 2026-08-13, см. «Экраны и фичи» выше) — код и
+   инфраструктура задеплоены, но реальная доставка push на iPhone НЕ
+   подтверждена пользователем (нельзя протестировать без телефона). Если
+   пользователь скажет «уведомление не пришло» — сначала проверить, что все
+   4 env-переменные реально стоят на Render (см. выше, это был единственный
+   ручной шаг, который Claude Code не мог сделать сам), потом — что GitHub
+   Actions тик реально бегает (`gh run list`) и возвращает не 401.
 
 ## Env (см. .env.example в каждой папке)
 
@@ -634,8 +678,14 @@ Always Free). `.env` и `credentials.json` — только на VM, в git не
   `DEEPGRAM_API_KEY`, `FRONTEND_URL` = `https://expense-web-eosin.vercel.app`
   (со схемой, без слэша — иначе CORS!), `PORT`, плюс с добавлением логина:
   `GOOGLE_OAUTH_CLIENT_ID/SECRET/REDIRECT_URI`, `ALLOWED_EMAILS`,
-  `JWT_SECRET`, `TOKEN_ENCRYPTION_KEY` (см. «Мульти-аккаунт» выше).
-- Frontend (Vercel): `VITE_API_URL` = `https://expense-web-peo6.onrender.com`.
+  `JWT_SECRET`, `TOKEN_ENCRYPTION_KEY` (см. «Мульти-аккаунт» выше), плюс с
+  добавлением напоминаний: `VAPID_PUBLIC_KEY/PRIVATE_KEY/SUBJECT`,
+  `REMINDER_CRON_SECRET` (см. «Напоминания» выше).
+- Frontend (Vercel): `VITE_API_URL` = `https://expense-web-peo6.onrender.com`,
+  `VITE_VAPID_PUBLIC_KEY` (публичный, безопасно светить в бандле — см.
+  предупреждение `vercel env add`, это ожидаемо).
+- GitHub repo secret: `REMINDER_CRON_SECRET` (тот же, что на Render) — для
+  `.github/workflows/reminders.yml`.
 - Bot (только на Oracle VM, `bot/.env.example`): `TELEGRAM_TOKEN`,
   `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, `USER1_TELEGRAM_ID/SHEET_ID`,
   `USER2_TELEGRAM_ID/SHEET_ID`, `GOOGLE_CREDENTIALS_FILE`, `API_BASE_URL`,
