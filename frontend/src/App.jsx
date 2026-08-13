@@ -236,12 +236,19 @@ export default function App() {
     const params = new URLSearchParams(window.location.search);
     const urlToken = params.get("token");
     const urlError = params.get("authError");
+    const urlOpen = params.get("open");
     if (urlToken) setToken(urlToken);
     if (urlError) setAuthError(urlError);
-    if (urlToken || urlError) {
+    // Deep link for Shortcuts/Action Button, e.g. "?open=wallets" — the
+    // state is set now regardless of auth (harmless if !user, since
+    // LoginScreen renders instead below), so it's already true by the time
+    // the main screen mounts and shows the sheet immediately after login.
+    if (urlOpen === "wallets") setWalletsOpen(true);
+    if (urlToken || urlError || urlOpen) {
       const url = new URL(window.location.href);
       url.searchParams.delete("token");
       url.searchParams.delete("authError");
+      url.searchParams.delete("open");
       window.history.replaceState({}, "", url);
     }
 
