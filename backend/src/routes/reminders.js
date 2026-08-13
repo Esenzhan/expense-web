@@ -118,7 +118,7 @@ remindersRouter.post("/tick", async (req, res) => {
       : `SELECT user_id, text FROM reminder_settings
          WHERE enabled = true AND $1 = ANY(days) AND time <= $2
            AND (last_sent_date IS NULL OR last_sent_date <> $3::date)`,
-    [weekday, time, date]
+    force ? [weekday, time] : [weekday, time, date]
   );
 
   let sent = 0;
