@@ -113,7 +113,7 @@ export default function InsightsSheet({ period, insights: data, wallet, walletBa
               className="wallet-chip-icon"
               style={wallet ? { background: getWalletIcon(wallet).bg, color: getWalletIcon(wallet).fg } : undefined}
             >
-              {wallet ? getWalletIcon(wallet).emoji : "💳"}
+              <CategoryGlyph emoji={wallet ? getWalletIcon(wallet).emoji : "💳"} size={20} />
             </span>
             <div>
               <div className="wallet-chip-name">{wallet || "Все счета"}</div>
@@ -268,7 +268,7 @@ export default function InsightsSheet({ period, insights: data, wallet, walletBa
                     <div className="category-limit-row">
                       <div className="category-limit-body total">
                         <span className="category-icon" style={{ background: walletIcon.bg, color: walletIcon.fg }}>
-                          {walletIcon.emoji}
+                          <CategoryGlyph emoji={walletIcon.emoji} size={20} />
                         </span>
                         <span className="category-limit-text">
                           <span className="category-limit-head">

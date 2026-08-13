@@ -6,6 +6,7 @@ import { computeInsights, periodRange, formatPeriodLabel } from "./insights";
 import { hydrateCategories } from "./categoryIcons";
 import { hydrateWallets, getWalletIcon } from "./wallets";
 import { haptic } from "./haptics";
+import CategoryGlyph from "./components/CategoryGlyph";
 import LoginScreen from "./components/LoginScreen";
 import VoiceRecorder from "./components/VoiceRecorder";
 import ExpenseList from "./components/ExpenseList";
@@ -623,7 +624,7 @@ export default function App() {
             className="wallet-chip-icon"
             style={chipIcon ? { background: chipIcon.bg, color: chipIcon.fg } : undefined}
           >
-            {chipIcon ? chipIcon.emoji : "💳"}
+            <CategoryGlyph emoji={chipIcon ? chipIcon.emoji : "💳"} size={20} />
           </span>
           <div>
             <div className="wallet-chip-name">{selectedWallet || "Все счета"}</div>

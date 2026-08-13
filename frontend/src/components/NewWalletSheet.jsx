@@ -2,6 +2,7 @@ import { useRef, useState } from "react";
 import { createWallet, updateWallet, deleteWallet } from "../api";
 import { haptic, hapticHeavy } from "../haptics";
 import { useSwipeDismiss } from "../sheetGestures";
+import CategoryGlyph from "./CategoryGlyph";
 
 const PALETTE = [
   { bg: "#e9e9ec", fg: "#3a3a40" },
@@ -126,7 +127,7 @@ export default function NewWalletSheet({ initial, onClose, onSaved, onDeleted })
             className="category-icon"
             style={emoji ? { background: color.bg, color: color.fg } : { background: "#e9e9ec", color: "#5b5b63" }}
           >
-            {emoji || "⃠"}
+            {emoji ? <CategoryGlyph emoji={emoji} size={20} /> : "⃠"}
           </span>
           <input
             className="note-input newcat-name-input"
@@ -152,7 +153,7 @@ export default function NewWalletSheet({ initial, onClose, onSaved, onDeleted })
                     setEmoji(icon);
                   }}
                 >
-                  {icon}
+                  <CategoryGlyph emoji={icon} size={20} />
                 </button>
               ))}
             </div>
@@ -188,7 +189,7 @@ export default function NewWalletSheet({ initial, onClose, onSaved, onDeleted })
                       setEmoji(icon);
                     }}
                   >
-                    {icon}
+                    <CategoryGlyph emoji={icon} size={20} />
                   </button>
                 ))}
               </div>

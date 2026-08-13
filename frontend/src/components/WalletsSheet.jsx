@@ -2,6 +2,7 @@ import { useRef } from "react";
 import { listWallets } from "../wallets";
 import { haptic } from "../haptics";
 import { useSwipeDismiss } from "../sheetGestures";
+import CategoryGlyph from "./CategoryGlyph";
 
 // «Счета»: pick the wallet the whole main screen is scoped to, add new ones,
 // or edit an existing one via the pencil.
@@ -60,7 +61,7 @@ export default function WalletsSheet({ totals, selected, onSelect, onAdd, onEdit
               onClick={() => choose(wallet.name)}
             >
               <span className="category-icon" style={{ background: wallet.bg, color: wallet.fg }}>
-                {wallet.emoji}
+                <CategoryGlyph emoji={wallet.emoji} size={20} />
               </span>
               <span className="cat-name">{wallet.name}</span>
               <span className="wallet-row-total">

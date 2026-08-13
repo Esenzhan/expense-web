@@ -61,9 +61,10 @@ export default function CategoriesSheet({ initialWallet, onClose, onAdd, onEdit,
             <button
               key={w.name}
               className={`period-pill ${activeWallet === w.name ? "active" : ""}`}
+              style={{ display: "inline-flex", alignItems: "center", gap: 4 }}
               onClick={() => pickWallet(w.name)}
             >
-              {w.emoji} {w.name}
+              <CategoryGlyph emoji={w.emoji} size={14} /> {w.name}
             </button>
           ))}
         </div>
