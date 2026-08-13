@@ -405,9 +405,13 @@ export default function App() {
         baseInsightsRows.some((r) => r.user_id != null && r.user_id !== user.id));
     setHasOtherAuthor(otherAuthor);
 
+    // "Только мои" hides the other account's rows from the visible list —
+    // it must NOT shrink baseInsightsRows too: category/wallet totals and
+    // limits (computeInsights below) are shared-wallet figures, not scoped
+    // to one account, so they stay computed from the full row set
+    // regardless of this toggle.
     if (onlyMineRef.current && user) {
       baseExp = baseExp.filter((e) => e.user_id === user.id);
-      baseInsightsRows = baseInsightsRows.filter((r) => r.user_id === user.id);
     }
 
     const mergedExpenses = [...pendingForList, ...baseExp];
