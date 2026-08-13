@@ -37,7 +37,12 @@ body {
   max-width: 480px;
   margin: 0 auto;
   min-height: 100vh;
-  padding: calc(env(safe-area-inset-top) + 20px) 16px calc(env(safe-area-inset-bottom) + 150px);
+  /* Top padding reserves the same space the header used to occupy in flow
+     now that it's position: fixed (78px = its 20px padding-top + ~40px
+     button row + the 18px gap that used to sit between it and the summary
+     card) — content still starts in the same spot, it just scrolls under
+     the header instead of pushing it along. */
+  padding: calc(env(safe-area-inset-top) + 78px) 16px calc(env(safe-area-inset-bottom) + 150px);
   display: flex;
   flex-direction: column;
   gap: 18px;
@@ -51,8 +56,19 @@ body {
   border-radius: 24px;
 }
 
-/* Header */
+/* Header — fixed to the viewport like .recorder-dock at the bottom, so it
+   stays put while the list scrolls underneath instead of scrolling away
+   with it (matches the reference). Content doesn't get pushed down for it;
+   see the .app padding-top comment above. */
 .app-header {
+  position: fixed;
+  top: env(safe-area-inset-top);
+  left: 0;
+  right: 0;
+  max-width: 480px;
+  margin: 0 auto;
+  padding: 20px 16px 0;
+  z-index: 20;
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -124,6 +140,10 @@ body {
   display: flex;
   align-items: center;
   gap: 10px;
+  background: var(--surface);
+  border-radius: 18px;
+  padding: 6px 16px 6px 6px;
+  box-shadow: 0 2px 8px rgba(20, 20, 26, 0.06);
 }
 
 .wallet-chip-icon {
@@ -1958,11 +1978,10 @@ body {
   border-color: var(--ink);
 }
 
-/* Wallet chip is now a button */
+/* Wallet chip is now a button — just strip the default button chrome that
+   isn't already covered by the .wallet-chip rule above */
 button.wallet-chip {
   border: none;
-  background: none;
-  padding: 0;
   font-family: var(--font-ui);
   text-align: left;
   color: var(--ink);
