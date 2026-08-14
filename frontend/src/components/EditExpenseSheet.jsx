@@ -1,6 +1,6 @@
 import { useEffect, useLayoutEffect, useReducer, useRef, useState } from "react";
-import { createExpense, updateExpense, isNetworkError } from "../api";
-import { enqueueExpense, updatePendingExpense, removePendingExpense } from "../offlineQueue";
+import { createExpense, updateExpense } from "../api";
+import { enqueueExpense, updatePendingExpense, removePendingExpense, syncPendingExpenses } from "../offlineQueue";
 import { listCategories, getCategoryIcon } from "../categoryIcons";
 import CategoryGlyph from "./CategoryGlyph";
 import { listWallets } from "../wallets";
@@ -292,26 +292,29 @@ export default function EditExpenseSheet({
       setError("Сумма должна быть больше нуля");
       return;
     }
-    setSaving(true);
     setError("");
     const payload = { wallet, amount, category, description: note || null };
+
+    if (isNew) {
+      // Never block on the network here: queue it like the offline path
+      // always has, dismiss immediately, and let the existing background
+      // sync (App.jsx's poll/online/visibility triggers) post it — so
+      // adding several expenses back to back doesn't wait on a slow or
+      // sleeping server between each one. The row shows the same pending
+      // hourglass badge until it's actually synced.
+      const saved = enqueueExpense(payload);
+      onCommitted?.();
+      syncPendingExpenses(createExpense).then((syncedAny) => {
+        if (syncedAny) onCommitted?.();
+      });
+      dismiss(() => onSaved?.(saved));
+      return;
+    }
+
+    setSaving(true);
     try {
-      let saved;
-      if (isNew) {
-        try {
-          saved = await createExpense(payload);
-        } catch (err) {
-          if (!isNetworkError(err)) throw err;
-          // Offline: keep it on the phone and sync once we're back online —
-          // manual add shouldn't require a connection
-          saved = enqueueExpense(payload);
-        }
-      } else if (isPending) {
-        saved = updatePendingExpense(expense.id, payload);
-      } else {
-        saved = await updateExpense(expense.id, payload);
-      }
-      // Refresh the list right away so the new row is already in place
+      const saved = isPending ? updatePendingExpense(expense.id, payload) : await updateExpense(expense.id, payload);
+      // Refresh the list right away so the edited row is already in place
       // behind the sheet while it slides down, like the reference
       onCommitted?.();
       dismiss(() => onSaved?.(saved));
