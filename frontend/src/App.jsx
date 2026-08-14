@@ -84,18 +84,34 @@ function UndoTimerRing({ durationMs }) {
 // now, so it's tagged with the owning account's email — a cache written by
 // a different logged-in account (shared device) is treated as empty rather
 // than flashed on screen.
+//
+// Keyed by the same `${period}|${wallet}` string as dataCacheRef (the
+// in-session Map in App) — this is that Map's persisted mirror, so a wallet
+// visited in an earlier session paints instantly too, not just the one
+// most recently viewed. Previously this held a single flat snapshot (the
+// last-viewed wallet only), so switching to any OTHER wallet had nothing to
+// paint from and had to block on a real network round trip — offline, that
+// fetch fails in milliseconds and falls back to (wrong, stale) data
+// instantly, which is what made switching wallets look faster offline than
+// on, a working connection, where it actually waits out the request.
+// Custom date-range periods are deliberately never persisted here — the
+// key is the literal "custom:from:to" string, so exploring ranges would
+// otherwise grow this without bound over weeks of use.
 function loadCache(email) {
   try {
     const parsed = JSON.parse(localStorage.getItem(CACHE_KEY));
-    return parsed && parsed.owner === email ? parsed : {};
+    return parsed && parsed.owner === email && parsed.entries ? parsed.entries : {};
   } catch {
     return {};
   }
 }
 
-function saveCache(data, email) {
+function saveCache(cacheKey, data, email) {
+  if (cacheKey.startsWith("custom:")) return;
   try {
-    localStorage.setItem(CACHE_KEY, JSON.stringify({ ...data, owner: email }));
+    const entries = loadCache(email);
+    entries[cacheKey] = data;
+    localStorage.setItem(CACHE_KEY, JSON.stringify({ owner: email, entries }));
   } catch {
     // storage full/unavailable — fine, just skip caching
   }
@@ -221,20 +237,26 @@ export default function App() {
   // Paints straight from this account's last cached snapshot — used both
   // by the offline-first bootstrap below and, once fetchMe() actually
   // resolves, for a brand new device that had no cached session yet.
+  // Rehydrates dataCacheRef with EVERY persisted (period, wallet) entry, not
+  // just the current one, so switching to any wallet visited in an earlier
+  // session paints instantly too — see loadCache's comment.
   function applyCachedSession(me) {
-    const cached = loadCache(me.email);
+    const entries = loadCache(me.email);
+    dataCacheRef.current = new Map(Object.entries(entries));
+    const cacheKey = `${periodRef.current}|${selectedWalletRef.current || ""}`;
+    const cached = entries[cacheKey] || {};
     rawRef.current = {
-      exp: cached.expenses || [],
-      wallets: cached.walletTotals || [],
+      exp: cached.exp || [],
+      wallets: cached.wallets || [],
       insightsRows: cached.insightsRows || [],
     };
-    setExpenses(cached.expenses || []);
-    setWalletTotals(cached.walletTotals || []);
+    setExpenses(cached.exp || []);
+    setWalletTotals(cached.wallets || []);
     const pending = listPendingExpenses();
     const wallet = selectedWalletRef.current;
     const pendingForList = wallet ? pending.filter((p) => p.wallet === wallet) : pending;
     setInsights(
-      computeInsights({ period: "month", rows: [...pendingForList, ...(cached.insightsRows || [])] })
+      computeInsights({ period: periodRef.current, rows: [...pendingForList, ...(cached.insightsRows || [])] })
     );
   }
 
@@ -552,6 +574,10 @@ export default function App() {
       ]);
       const fresh = { exp, wallets, insightsRows };
       dataCacheRef.current.set(cacheKey, fresh);
+      // Persisted regardless of whether this selection is still current —
+      // it's just building up the cross-session cache for next time, same
+      // as the in-session Map above.
+      if (user) saveCache(cacheKey, fresh, user.email);
       // Discard if the wallet/period was switched away from while this was
       // in flight — a slower response for an abandoned selection (Render's
       // cold start can take tens of seconds) must not clobber rawRef with
@@ -560,7 +586,6 @@ export default function App() {
       if (wallet === selectedWalletRef.current && currentPeriod === periodRef.current) {
         rawRef.current = fresh;
         setWalletBalances(balances);
-        if (user) saveCache({ expenses: exp, walletTotals: wallets, insightsRows, wallet }, user.email);
       }
     } catch {
       // Offline — nothing fresh from the server, keep the last known data
