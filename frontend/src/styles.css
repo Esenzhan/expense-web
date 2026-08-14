@@ -196,16 +196,33 @@ body {
   border-radius: 18px;
   padding: 6px 16px 6px 6px;
   box-shadow: 0 2px 8px rgba(20, 20, 26, 0.06);
+  /* Lets the chip shrink below its text's natural width instead of forcing
+     the balance to wrap onto a second line — .app's fixed padding-top
+     assumes a one-line header, so a wrapped chip grows taller than that
+     and its second line collides with the summary card underneath. */
+  min-width: 0;
 }
 
 .wallet-chip-icon {
   width: 40px;
   height: 40px;
+  min-width: 40px;
   border-radius: 12px;
   display: flex;
   align-items: center;
   justify-content: center;
   font-size: 18px;
+}
+
+.wallet-chip-text {
+  min-width: 0;
+}
+
+.wallet-chip-name,
+.wallet-chip-balance {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .wallet-chip-name {
@@ -222,6 +239,9 @@ body {
 .header-actions {
   display: flex;
   gap: 8px;
+  /* Never compress the nav icons to make room for a long wallet balance —
+     the chip (min-width: 0 above) is the one that gives way and truncates. */
+  flex-shrink: 0;
 }
 
 .header-icon {

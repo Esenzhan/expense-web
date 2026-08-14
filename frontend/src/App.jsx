@@ -527,15 +527,24 @@ export default function App() {
         fetchWalletBalances(),
       ]);
       const fresh = { exp, wallets, insightsRows };
-      rawRef.current = fresh;
       dataCacheRef.current.set(cacheKey, fresh);
-      setWalletBalances(balances);
-      if (user) saveCache({ expenses: exp, walletTotals: wallets, insightsRows, wallet }, user.email);
+      // Discard if the wallet/period was switched away from while this was
+      // in flight — a slower response for an abandoned selection (Render's
+      // cold start can take tens of seconds) must not clobber rawRef with
+      // the wrong wallet's data; the newer selection's own refreshAll call
+      // is already responsible for keeping the screen correct.
+      if (wallet === selectedWalletRef.current && currentPeriod === periodRef.current) {
+        rawRef.current = fresh;
+        setWalletBalances(balances);
+        if (user) saveCache({ expenses: exp, walletTotals: wallets, insightsRows, wallet }, user.email);
+      }
     } catch {
       // Offline — nothing fresh from the server, keep the last known data
       // and just re-merge whatever's pending below
     }
-    mergeAndSet(wallet, currentPeriod);
+    if (wallet === selectedWalletRef.current && currentPeriod === periodRef.current) {
+      mergeAndSet(wallet, currentPeriod);
+    }
   }
 
   useEffect(() => {
@@ -666,7 +675,7 @@ export default function App() {
           >
             <CategoryGlyph emoji={chipIcon ? chipIcon.emoji : "💳"} size={20} />
           </span>
-          <div>
+          <div className="wallet-chip-text">
             <div className="wallet-chip-name">{selectedWallet || "Все счета"}</div>
             <div className="wallet-chip-balance">
               −{walletBalance.toLocaleString("ru-RU")} ₸
