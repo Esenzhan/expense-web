@@ -463,10 +463,25 @@ body {
   position: relative;
   overflow: hidden;
   border-bottom: 1px solid var(--border);
+  display: grid;
+  grid-template-rows: 1fr;
+  opacity: 1;
+  /* Duration must match ROW_EXIT_MS in App.jsx — that's how long a row
+     stays in the rendered list past being excluded from totals. */
+  transition: grid-template-rows 0.24s ease, opacity 0.24s ease;
 }
 
 .expense-row-wrap:last-child {
   border-bottom: none;
+}
+
+/* Tapping the delete button confirms the swipe — collapses the row's own
+   grid track to nothing (rows below slide up to fill the gap) instead of
+   it just vanishing the instant setExpenses drops it, which is what the
+   plain unmount used to look like. */
+.expense-row-wrap.exiting {
+  grid-template-rows: 0fr;
+  opacity: 0;
 }
 
 /* Fixed-width delete button revealed behind the row as it slides left.
@@ -518,6 +533,20 @@ body {
   cursor: pointer;
   animation: row-in 0.3s ease;
   touch-action: pan-y;
+  /* Lets .expense-row-wrap's grid-template-rows collapse actually clip
+     this row's content instead of it overflowing the shrinking track.
+     Padding is animated too — min-height:0 alone only lets the CONTENT
+     box reach 0, so without this the row would visibly stall at ~24px
+     (its fixed top+bottom padding) for the rest of the exit animation
+     instead of collapsing the rest of the way. */
+  min-height: 0;
+  overflow: hidden;
+  transition: padding 0.24s ease;
+}
+
+.expense-row-wrap.exiting .expense-row {
+  padding-top: 0;
+  padding-bottom: 0;
 }
 
 /* Queued locally while offline, not yet synced to the server */

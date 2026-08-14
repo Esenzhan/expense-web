@@ -33,6 +33,10 @@ const CACHE_KEY = "traty-cache-v4";
 // actually sent (the reference app's ring takes about this long to drain).
 const UNDO_WINDOW_MS = 4000;
 
+// How long a row's exit animation runs — must match the transition duration
+// on .expense-row-wrap.exiting in styles.css.
+const ROW_EXIT_MS = 240;
+
 function HeaderIcon({ children }) {
   return (
     <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
@@ -239,6 +243,12 @@ export default function App() {
   // view for as long as its DELETE round-trip takes (can be tens of
   // seconds on a cold Render instance).
   const committingRef = useRef(new Map()); // id -> { wallet, amount }
+  // Ids currently playing their row-out exit animation (see ROW_EXIT_MS and
+  // .expense-row-wrap.exiting in styles.css) — mergeAndSet keeps a row in
+  // the rendered list for this long past the moment it's excluded from
+  // totals, so tapping delete plays a visible collapse instead of the row
+  // just vanishing the instant the numbers update.
+  const exitingRef = useRef(new Set());
   // State, not a plain ref: the banner mounts/unmounts inside this
   // never-unmounting component, so the ref callback needs to trigger a
   // re-render for useSwipeDismissUp's effect to see it — see that hook's
@@ -434,7 +444,11 @@ export default function App() {
       const { expense } = pendingDeleteRef.current;
       excluded.set(expense.id, { wallet: expense.wallet, amount: expense.amount });
     }
-    let baseExp = excluded.size ? exp.filter((e) => !excluded.has(e.id)) : exp;
+    // Totals/insights drop an excluded row immediately, but the rendered
+    // list keeps it a beat longer (ROW_EXIT_MS) so ExpenseRow can play its
+    // exit animation instead of the row just vanishing the instant the
+    // numbers update — see exitingRef's comment above.
+    let baseExp = excluded.size ? exp.filter((e) => !excluded.has(e.id) || exitingRef.current.has(e.id)) : exp;
     let baseInsightsRows = excluded.size ? insightsRows.filter((r) => !excluded.has(r.id)) : insightsRows;
 
     // The toggle only makes sense (and only shows) once there's actually a
@@ -455,7 +469,9 @@ export default function App() {
       baseExp = baseExp.filter((e) => e.user_id === user.id);
     }
 
-    const mergedExpenses = [...pendingForList, ...baseExp];
+    const mergedExpenses = [...pendingForList, ...baseExp].map((e) =>
+      exitingRef.current.has(e.id) ? { ...e, exiting: true } : e
+    );
 
     const pendingByWallet = new Map();
     for (const p of pending) {
@@ -522,13 +538,22 @@ export default function App() {
   // nothing to undo on the server, so it's removed immediately instead.
   function requestDeleteExpense(expense) {
     if (expense.pending) {
-      removePendingExpense(expense.id);
-      refreshAll(periodRef.current, selectedWalletRef.current);
+      exitingRef.current.add(expense.id);
+      mergeAndSet(selectedWalletRef.current, periodRef.current);
+      setTimeout(() => {
+        exitingRef.current.delete(expense.id);
+        removePendingExpense(expense.id);
+        refreshAll(periodRef.current, selectedWalletRef.current);
+      }, ROW_EXIT_MS);
       return;
     }
     if (pendingDeleteRef.current) commitDelete(pendingDeleteRef.current);
     haptic();
-    const entry = { expense, timeoutId: null };
+    exitingRef.current.add(expense.id);
+    // startedAt gives the undo banner's countdown ring a fresh key each
+    // time, so swiping a second row while the banner is already showing
+    // remounts it instead of leaving it mid-animation from the last one.
+    const entry = { expense, startedAt: Date.now(), timeoutId: null };
     entry.timeoutId = setTimeout(() => {
       if (pendingDeleteRef.current === entry) {
         pendingDeleteRef.current = null;
@@ -539,6 +564,10 @@ export default function App() {
     pendingDeleteRef.current = entry;
     setPendingDelete(entry);
     mergeAndSet(selectedWalletRef.current, periodRef.current);
+    setTimeout(() => {
+      exitingRef.current.delete(expense.id);
+      mergeAndSet(selectedWalletRef.current, periodRef.current);
+    }, ROW_EXIT_MS);
   }
 
   // Swiped away instead of waiting out the countdown — commits the deletion
@@ -555,6 +584,7 @@ export default function App() {
     const entry = pendingDeleteRef.current;
     if (!entry) return;
     clearTimeout(entry.timeoutId);
+    exitingRef.current.delete(entry.expense.id);
     pendingDeleteRef.current = null;
     setPendingDelete(null);
     haptic();
@@ -734,7 +764,7 @@ export default function App() {
     <div className={`app ${insightsOpen ? "app-behind" : ""}`}>
       {pendingDelete && (
         <div className="undo-banner" ref={setUndoBannerEl}>
-          <UndoTimerRing durationMs={UNDO_WINDOW_MS} />
+          <UndoTimerRing key={pendingDelete.startedAt} durationMs={UNDO_WINDOW_MS} />
           <span className="undo-banner-text">Операция удалена</span>
           <button className="undo-banner-action" onClick={undoDelete}>
             Отменить

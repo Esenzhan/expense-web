@@ -122,7 +122,7 @@ export default function ExpenseRow({ expense, icon, readonly, onSelect, onDelete
   }
 
   return (
-    <div className="expense-row-wrap" ref={wrapRef}>
+    <div className={`expense-row-wrap ${expense.exiting ? "exiting" : ""}`} ref={wrapRef}>
       <div className="expense-row-delete">
         <button type="button" className="expense-row-delete-btn" onClick={handleDeleteClick} aria-label="Удалить">
           <TrashIcon />
