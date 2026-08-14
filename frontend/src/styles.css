@@ -561,7 +561,8 @@ body {
 .category-icon,
 .category-pick,
 .insights-card-icon-badge,
-.newcat-icon {
+.newcat-icon,
+.wallet-pick-icon {
   background: var(--cat-bg);
   color: var(--cat-fg);
 }
@@ -569,7 +570,8 @@ body {
   .category-icon,
   .category-pick,
   .insights-card-icon-badge,
-  .newcat-icon {
+  .newcat-icon,
+  .wallet-pick-icon {
     background: var(--cat-fg);
     color: #fff;
   }
@@ -577,14 +579,16 @@ body {
 :root[data-theme="dark"] .category-icon,
 :root[data-theme="dark"] .category-pick,
 :root[data-theme="dark"] .insights-card-icon-badge,
-:root[data-theme="dark"] .newcat-icon {
+:root[data-theme="dark"] .newcat-icon,
+:root[data-theme="dark"] .wallet-pick-icon {
   background: var(--cat-fg);
   color: #fff;
 }
 :root[data-theme="light"] .category-icon,
 :root[data-theme="light"] .category-pick,
 :root[data-theme="light"] .insights-card-icon-badge,
-:root[data-theme="light"] .newcat-icon {
+:root[data-theme="light"] .newcat-icon,
+:root[data-theme="light"] .wallet-pick-icon {
   background: var(--cat-bg);
   color: var(--cat-fg);
 }
@@ -1090,23 +1094,55 @@ body {
   animation: digit-in 0.18s ease-out;
 }
 
-.edit-wallet-row {
+/* One-tap wallet picker in the add/edit sheet — replaces a native <select>
+   so switching wallets doesn't need opening a dropdown first. Only a
+   handful of wallets exist, so a wrapped row (not a scroller) is safe —
+   see the .wallet-tabs flex-wrap note for why not overflow-x:auto here. */
+.wallet-pick-row {
   display: flex;
-  align-items: center;
-  gap: 12px;
+  flex-wrap: wrap;
+  gap: 8px;
 }
 
-.wallet-select {
+.wallet-pick {
   flex: 1;
+  min-width: 64px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
   border: none;
   background: var(--surface-soft);
-  color: var(--ink);
-  font-family: var(--font-ui);
-  font-weight: 600;
-  font-size: 14px;
-  padding: 12px 14px;
   border-radius: 14px;
-  appearance: none;
+  padding: 10px 6px 8px;
+  font-family: var(--font-ui);
+}
+
+.wallet-pick.active {
+  background: var(--accent);
+}
+
+.wallet-pick-icon {
+  width: 32px;
+  height: 32px;
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.wallet-pick-label {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--ink);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
+}
+
+.wallet-pick.active .wallet-pick-label {
+  color: var(--on-accent);
 }
 
 .note-input {

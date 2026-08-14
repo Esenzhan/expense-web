@@ -176,7 +176,8 @@ export default function EditExpenseSheet({
           : "0",
     ],
   });
-  const walletNames = listWallets().map((w) => w.name);
+  const wallets = listWallets();
+  const walletNames = wallets.map((w) => w.name);
   const [wallet, setWallet] = useState(expense?.wallet || initial?.wallet || defaultWallet || walletNames[0]);
   const categoryNames = listCategories(wallet).map((c) => c.name);
   const [category, setCategory] = useState(expense?.category || initial?.category || categoryNames[0]);
@@ -392,21 +393,24 @@ export default function EditExpenseSheet({
           </div>
         </div>
 
-        <div className="edit-wallet-row">
-          <span className="category-icon" style={catIconVars(icon.bg, icon.fg)}>
-            <CategoryGlyph emoji={icon.emoji} size={20} />
-          </span>
-          <select
-            className="wallet-select"
-            value={wallet}
-            onChange={(event) => setWallet(event.target.value)}
-          >
-            {walletNames.map((w) => (
-              <option key={w} value={w}>
-                {w}
-              </option>
-            ))}
-          </select>
+        <div className="wallet-pick-row">
+          {wallets.map((w) => (
+            <button
+              key={w.name}
+              type="button"
+              className={`wallet-pick ${wallet === w.name ? "active" : ""}`}
+              onClick={() => {
+                if (w.name === wallet) return;
+                haptic();
+                setWallet(w.name);
+              }}
+            >
+              <span className="wallet-pick-icon" style={catIconVars(w.bg, w.fg)}>
+                <CategoryGlyph emoji={w.emoji} size={18} />
+              </span>
+              <span className="wallet-pick-label">{w.name}</span>
+            </button>
+          ))}
         </div>
 
         <input
