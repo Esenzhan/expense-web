@@ -20,34 +20,27 @@ self.addEventListener("fetch", (event) => {
   const url = new URL(request.url);
   if (url.origin !== self.location.origin) return;
 
-  // The HTML shell must always be fresh — otherwise a redeploy can get stuck
-  // showing a stale build until the cache happens to revalidate in the
-  // background. Fall back to cache only when actually offline.
-  if (request.mode === "navigate") {
-    // .clone() must happen in the very first reaction to fetch(), before the
-    // response is handed anywhere else — once respondWith's consumer (the
-    // browser, rendering the navigation) starts reading the body, cloning
-    // later throws "body is already used" and the cache write silently
-    // never happens. This was the actual bug: the previous version cloned
-    // inside a second, separately-scheduled .then(), racing the renderer.
-    const fetchPromise = fetch(request).then((response) => {
-      const toCache = response.clone();
-      event.waitUntil(caches.open(CACHE_NAME).then((cache) => cache.put(request, toCache)));
-      return response;
-    });
+  // The HTML shell used to be network-first here, on the theory that a
+  // redeploy could otherwise get stuck showing a stale build. In practice
+  // that made every online launch wait on a real network round-trip before
+  // painting anything (visible white screen), while offline launches hit
+  // the network's instant failure and fell back to cache immediately —
+  // backwards from what actually feels fast. Nothing in this file evicts an
+  // old cached asset once a newer one replaces it (CACHE_NAME only changes,
+  // and old entries only get swept, when this SW script's own bytes change,
+  // which an ordinary frontend deploy doesn't touch), so a stale cached
+  // shell's hashed <script>/<link> references stay servable from cache too
+  // — falling back to it is safe, not broken. Now shares the same
+  // stale-while-revalidate handling as hashed assets below: instant paint
+  // from cache when there is one, with a background fetch that refreshes
+  // the cache for the next launch. A fresh deploy may take one extra reopen
+  // to show up instead of appearing immediately, in exchange for the shell
+  // never blocking on the network again.
 
-    event.respondWith(
-      fetchPromise.catch(async () => {
-        const cached = await caches.match(request);
-        if (cached) return cached;
-        throw new Error("offline and no cached shell yet");
-      })
-    );
-    return;
-  }
-
-  // Hashed asset files (js/css/icons) are safe to serve stale-while-revalidate
-  // since their filename changes whenever their content does.
+  // Hashed asset files (js/css/icons), and now the HTML shell above, are
+  // safe to serve stale-while-revalidate since asset filenames change
+  // whenever their content does, and a stale shell's references still
+  // resolve against whatever was cached alongside it.
   event.respondWith(
     (async () => {
       const cache = await caches.open(CACHE_NAME);
