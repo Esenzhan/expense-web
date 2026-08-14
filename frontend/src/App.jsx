@@ -206,6 +206,18 @@ export default function App() {
   // on the network again, and still quietly refetches behind it to catch
   // anything that changed meanwhile.
   const dataCacheRef = useRef(new Map());
+  // Guards against out-of-order refreshAll responses for the SAME (period,
+  // wallet) key — adding several expenses back to back fires one refreshAll
+  // per save, all uncoordinated, and a slower/older one (Render's cold
+  // start can take tens of seconds; the browser's own per-origin connection
+  // cap queues the rest behind it) can easily land after a faster/newer one
+  // already did. Without this, that late arrival's pre-delete/pre-add
+  // snapshot overwrites rawRef with stale data — and if a delete's own undo
+  // window has already lifted its exclusion by then, the row it removed
+  // gets silently resurrected, stuck showing whatever the swipe left behind
+  // since nothing since has re-rendered it. Only the most-recently-ISSUED
+  // request for a key is allowed to write rawRef/clear synced shadows.
+  const requestSeqRef = useRef(new Map());
   const periodRef = useRef(period);
   periodRef.current = period;
   const selectedWalletRef = useRef(selectedWallet);
@@ -570,6 +582,8 @@ export default function App() {
     // comes back with, so clearConfirmedSynced below only ever drops a
     // shadow row once a fetch that could actually see it has landed.
     const fetchStartedAt = Date.now();
+    const mySeq = (requestSeqRef.current.get(cacheKey) || 0) + 1;
+    requestSeqRef.current.set(cacheKey, mySeq);
     try {
       const [exp, wallets, insightsRows, balances] = await Promise.all([
         fetchExpenses(expenseParams),
@@ -587,21 +601,29 @@ export default function App() {
       // in flight — a slower response for an abandoned selection (Render's
       // cold start can take tens of seconds) must not clobber rawRef with
       // the wrong wallet's data; the newer selection's own refreshAll call
-      // is already responsible for keeping the screen correct.
-      if (wallet === selectedWalletRef.current && currentPeriod === periodRef.current) {
+      // is already responsible for keeping the screen correct. Also discard
+      // if a newer refreshAll for this SAME key has since been issued (see
+      // requestSeqRef above) — this response is stale even though it's for
+      // the right key, and applying it would overwrite whatever that newer
+      // call already landed (or will land) with older data.
+      if (
+        wallet === selectedWalletRef.current &&
+        currentPeriod === periodRef.current &&
+        requestSeqRef.current.get(cacheKey) === mySeq
+      ) {
         rawRef.current = fresh;
         setWalletBalances(balances);
-        // Only once rawRef actually holds this fetch's data — an abandoned
-        // (wallet/period switched away from) fetch landing later must not
-        // clear a shadow row the still-current selection's own baseExp
-        // hasn't caught up to yet.
         clearConfirmedSynced(fetchStartedAt);
       }
     } catch {
       // Offline — nothing fresh from the server, keep the last known data
       // and just re-merge whatever's pending below
     }
-    if (wallet === selectedWalletRef.current && currentPeriod === periodRef.current) {
+    if (
+      wallet === selectedWalletRef.current &&
+      currentPeriod === periodRef.current &&
+      requestSeqRef.current.get(cacheKey) === mySeq
+    ) {
       mergeAndSet(wallet, currentPeriod);
     }
   }
