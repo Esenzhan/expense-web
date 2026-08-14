@@ -806,9 +806,15 @@ export default function App() {
             setScanExpense(null);
           }}
           onCommitted={() => refreshAll(period)}
-          onSaved={() => {
+          onSaved={(saved) => {
             setAddingExpense(false);
             setScanExpense(null);
+            // Jump to the wallet the expense was actually saved under —
+            // otherwise it's saved but invisible, still looking at whatever
+            // wallet was selected before.
+            if (saved?.wallet && saved.wallet !== selectedWallet) {
+              selectWallet(saved.wallet);
+            }
           }}
         />
       )}
