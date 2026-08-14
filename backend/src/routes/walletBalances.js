@@ -1,12 +1,9 @@
 import { Router } from "express";
 import { pool } from "../db.js";
-import { isValidWallet, sharedWalletNames } from "../wallets.js";
+import { isValidWallet } from "../wallets.js";
+import { isSharedWallet, getCurrentBalance, setBalance, logBalanceChange } from "../services/balanceHistory.js";
 
 export const walletBalancesRouter = Router();
-
-async function isSharedWallet(wallet) {
-  return (await sharedWalletNames()).includes(wallet);
-}
 
 // Every wallet that has a balance set up for the current account (shared
 // wallets always resolve to the one shared row; "Личные" only to this
@@ -41,19 +38,24 @@ walletBalancesRouter.put("/:wallet", async (req, res) => {
   }
 
   const shared = await isSharedWallet(wallet);
-  const { rows } = await pool.query(
-    shared
-      ? `INSERT INTO wallet_balances (wallet, user_id, base_amount, base_at)
-         VALUES ($1, NULL, $2, now())
-         ON CONFLICT (wallet) WHERE user_id IS NULL
-         DO UPDATE SET base_amount = EXCLUDED.base_amount, base_at = EXCLUDED.base_at
-         RETURNING wallet, base_amount, base_at`
-      : `INSERT INTO wallet_balances (wallet, user_id, base_amount, base_at)
-         VALUES ($1, $2, $3, now())
-         ON CONFLICT (wallet, user_id) WHERE user_id IS NOT NULL
-         DO UPDATE SET base_amount = EXCLUDED.base_amount, base_at = EXCLUDED.base_at
-         RETURNING wallet, base_amount, base_at`,
-    shared ? [wallet, amount] : [wallet, req.user.id, amount]
-  );
-  res.json({ ...rows[0], current_balance: rows[0].base_amount });
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+    const oldAmount = await getCurrentBalance(client, wallet, req.user.id);
+    const updated = await setBalance(client, wallet, req.user.id, shared, amount);
+    await logBalanceChange(client, {
+      wallet,
+      oldAmount,
+      newAmount: amount,
+      reason: "manual",
+      changedBy: req.user.id,
+    });
+    await client.query("COMMIT");
+    res.json(updated);
+  } catch (err) {
+    await client.query("ROLLBACK");
+    throw err;
+  } finally {
+    client.release();
+  }
 });

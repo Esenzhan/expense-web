@@ -1835,6 +1835,39 @@ body {
   border-radius: 999px;
 }
 
+/* Балансы: settings-row is normally a <button> with a single label, but
+   each history entry needs a two-line title/detail stack plus a timestamp
+   — reuses the same row/icon spacing, just swaps settings-row-label for
+   this stack. */
+.balance-history-row {
+  align-items: flex-start;
+}
+
+.balance-history-main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.balance-history-title {
+  font-weight: 600;
+}
+
+.balance-history-sub {
+  font-size: 13px;
+  color: var(--ink-soft);
+  font-family: var(--font-mono);
+}
+
+.balance-history-when {
+  font-size: 12px;
+  color: var(--ink-soft);
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
 /* iOS-style switch */
 .switch {
   width: 48px;

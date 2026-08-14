@@ -22,6 +22,8 @@ import CategoriesSheet from "./components/CategoriesSheet";
 import NewCategorySheet from "./components/NewCategorySheet";
 import WalletsSheet from "./components/WalletsSheet";
 import NewWalletSheet from "./components/NewWalletSheet";
+import WalletTransferSheet from "./components/WalletTransferSheet";
+import BalanceHistorySheet from "./components/BalanceHistorySheet";
 import PeriodPickerSheet from "./components/PeriodPickerSheet";
 import SearchSheet from "./components/SearchSheet";
 import AccountBalanceRow from "./components/AccountBalanceRow";
@@ -185,6 +187,7 @@ export default function App() {
   const [categoriesOpen, setCategoriesOpen] = useState(false);
   const [remindersOpen, setRemindersOpen] = useState(false);
   const [themeOpen, setThemeOpen] = useState(false);
+  const [balanceHistoryOpen, setBalanceHistoryOpen] = useState(false);
   const [theme, setTheme] = useState(loadLocalTheme);
   const themeSyncedRef = useRef(false);
   const [newCategoryWallet, setNewCategoryWallet] = useState(null);
@@ -192,6 +195,7 @@ export default function App() {
   const [walletsOpen, setWalletsOpen] = useState(false);
   const [newWalletOpen, setNewWalletOpen] = useState(false);
   const [editingWallet, setEditingWallet] = useState(null);
+  const [transferOpen, setTransferOpen] = useState(false);
   const [selectedWallet, setSelectedWallet] = useState(
     () => localStorage.getItem("traty-wallet") || null
   );
@@ -938,12 +942,15 @@ export default function App() {
           onOpenCategories={() => setCategoriesOpen(true)}
           onOpenReminders={() => setRemindersOpen(true)}
           onOpenTheme={() => setThemeOpen(true)}
+          onOpenBalanceHistory={() => setBalanceHistoryOpen(true)}
         />
       )}
 
       {remindersOpen && <RemindersSheet onClose={() => setRemindersOpen(false)} />}
 
       {themeOpen && <ThemeSheet theme={theme} onChange={changeTheme} onClose={() => setThemeOpen(false)} />}
+
+      {balanceHistoryOpen && <BalanceHistorySheet onClose={() => setBalanceHistoryOpen(false)} />}
 
       {categoriesOpen && (
         <CategoriesSheet
@@ -983,6 +990,18 @@ export default function App() {
           onAdd={() => setNewWalletOpen(true)}
           onEdit={(wallet) => setEditingWallet(wallet)}
           onClose={() => setWalletsOpen(false)}
+          onTransfer={() => setTransferOpen(true)}
+        />
+      )}
+
+      {transferOpen && (
+        <WalletTransferSheet
+          initialFrom={selectedWallet}
+          onClose={() => setTransferOpen(false)}
+          onTransferred={async () => {
+            setWalletBalances(await fetchWalletBalances());
+            setTransferOpen(false);
+          }}
         />
       )}
 

@@ -7,7 +7,7 @@ import { catIconVars } from "../catIconVars";
 
 // «Счета»: pick the wallet the whole main screen is scoped to, add new ones,
 // or edit an existing one via the pencil.
-export default function WalletsSheet({ balances, pendingWalletDeltas, selected, onSelect, onAdd, onEdit, onClose }) {
+export default function WalletsSheet({ balances, pendingWalletDeltas, selected, onSelect, onAdd, onEdit, onClose, onTransfer }) {
   const sheetRef = useRef(null);
   useSwipeDismiss(sheetRef, onClose);
 
@@ -52,6 +52,18 @@ export default function WalletsSheet({ balances, pendingWalletDeltas, selected, 
               aria-label="Новый счёт"
             >
               +
+            </button>
+            <button
+              className="icon-button"
+              onClick={() => {
+                haptic();
+                onTransfer();
+              }}
+              aria-label="Переводы"
+            >
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M4 8h13m-3-3 3 3-3 3M20 16H7m3-3-3 3 3 3" />
+              </svg>
             </button>
             <button className="icon-button" aria-label="Сортировка">
               ⇅

@@ -56,6 +56,7 @@ const Icons = {
   voice: <I><rect x="9" y="4" width="6" height="10" rx="3" /><path d="M6 11a6 6 0 0 0 12 0" /><path d="M12 17v3" /></I>,
   bell: <I><path d="M6 16v-5a6 6 0 0 1 12 0v5l1.5 2.5H4.5L6 16Z" /><path d="M10 21a2 2 0 0 0 4 0" /></I>,
   calendar: <I><rect x="4" y="6" width="16" height="14" rx="3" /><path d="M8 3v5M16 3v5M4 11h16" /></I>,
+  history: <I><circle cx="12" cy="12" r="8" /><path d="M12 7v5l3.5 2" /></I>,
   palette: <I><path d="M12 4a8 8 0 1 0 0 16c1.5 0 2-1 1.5-2s0-2 1.5-2H17a3 3 0 0 0 3-3 8 8 0 0 0-8-9Z" /><circle cx="8.5" cy="10.5" r="0.5" /><circle cx="12" cy="8.5" r="0.5" /><circle cx="15.5" cy="10.5" r="0.5" /></I>,
   buttons: <I><circle cx="12" cy="12" r="3.5" /><circle cx="4.5" cy="12" r="1" /><circle cx="19.5" cy="12" r="1" /></I>,
   calc: <I><rect x="5" y="3" width="14" height="18" rx="3" /><path d="M8.5 7h7M8.5 12h.01M12 12h.01M15.5 12h.01M8.5 16h.01M12 16h.01M15.5 16h.01" /></I>,
@@ -99,7 +100,7 @@ function ToggleRow({ icon, label, on, onFlip }) {
   );
 }
 
-export default function SettingsSheet({ user, theme, onClose, onOpenCategories, onOpenReminders, onOpenTheme }) {
+export default function SettingsSheet({ user, theme, onClose, onOpenCategories, onOpenReminders, onOpenTheme, onOpenBalanceHistory }) {
   const [toggles, setToggles] = useState(loadToggles);
   const [closing, setClosing] = useState(false);
   const pageRef = useRef(null);
@@ -178,6 +179,7 @@ export default function SettingsSheet({ user, theme, onClose, onOpenCategories, 
           onPress={onOpenReminders}
         />
         <Row icon={Icons.calendar} label="Первый день недели" value="Понедельник" />
+        <Row icon={Icons.history} label="История балансов" onPress={onOpenBalanceHistory} />
         <Row icon={Icons.palette} label="Тема" value={THEME_LABELS[theme] || THEME_LABELS.system} onPress={onOpenTheme} />
       </div>
 

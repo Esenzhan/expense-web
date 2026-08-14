@@ -126,6 +126,25 @@ export async function setWalletBalance(wallet, amount) {
   return res.json();
 }
 
+export async function fetchBalanceHistory(wallet) {
+  const params = wallet ? `?wallet=${encodeURIComponent(wallet)}` : "";
+  const res = await apiFetch(`/api/balance-history${params}`);
+  return res.json();
+}
+
+export async function transferBetweenWallets(from, to, amount) {
+  const res = await apiFetch(`/api/wallet-transfers`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ from, to, amount }),
+  });
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    throw new Error(body.error || "Не удалось выполнить перевод");
+  }
+  return res.json();
+}
+
 export async function fetchWallets() {
   const res = await apiFetch(`/api/wallets`);
   return res.json();

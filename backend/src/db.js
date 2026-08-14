@@ -317,4 +317,28 @@ export async function initSchema() {
   await pool.query(`
     CREATE INDEX IF NOT EXISTS receipt_scans_user_date_idx ON receipt_scans (user_id, scan_date);
   `);
+
+  // Audit trail for wallet_balances changes — every manual correction and
+  // every transfer leg writes a row here, so a lost/corrupted base_amount
+  // (bad edit, future bug) is always recoverable by reading back what it
+  // used to be, without depending on any periodic snapshot job that could
+  // itself silently fail to run. old_amount is null for a wallet's very
+  // first balance entry (nothing to compare against yet). changed_by is
+  // always set (even for shared wallets) so a shared wallet's history shows
+  // which of the two accounts made each change.
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS balance_history (
+      id SERIAL PRIMARY KEY,
+      wallet TEXT NOT NULL REFERENCES wallets(name) ON DELETE CASCADE ON UPDATE CASCADE,
+      old_amount NUMERIC,
+      new_amount NUMERIC NOT NULL,
+      reason TEXT NOT NULL DEFAULT 'manual',
+      counterpart_wallet TEXT,
+      changed_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+      changed_at TIMESTAMPTZ NOT NULL DEFAULT now()
+    );
+  `);
+  await pool.query(`
+    CREATE INDEX IF NOT EXISTS balance_history_wallet_idx ON balance_history (wallet, changed_at DESC);
+  `);
 }
