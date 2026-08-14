@@ -113,7 +113,11 @@ export function computeInsights({ period, rows, previousTotal = 0, now = new Dat
     series.push({ day, cumulative: running });
   }
 
-  const avgPerDay = daysInPeriod > 0 ? total / daysInPeriod : 0;
+  // Divided by days elapsed so far, not the full period length — for the
+  // current month that's days-from-the-1st-to-today, not all 30/31 days,
+  // so the average reflects the actual pace rather than being diluted by
+  // days that haven't happened yet.
+  const avgPerDay = todayIndex > 0 ? total / todayIndex : 0;
 
   let biggestExpense = null;
   for (const row of rows) {
