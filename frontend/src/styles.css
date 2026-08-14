@@ -327,6 +327,12 @@ body {
   opacity: 0.7;
 }
 
+.balance-error {
+  color: var(--danger);
+  font-size: 12px;
+  margin: -8px 0 12px;
+}
+
 .balance-label {
   font-size: 13px;
   color: var(--ink-soft);

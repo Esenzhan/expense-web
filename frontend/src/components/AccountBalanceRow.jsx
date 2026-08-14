@@ -8,11 +8,13 @@ export default function AccountBalanceRow({ balance, editable, onSave }) {
   const [editing, setEditing] = useState(false);
   const [value, setValue] = useState("");
   const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
 
   function startEdit() {
     if (!editable || saving) return;
     haptic();
     setValue(balance != null ? String(Math.round(balance)) : "");
+    setError("");
     setEditing(true);
   }
 
@@ -23,29 +25,38 @@ export default function AccountBalanceRow({ balance, editable, onSave }) {
       return;
     }
     setSaving(true);
+    setError("");
     try {
       await onSave(num);
       hapticHeavy();
+      setEditing(false);
+    } catch (err) {
+      // Keep editing open with the typed value and surface the failure —
+      // it used to close silently and revert to the old number, so a save
+      // that failed offline looked exactly like one that succeeded.
+      setError(err.message || "Не удалось сохранить");
     } finally {
       setSaving(false);
-      setEditing(false);
     }
   }
 
   if (editing) {
     return (
-      <div className="balance-row">
-        <span className="balance-label">Баланс</span>
-        <input
-          className="balance-input"
-          type="number"
-          inputMode="decimal"
-          autoFocus
-          value={value}
-          onChange={(event) => setValue(event.target.value)}
-          onBlur={commit}
-          onKeyDown={(event) => event.key === "Enter" && event.currentTarget.blur()}
-        />
+      <div className="balance-row-wrap">
+        <div className="balance-row">
+          <span className="balance-label">Баланс</span>
+          <input
+            className="balance-input"
+            type="number"
+            inputMode="decimal"
+            autoFocus
+            value={value}
+            onChange={(event) => setValue(event.target.value)}
+            onBlur={commit}
+            onKeyDown={(event) => event.key === "Enter" && event.currentTarget.blur()}
+          />
+        </div>
+        {error && <p className="balance-error">{error}</p>}
       </div>
     );
   }

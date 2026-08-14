@@ -1,5 +1,6 @@
 import { useRef, useState } from "react";
 import { WS_URL, createExpense, scanReceipt } from "../api";
+import { enqueueExpense, syncPendingExpenses } from "../offlineQueue";
 import { getToken } from "../auth";
 import { getCategoryIcon } from "../categoryIcons";
 import CategoryGlyph from "./CategoryGlyph";
@@ -94,7 +95,6 @@ export default function VoiceRecorder({ onSaved, onManualAdd, onScanned }) {
   const [transcript, setTranscript] = useState("");
   const [proposal, setProposal] = useState(null);
   const [errorMessage, setErrorMessage] = useState("");
-  const [saving, setSaving] = useState(false);
   // Shows the "waking the server" hint when the socket takes suspiciously
   // long to open (Render free tier cold start)
   const [slowWake, setSlowWake] = useState(false);
@@ -317,25 +317,27 @@ export default function VoiceRecorder({ onSaved, onManualAdd, onScanned }) {
     setPhase("idle");
   }
 
-  async function confirmProposal() {
+  function confirmProposal() {
     if (!proposal) return;
-    // Buzz at press time: after the awaits below the transient user
-    // activation is gone and iOS drops the haptic
+    // Buzz at press time: after an await the transient user activation is
+    // gone and iOS drops the haptic.
     haptic();
-    setSaving(true);
-    setErrorMessage("");
-    try {
-      const expense = await createExpense(proposal);
-      hapticHeavy();
-      onSaved?.(expense);
-      setProposal(null);
-      setTranscript("");
-      setPhase("idle");
-    } catch (err) {
-      setErrorMessage(err.message);
-    } finally {
-      setSaving(false);
-    }
+    // Never block on the network here, same as manual add: queue it
+    // locally and close the card immediately, syncing in the background.
+    // Previously this awaited createExpense directly, so losing signal
+    // between finishing the recording and tapping "Сохранить" (elevator,
+    // weak spot) silently dropped the expense — the transcript/proposal
+    // already had everything needed to queue it like any offline add.
+    const { raw_text, ...payload } = proposal;
+    const saved = enqueueExpense(payload);
+    hapticHeavy();
+    onSaved?.(saved);
+    syncPendingExpenses(createExpense).then((syncedAny) => {
+      if (syncedAny) onSaved?.(saved);
+    });
+    setProposal(null);
+    setTranscript("");
+    setPhase("idle");
   }
 
   const icon = proposal ? getCategoryIcon(proposal.wallet, proposal.category) : null;
@@ -389,11 +391,11 @@ export default function VoiceRecorder({ onSaved, onManualAdd, onScanned }) {
               </div>
             </div>
             <div className="confirm-actions">
-              <button className="btn-secondary" onClick={dismissProposal} disabled={saving}>
+              <button className="btn-secondary" onClick={dismissProposal}>
                 Отмена
               </button>
-              <button className="btn-primary" onClick={confirmProposal} disabled={saving}>
-                {saving ? "Сохраняю…" : "Сохранить"}
+              <button className="btn-primary" onClick={confirmProposal}>
+                Сохранить
               </button>
             </div>
           </div>

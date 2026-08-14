@@ -35,7 +35,10 @@ statsRouter.get("/daily", async (req, res) => {
   const { days = 30 } = req.query;
   const values = [];
   const visibility = await visibilityWhere(req.user.id, values);
-  values.push(Number(days));
+  // Same NaN guard as expenses.js's ?limit= — a non-numeric ?days= would
+  // otherwise make pool.query throw on the bind.
+  const daysNum = Number(days);
+  values.push(Number.isFinite(daysNum) && daysNum > 0 ? Math.floor(daysNum) : 30);
   const { rows } = await pool.query(
     `SELECT date_trunc('day', created_at) AS day, COALESCE(SUM(amount), 0) AS total
      FROM expenses

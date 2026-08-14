@@ -1,6 +1,7 @@
 import { Router } from "express";
 import { pool } from "../db.js";
 import { isValidWallet, sharedWalletNames } from "../wallets.js";
+import { isValidCategory } from "../categories.js";
 import { appendExpenseRow, updateExpenseRow, deleteExpenseRow } from "../services/sheets.js";
 import { parseReceiptFromImage } from "../services/parseReceipt.js";
 import { tryLogScan, DAILY_SCAN_LIMIT } from "../services/receiptScans.js";
@@ -40,7 +41,11 @@ expensesRouter.get("/", async (req, res) => {
     conditions.push(`(description ILIKE $${i} OR category ILIKE $${i} OR amount::text ILIKE $${i})`);
   }
 
-  values.push(Number(limit));
+  // A non-numeric ?limit= (malformed link, manual query-string edit) would
+  // otherwise become NaN and make pool.query throw on the bind — fall back
+  // to the default instead of erroring on a plausible bad input.
+  const limitNum = Number(limit);
+  values.push(Number.isFinite(limitNum) && limitNum > 0 ? Math.floor(limitNum) : 100);
 
   const { rows } = await pool.query(
     `SELECT * FROM expenses WHERE ${conditions.join(" AND ")} ORDER BY created_at DESC LIMIT $${values.length}`,
@@ -67,6 +72,15 @@ expensesRouter.post("/", async (req, res) => {
       return res.status(400).json({ error: "Некорректная дата" });
     }
   }
+  // A category from a different wallet's list (stale client cache, a form
+  // that didn't reset on wallet change) would otherwise save silently —
+  // same "Прочее"-of-this-wallet fallback the voice/receipt parsers use on
+  // a mismatch, not a hard error, since a bad category shouldn't block
+  // saving someone's money.
+  let finalCategory = category || "Прочее";
+  if (!(await isValidCategory(wallet, finalCategory))) {
+    finalCategory = "Прочее";
+  }
 
   const { rows } = await pool.query(
     createdAt
@@ -75,8 +89,8 @@ expensesRouter.post("/", async (req, res) => {
       : `INSERT INTO expenses (wallet, amount, category, description, raw_text, user_id)
          VALUES ($1, $2, $3, $4, $5, $6) RETURNING *`,
     createdAt
-      ? [wallet, amount, category || "Прочее", description || null, raw_text || null, req.user.id, createdAt]
-      : [wallet, amount, category || "Прочее", description || null, raw_text || null, req.user.id]
+      ? [wallet, amount, finalCategory, description || null, raw_text || null, req.user.id, createdAt]
+      : [wallet, amount, finalCategory, description || null, raw_text || null, req.user.id]
   );
   appendExpenseRow(req.user, rows[0]);
   res.status(201).json(rows[0]);
@@ -129,10 +143,15 @@ expensesRouter.put("/:id", async (req, res) => {
   }
   const existing = existingRows[0];
 
+  let finalCategory = category || "Прочее";
+  if (!(await isValidCategory(wallet, finalCategory))) {
+    finalCategory = "Прочее";
+  }
+
   const { rows } = await pool.query(
     `UPDATE expenses SET wallet = $1, amount = $2, category = $3, description = $4
      WHERE id = $5 RETURNING *`,
-    [wallet, amount, category || "Прочее", description || null, req.params.id]
+    [wallet, amount, finalCategory, description || null, req.params.id]
   );
 
   updateExpenseRow(req.user, rows[0], existing.wallet);

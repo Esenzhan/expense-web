@@ -54,6 +54,10 @@ export default function InsightsSheet({ period, insights: data, wallet, walletBa
   const [editingCategory, setEditingCategory] = useState(null);
   const [categoryLimitDraft, setCategoryLimitDraft] = useState("");
   const [categoryLimitError, setCategoryLimitError] = useState(null);
+  // Discards an out-of-order response — same guard as SearchSheet.jsx —
+  // so a slower fetch for a wallet since switched away from can't land
+  // after and overwrite the currently-displayed wallet's limits.
+  const limitsRequestIdRef = useRef(0);
 
   useEffect(() => {
     setEditingCategory(null);
@@ -63,15 +67,21 @@ export default function InsightsSheet({ period, insights: data, wallet, walletBa
       setCategoryLimitsReady(false);
       return;
     }
+    const requestId = ++limitsRequestIdRef.current;
     setCategoryLimitsReady(false);
     fetchCategoryLimits(wallet)
       .then((rows) => {
+        if (limitsRequestIdRef.current !== requestId) return;
         const map = {};
         for (const row of rows) map[row.category] = Number(row.monthly_limit);
         setCategoryLimits(map);
       })
-      .catch(() => setCategoryLimits({}))
-      .finally(() => setCategoryLimitsReady(true));
+      .catch(() => {
+        if (limitsRequestIdRef.current === requestId) setCategoryLimits({});
+      })
+      .finally(() => {
+        if (limitsRequestIdRef.current === requestId) setCategoryLimitsReady(true);
+      });
   }, [wallet]);
 
   function saveCategoryLimit(category) {
