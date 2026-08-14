@@ -25,6 +25,7 @@ import NewWalletSheet from "./components/NewWalletSheet";
 import PeriodPickerSheet from "./components/PeriodPickerSheet";
 import SearchSheet from "./components/SearchSheet";
 import AccountBalanceRow from "./components/AccountBalanceRow";
+import { useSwipeDismissUp } from "./sheetGestures";
 
 const CACHE_KEY = "traty-cache-v4";
 
@@ -210,6 +211,12 @@ export default function App() {
   // view for as long as its DELETE round-trip takes (can be tens of
   // seconds on a cold Render instance).
   const committingRef = useRef(new Map()); // id -> { wallet, amount }
+  // State, not a plain ref: the banner mounts/unmounts inside this
+  // never-unmounting component, so the ref callback needs to trigger a
+  // re-render for useSwipeDismissUp's effect to see it — see that hook's
+  // comment for why.
+  const [undoBannerEl, setUndoBannerEl] = useState(null);
+  useSwipeDismissUp(undoBannerEl, dismissUndoBanner);
 
   // Paints straight from this account's last cached snapshot — used both
   // by the offline-first bootstrap below and, once fetchMe() actually
@@ -463,9 +470,16 @@ export default function App() {
         // Offline or the request failed — the row already reads as deleted
         // locally; the next successful refresh reconciles either way.
       })
-      .finally(() => {
+      .then(() => refreshAll(periodRef.current, selectedWalletRef.current))
+      .then(() => {
+        // Only lift the exclusion once refreshAll has actually landed fresh
+        // data. refreshAll's own cache fast-path re-renders synchronously
+        // from whatever was last fetched — which still has this row, since
+        // that cache predates the delete — so clearing the exclusion any
+        // earlier (e.g. in a .finally() racing refreshAll) let the row
+        // flash back for the fraction of a second it took the real fetch
+        // to land and exclude it again for good.
         committingRef.current.delete(entry.expense.id);
-        refreshAll(periodRef.current, selectedWalletRef.current);
       });
   }
 
@@ -491,6 +505,16 @@ export default function App() {
     pendingDeleteRef.current = entry;
     setPendingDelete(entry);
     mergeAndSet(selectedWalletRef.current, periodRef.current);
+  }
+
+  // Swiped away instead of waiting out the countdown — commits the deletion
+  // right away instead of undoing it, same as the timer reaching zero.
+  function dismissUndoBanner() {
+    const entry = pendingDeleteRef.current;
+    if (!entry) return;
+    pendingDeleteRef.current = null;
+    setPendingDelete(null);
+    commitDelete(entry);
   }
 
   function undoDelete() {
@@ -652,7 +676,7 @@ export default function App() {
   return (
     <div className={`app ${insightsOpen ? "app-behind" : ""}`}>
       {pendingDelete && (
-        <div className="undo-banner">
+        <div className="undo-banner" ref={setUndoBannerEl}>
           <UndoTimerRing durationMs={UNDO_WINDOW_MS} />
           <span className="undo-banner-text">Операция удалена</span>
           <button className="undo-banner-action" onClick={undoDelete}>

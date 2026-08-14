@@ -196,3 +196,86 @@ export function useSwipeDismissRight(pageRef, onClose) {
     };
   }, [pageRef]);
 }
+
+// Swipe-up-to-dismiss for the delete-undo banner — it's a small, always
+// non-scrolling strip (unlike the sheet/page above), so no scroll-position
+// or carousel exceptions are needed, just upward drag intent.
+//
+// Takes the DOM node itself, not a ref object like the two hooks above:
+// those are called from inside a sheet/page component that mounts fresh
+// every time it's shown, so its ref is already attached by the time the
+// effect (with a stable `[sheetRef]` dependency that never itself changes)
+// runs. This banner instead toggles inside App, which never unmounts — a
+// plain ref's `.current` would still be null the one time the effect body
+// actually runs. The caller uses a state setter as the ref callback
+// (`ref={setUndoBannerEl}`) so the element itself is the dependency here,
+// re-running (and re-attaching) this effect exactly when the banner mounts.
+export function useSwipeDismissUp(el, onDismiss) {
+  const onDismissRef = useRef(onDismiss);
+  onDismissRef.current = onDismiss;
+
+  useEffect(() => {
+    if (!el) return;
+    const state = { pulling: false, startX: 0, startY: 0, dy: 0 };
+
+    function onTouchStart(event) {
+      state.pulling = false;
+      state.startX = event.touches[0].clientX;
+      state.startY = event.touches[0].clientY;
+      state.dy = 0;
+    }
+
+    function onTouchMove(event) {
+      const dx = event.touches[0].clientX - state.startX;
+      const dy = event.touches[0].clientY - state.startY;
+      if (!state.pulling) {
+        // Downward or horizontal intent isn't a dismiss — stand down
+        if (dy > 4 || Math.abs(dx) > Math.abs(dy)) return;
+        if (dy > -10) return;
+        state.pulling = true;
+      }
+      state.dy = dy;
+      event.preventDefault();
+      el.style.transition = "none";
+      el.style.transform = `translateY(${Math.min(0, dy)}px)`;
+      el.style.opacity = `${1 - Math.min(1, Math.abs(dy) / 80)}`;
+    }
+
+    function onTouchEnd() {
+      const wasPulling = state.pulling;
+      state.pulling = false;
+      if (!wasPulling) return;
+      el.style.transition = "transform 0.22s ease, opacity 0.22s ease";
+      if (state.dy < -40) {
+        el.style.transform = "translateY(-140%)";
+        el.style.opacity = "0";
+        // Commit only once the slide-away animation actually finishes —
+        // matches useSwipeDismiss/useSwipeDismissRight's pattern so the
+        // banner doesn't just vanish mid-flick.
+        let dismissed = false;
+        const dismiss = () => {
+          if (dismissed) return;
+          dismissed = true;
+          onDismissRef.current?.();
+        };
+        el.addEventListener("transitionend", dismiss, { once: true });
+        setTimeout(dismiss, 260); // fallback if transitionend never fires
+      } else {
+        el.style.transform = "translateY(0)";
+        el.style.opacity = "1";
+      }
+      state.dy = 0;
+    }
+
+    el.addEventListener("touchstart", onTouchStart, { passive: true });
+    el.addEventListener("touchmove", onTouchMove, { passive: false });
+    el.addEventListener("touchend", onTouchEnd);
+    el.addEventListener("touchcancel", onTouchEnd);
+    return () => {
+      el.removeEventListener("touchstart", onTouchStart);
+      el.removeEventListener("touchmove", onTouchMove);
+      el.removeEventListener("touchend", onTouchEnd);
+      el.removeEventListener("touchcancel", onTouchEnd);
+    };
+  }, [el]);
+}
