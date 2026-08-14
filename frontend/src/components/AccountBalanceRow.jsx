@@ -13,7 +13,7 @@ export default function AccountBalanceRow({ balance, editable, onSave }) {
   function startEdit() {
     if (!editable || saving) return;
     haptic();
-    setValue(balance != null ? String(Math.round(balance)) : "");
+    setValue(balance != null ? balance.toFixed(2) : "");
     setError("");
     setEditing(true);
   }
@@ -66,7 +66,7 @@ export default function AccountBalanceRow({ balance, editable, onSave }) {
       <span className="balance-label">Баланс</span>
       <span className="balance-value">
         {balance != null
-          ? `${Math.round(balance).toLocaleString("ru-RU")} ₸`
+          ? `${balance.toLocaleString("ru-RU", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ₸`
           : editable
           ? "Указать сумму"
           : "—"}
