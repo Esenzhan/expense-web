@@ -976,7 +976,8 @@ export default function App() {
 
       {walletsOpen && (
         <WalletsSheet
-          totals={walletTotals}
+          balances={walletBalances}
+          pendingWalletDeltas={pendingWalletDeltas}
           selected={selectedWallet}
           onSelect={selectWallet}
           onAdd={() => setNewWalletOpen(true)}

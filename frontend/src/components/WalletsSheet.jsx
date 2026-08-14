@@ -7,13 +7,26 @@ import { catIconVars } from "../catIconVars";
 
 // «Счета»: pick the wallet the whole main screen is scoped to, add new ones,
 // or edit an existing one via the pencil.
-export default function WalletsSheet({ totals, selected, onSelect, onAdd, onEdit, onClose }) {
+export default function WalletsSheet({ balances, pendingWalletDeltas, selected, onSelect, onAdd, onEdit, onClose }) {
   const sheetRef = useRef(null);
   useSwipeDismiss(sheetRef, onClose);
 
   const wallets = listWallets();
-  const totalOf = (name) => Number(totals.find((t) => t.wallet === name)?.total || 0);
-  const allTotal = totals.reduce((sum, t) => sum + Number(t.total), 0);
+  // Same formula as accountBalance in App.jsx's "Баланс" row — a wallet with
+  // no balance entry (never given a starting amount) has none to show here
+  // either, and the pending delta keeps an in-flight add/undo-window delete
+  // reflected instantly instead of only after its server round-trip lands.
+  const balanceOf = (name) => {
+    const entry = balances.find((b) => b.wallet === name);
+    return entry ? Number(entry.current_balance) - (pendingWalletDeltas.get(name) || 0) : null;
+  };
+  const allBalance = balances.length
+    ? balances.reduce((sum, b) => sum + Number(b.current_balance) - (pendingWalletDeltas.get(b.wallet) || 0), 0)
+    : null;
+  const formatBalance = (amount) =>
+    amount != null
+      ? `${amount.toLocaleString("ru-RU", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ₸`
+      : "—";
 
   function choose(name) {
     haptic();
@@ -51,7 +64,7 @@ export default function WalletsSheet({ totals, selected, onSelect, onAdd, onEdit
           onClick={() => choose(null)}
         >
           <span className="cat-name">Все счета</span>
-          <span className="wallet-row-total">−{allTotal.toLocaleString("ru-RU")} ₸</span>
+          <span className="wallet-row-total">{formatBalance(allBalance)}</span>
         </button>
 
         <div className="cats-list">
@@ -65,9 +78,7 @@ export default function WalletsSheet({ totals, selected, onSelect, onAdd, onEdit
                 <CategoryGlyph emoji={wallet.emoji} size={20} />
               </span>
               <span className="cat-name">{wallet.name}</span>
-              <span className="wallet-row-total">
-                −{totalOf(wallet.name).toLocaleString("ru-RU")} ₸
-              </span>
+              <span className="wallet-row-total">{formatBalance(balanceOf(wallet.name))}</span>
               <button
                 className="wallet-edit"
                 aria-label="Редактировать"
