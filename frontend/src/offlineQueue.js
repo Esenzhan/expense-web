@@ -35,8 +35,24 @@ function toExpenseShape(entry) {
   };
 }
 
+// Rows whose POST already succeeded (so the server has them for real) but
+// that haven't yet been confirmed present in a fresh /api/expenses fetch —
+// held here, shaped like a normal (non-pending) server row real id and all,
+// so mergeAndSet keeps showing them across the gap between "popped from the
+// local queue" and "the next refreshAll's GET actually reflects them".
+// Without this, that gap reads as the just-saved expense vanishing for the
+// round-trip and then popping back in once the fetch lands.
+let syncedShadow = [];
+
 export function listPendingExpenses() {
-  return loadQueue().map(toExpenseShape);
+  return [...syncedShadow, ...loadQueue().map(toExpenseShape)];
+}
+
+// Called once a refreshAll fetch that started after a row's sync has
+// landed — a GET issued after the POST resolved is guaranteed to reflect
+// it, so it's now safe to stop standing in for it.
+export function clearConfirmedSynced(startedAfter) {
+  syncedShadow = syncedShadow.filter((e) => e.syncedAt >= startedAfter);
 }
 
 export function enqueueExpense(payload) {
@@ -88,13 +104,15 @@ export async function syncPendingExpenses(createExpense) {
     let syncedAny = false;
     while (queue.length > 0) {
       const entry = queue[queue.length - 1]; // oldest is at the end (unshift adds to front)
+      let created;
       try {
-        await createExpense(entry.payload);
+        created = await createExpense(entry.payload);
       } catch {
         break;
       }
       queue.pop();
       saveQueue(queue);
+      syncedShadow.push({ ...created, pending: false, syncedAt: Date.now() });
       syncedAny = true;
     }
     return syncedAny;

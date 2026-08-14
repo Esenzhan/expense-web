@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { fetchExpenses, fetchExpensesRange, fetchWalletTotals, fetchWalletBalances, setWalletBalance, fetchCategories, fetchWallets, fetchMe, warmBackend, createExpense, deleteExpense, deleteCategory, saveThemeSetting } from "./api";
 import { loadLocalTheme, setLocalTheme } from "./theme";
 import { getToken, setToken } from "./auth";
-import { listPendingExpenses, syncPendingExpenses, hasPendingExpenses, removePendingExpense } from "./offlineQueue";
+import { listPendingExpenses, syncPendingExpenses, hasPendingExpenses, removePendingExpense, clearConfirmedSynced } from "./offlineQueue";
 import { computeInsights, periodRange, formatPeriodLabel } from "./insights";
 import { hydrateCategories } from "./categoryIcons";
 import { hydrateWallets, getWalletIcon } from "./wallets";
@@ -565,6 +565,11 @@ export default function App() {
     const expenseParams = { limit: 50 };
     if (wallet) expenseParams.wallet = wallet;
     const { start, end } = periodRange(currentPeriod);
+    // Recorded before the request goes out: a sync that completed before
+    // this timestamp is guaranteed to be reflected in whatever this fetch
+    // comes back with, so clearConfirmedSynced below only ever drops a
+    // shadow row once a fetch that could actually see it has landed.
+    const fetchStartedAt = Date.now();
     try {
       const [exp, wallets, insightsRows, balances] = await Promise.all([
         fetchExpenses(expenseParams),
@@ -586,6 +591,11 @@ export default function App() {
       if (wallet === selectedWalletRef.current && currentPeriod === periodRef.current) {
         rawRef.current = fresh;
         setWalletBalances(balances);
+        // Only once rawRef actually holds this fetch's data — an abandoned
+        // (wallet/period switched away from) fetch landing later must not
+        // clear a shadow row the still-current selection's own baseExp
+        // hasn't caught up to yet.
+        clearConfirmedSynced(fetchStartedAt);
       }
     } catch {
       // Offline — nothing fresh from the server, keep the last known data
