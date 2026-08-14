@@ -100,18 +100,27 @@ export async function syncPendingExpenses(createExpense) {
   if (syncing) return false;
   syncing = true;
   try {
-    const queue = loadQueue();
     let syncedAny = false;
-    while (queue.length > 0) {
+    while (true) {
+      // Re-read fresh on every iteration instead of looping over one
+      // snapshot taken at the top: createExpense can take tens of seconds
+      // on a cold Render instance, and enqueueExpense() writes straight to
+      // localStorage — an entry added while an earlier one is still in
+      // flight would otherwise only ever exist in that stale in-memory
+      // array, and saving it back after the pop below would silently wipe
+      // the newer entry out of localStorage without ever having sent it.
+      const queue = loadQueue();
       const entry = queue[queue.length - 1]; // oldest is at the end (unshift adds to front)
+      if (!entry) break;
       let created;
       try {
         created = await createExpense(entry.payload);
       } catch {
         break;
       }
-      queue.pop();
-      saveQueue(queue);
+      // Read fresh again before removing, for the same reason — anything
+      // enqueued during the await above must survive this save.
+      saveQueue(loadQueue().filter((e) => e.localId !== entry.localId));
       syncedShadow.push({ ...created, pending: false, syncedAt: Date.now() });
       syncedAny = true;
     }
