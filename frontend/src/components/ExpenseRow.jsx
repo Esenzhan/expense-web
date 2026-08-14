@@ -24,6 +24,7 @@ function TrashIcon() {
 
 export default function ExpenseRow({ expense, icon, readonly, onSelect, onDeleteRequest }) {
   const rowRef = useRef(null);
+  const wrapRef = useRef(null);
   const onDeleteRef = useRef(onDeleteRequest);
   onDeleteRef.current = onDeleteRequest;
 
@@ -38,6 +39,10 @@ export default function ExpenseRow({ expense, icon, readonly, onSelect, onDelete
     if (!el) return;
     el.style.transition = animate ? "transform 0.22s ease" : "none";
     el.style.transform = `translateX(${dx}px)`;
+    // Reveals the delete button only while actually shifted — see the CSS
+    // comment on .expense-row-delete-btn for why this can't just rely on
+    // the row's own background to hide it.
+    wrapRef.current?.classList.toggle("swiping", dx !== 0);
   }
 
   function setOpen(open, animate) {
@@ -117,7 +122,7 @@ export default function ExpenseRow({ expense, icon, readonly, onSelect, onDelete
   }
 
   return (
-    <div className="expense-row-wrap">
+    <div className="expense-row-wrap" ref={wrapRef}>
       <div className="expense-row-delete">
         <button type="button" className="expense-row-delete-btn" onClick={handleDeleteClick} aria-label="Удалить">
           <TrashIcon />

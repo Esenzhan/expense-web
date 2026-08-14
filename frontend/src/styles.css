@@ -480,6 +480,12 @@ body {
   display: flex;
 }
 
+/* Hidden until the row is actually dragged/open (.expense-row-wrap.swiping,
+   toggled from ExpenseRow.jsx) — not just relying on the row's own opaque
+   background to cover it, since row-in's opacity fade would otherwise let
+   this always-solid red button bleed through a newly-mounted row. Hiding
+   is delayed to match the row's own close transition so it doesn't vanish
+   out from under a row still sliding shut over it; revealing is instant. */
 .expense-row-delete-btn {
   flex: 1;
   border: none;
@@ -489,6 +495,13 @@ body {
   align-items: center;
   justify-content: center;
   cursor: pointer;
+  visibility: hidden;
+  transition: visibility 0s linear 0.22s;
+}
+
+.expense-row-wrap.swiping .expense-row-delete-btn {
+  visibility: visible;
+  transition-delay: 0s;
 }
 
 .expense-row-delete-btn:active {
