@@ -469,43 +469,30 @@ body {
   border-bottom: none;
 }
 
-/* Grows with the swipe (width is written from JS) and deepens once the
-   drag passes the point where releasing deletes */
+/* Fixed-width delete button revealed behind the row as it slides left.
+   Width must match BUTTON_WIDTH in ExpenseRow.jsx. */
 .expense-row-delete {
   position: absolute;
   top: 0;
   right: 0;
   bottom: 0;
-  width: 0;
-  background: color-mix(in srgb, var(--danger) 18%, var(--surface));
-  color: var(--danger);
+  width: 76px;
+  display: flex;
+}
+
+.expense-row-delete-btn {
+  flex: 1;
+  border: none;
+  background: var(--danger);
+  color: #fff;
   display: flex;
   align-items: center;
   justify-content: center;
-  overflow: hidden;
+  cursor: pointer;
 }
 
-.expense-row-delete.armed {
-  background: var(--danger);
-  color: #fff;
-}
-
-/* Rises from the bottom as the drag approaches the commit threshold, like a
-   gauge filling up — reaches full height exactly when the row arms. */
-.expense-row-delete-fill {
-  position: absolute;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  height: 0%;
-  background: var(--danger);
-}
-
-.expense-row-delete-icon {
-  position: relative;
-  z-index: 1;
-  display: flex;
-  min-width: 20px;
+.expense-row-delete-btn:active {
+  background: color-mix(in srgb, var(--danger) 85%, black);
 }
 
 .expense-row {
