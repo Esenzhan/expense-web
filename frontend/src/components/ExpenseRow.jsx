@@ -3,9 +3,11 @@ import CategoryGlyph from "./CategoryGlyph";
 import { haptic } from "../haptics";
 import { catIconVars } from "../catIconVars";
 
-// Drag past this and releasing deletes; below it the row springs back.
-const COMMIT_DISTANCE = 96;
-const MAX_DRAG = 150;
+// Drag past this fraction of the screen width and releasing deletes;
+// below it the row springs back. A little extra travel past that point
+// is allowed for an elastic overdrag feel.
+const COMMIT_RATIO = 0.7;
+const OVERDRAG = 40;
 
 function TrashIcon() {
   return (
@@ -24,6 +26,7 @@ function TrashIcon() {
 export default function ExpenseRow({ expense, icon, readonly, onSelect, onDeleteRequest }) {
   const rowRef = useRef(null);
   const zoneRef = useRef(null);
+  const fillRef = useRef(null);
   const iconRef = useRef(null);
   const onDeleteRef = useRef(onDeleteRequest);
   onDeleteRef.current = onDeleteRequest;
@@ -38,19 +41,31 @@ export default function ExpenseRow({ expense, icon, readonly, onSelect, onDelete
 
     // Axis is decided once per touch and then locked: "h" owns the gesture
     // and suppresses page scroll, "v" hands the touch back to the scroller.
-    const state = { axis: null, startX: 0, startY: 0, dx: 0, armed: false };
+    // commitDistance is recomputed from the viewport at the start of each
+    // touch, so rotating the device or resizing keeps the 70% threshold.
+    const state = { axis: null, startX: 0, startY: 0, dx: 0, armed: false, commitDistance: 0, maxDrag: 0 };
 
     function paint(dx, animate) {
       const zone = zoneRef.current;
+      const commit = state.commitDistance || 1;
+      const progress = Math.min(1, Math.abs(dx) / commit);
       el.style.transition = animate ? "transform 0.22s ease" : "none";
       el.style.transform = `translateX(${dx}px)`;
       if (zone) {
         zone.style.transition = animate ? "width 0.22s ease" : "none";
         zone.style.width = `${Math.abs(dx)}px`;
-        zone.classList.toggle("armed", Math.abs(dx) >= COMMIT_DISTANCE);
+        zone.classList.toggle("armed", Math.abs(dx) >= commit);
+      }
+      if (fillRef.current) {
+        fillRef.current.style.transition = animate ? "height 0.22s ease" : "none";
+        fillRef.current.style.height = `${progress * 100}%`;
       }
       if (iconRef.current) {
-        iconRef.current.style.opacity = `${0.3 + 0.7 * Math.min(1, Math.abs(dx) / COMMIT_DISTANCE)}`;
+        iconRef.current.style.opacity = `${0.3 + 0.7 * progress}`;
+        // The fill and the icon's default color are the same red, so once
+        // the rising fill passes the icon's vertical center it'd vanish
+        // into it — flip to white a bit before that happens.
+        iconRef.current.style.color = progress >= 0.5 ? "#fff" : "";
       }
     }
 
@@ -60,6 +75,8 @@ export default function ExpenseRow({ expense, icon, readonly, onSelect, onDelete
       state.startY = event.touches[0].clientY;
       state.dx = 0;
       state.armed = false;
+      state.commitDistance = window.innerWidth * COMMIT_RATIO;
+      state.maxDrag = state.commitDistance + OVERDRAG;
       swipedRef.current = false;
     }
 
@@ -83,11 +100,11 @@ export default function ExpenseRow({ expense, icon, readonly, onSelect, onDelete
       // Horizontal: block the page from scrolling for the rest of this touch
       if (event.cancelable) event.preventDefault();
       swipedRef.current = true;
-      const next = Math.max(-MAX_DRAG, dxRaw);
+      const next = Math.max(-state.maxDrag, dxRaw);
       state.dx = next;
       // Buzz exactly when crossing the commit threshold, so the point of no
       // return is felt without looking
-      const armedNow = Math.abs(next) >= COMMIT_DISTANCE;
+      const armedNow = Math.abs(next) >= state.commitDistance;
       if (armedNow !== state.armed) {
         state.armed = armedNow;
         if (armedNow) haptic();
@@ -96,7 +113,7 @@ export default function ExpenseRow({ expense, icon, readonly, onSelect, onDelete
     }
 
     function onTouchEnd() {
-      const committed = Math.abs(state.dx) >= COMMIT_DISTANCE;
+      const committed = Math.abs(state.dx) >= state.commitDistance;
       state.axis = null;
       state.dx = 0;
       state.armed = false;
@@ -132,6 +149,7 @@ export default function ExpenseRow({ expense, icon, readonly, onSelect, onDelete
   return (
     <div className="expense-row-wrap">
       <div className="expense-row-delete" ref={zoneRef} aria-hidden="true">
+        <span className="expense-row-delete-fill" ref={fillRef} />
         <span className="expense-row-delete-icon" ref={iconRef}>
           <TrashIcon />
         </span>

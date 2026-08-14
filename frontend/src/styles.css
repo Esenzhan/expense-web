@@ -464,7 +464,20 @@ body {
   color: #fff;
 }
 
+/* Rises from the bottom as the drag approaches the commit threshold, like a
+   gauge filling up — reaches full height exactly when the row arms. */
+.expense-row-delete-fill {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 0%;
+  background: var(--danger);
+}
+
 .expense-row-delete-icon {
+  position: relative;
+  z-index: 1;
   display: flex;
   min-width: 20px;
 }
