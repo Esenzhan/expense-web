@@ -56,8 +56,15 @@ expensesRouter.get("/", async (req, res) => {
 
 // Create an expense — used for manual entry, to confirm a voice-parsed
 // proposal, and (with created_at) for backfilling historical expenses.
+//
+// idempotencyKey is optional, set only by the offline queue's retry loop
+// (frontend/src/offlineQueue.js — the entry's localId). That loop can't
+// tell "the POST never reached the server" apart from "it did, but the
+// response got lost" (a cold Render start is exactly that kind of flaky
+// window), so it retries either way — ON CONFLICT DO NOTHING below makes a
+// retried create return the original row instead of inserting a second one.
 expensesRouter.post("/", async (req, res) => {
-  const { wallet, amount, category, description, raw_text, created_at } = req.body;
+  const { wallet, amount, category, description, raw_text, created_at, idempotencyKey } = req.body;
 
   if (!(await isValidWallet(wallet))) {
     return res.status(400).json({ error: "Некорректный кошелёк" });
@@ -84,16 +91,33 @@ expensesRouter.post("/", async (req, res) => {
 
   const { rows } = await pool.query(
     createdAt
-      ? `INSERT INTO expenses (wallet, amount, category, description, raw_text, user_id, created_at)
-         VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *`
-      : `INSERT INTO expenses (wallet, amount, category, description, raw_text, user_id)
-         VALUES ($1, $2, $3, $4, $5, $6) RETURNING *`,
+      ? `INSERT INTO expenses (wallet, amount, category, description, raw_text, user_id, created_at, idempotency_key)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+         ON CONFLICT (user_id, idempotency_key) WHERE idempotency_key IS NOT NULL DO NOTHING
+         RETURNING *`
+      : `INSERT INTO expenses (wallet, amount, category, description, raw_text, user_id, idempotency_key)
+         VALUES ($1, $2, $3, $4, $5, $6, $7)
+         ON CONFLICT (user_id, idempotency_key) WHERE idempotency_key IS NOT NULL DO NOTHING
+         RETURNING *`,
     createdAt
-      ? [wallet, amount, finalCategory, description || null, raw_text || null, req.user.id, createdAt]
-      : [wallet, amount, finalCategory, description || null, raw_text || null, req.user.id]
+      ? [wallet, amount, finalCategory, description || null, raw_text || null, req.user.id, createdAt, idempotencyKey || null]
+      : [wallet, amount, finalCategory, description || null, raw_text || null, req.user.id, idempotencyKey || null]
   );
-  appendExpenseRow(req.user, rows[0]);
-  res.status(201).json(rows[0]);
+
+  let row = rows[0];
+  let isNew = true;
+  if (!row && idempotencyKey) {
+    // Lost the race to another request with the same key — that one landed
+    // the real insert, so hand back its row instead of erroring out.
+    const existing = await pool.query(`SELECT * FROM expenses WHERE user_id = $1 AND idempotency_key = $2`, [
+      req.user.id,
+      idempotencyKey,
+    ]);
+    row = existing.rows[0];
+    isNew = false;
+  }
+  if (isNew) appendExpenseRow(req.user, row);
+  res.status(201).json(row);
 });
 
 // Photo → Claude Vision → a proposal, same contract as the voice flow's

@@ -122,6 +122,19 @@ export async function initSchema() {
     await pool.query(`CREATE INDEX IF NOT EXISTS expenses_user_id_idx ON expenses (user_id)`);
   }
 
+  // Idempotent for expenses tables created before this existed. The offline
+  // queue (frontend/src/offlineQueue.js) retries a create whenever it can't
+  // tell "never reached the server" apart from "server saved it but the
+  // response got lost" (a cold Render start is exactly that kind of flaky
+  // window) — without a client-supplied key to dedup on, that retry becomes
+  // a genuine second row. NULL for every other insert path (voice confirm,
+  // receipt scan, backfill), which don't go through that retry loop.
+  await pool.query(`ALTER TABLE expenses ADD COLUMN IF NOT EXISTS idempotency_key TEXT`);
+  await pool.query(`
+    CREATE UNIQUE INDEX IF NOT EXISTS expenses_idempotency_key_idx
+    ON expenses (user_id, idempotency_key) WHERE idempotency_key IS NOT NULL;
+  `);
+
   // categories: used to be one global list (UNIQUE on name alone). Fresh
   // installs get the per-wallet shape directly; existing tables are
   // migrated below.

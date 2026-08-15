@@ -114,7 +114,11 @@ export async function syncPendingExpenses(createExpense) {
       if (!entry) break;
       let created;
       try {
-        created = await createExpense(entry.payload);
+        // localId doubles as the server-side dedup key — if this exact
+        // create already landed once (its response just never made it
+        // back, e.g. a cold Render start dropping the connection), the
+        // retry below returns that original row instead of a new one.
+        created = await createExpense({ ...entry.payload, idempotencyKey: entry.localId });
       } catch {
         break;
       }
