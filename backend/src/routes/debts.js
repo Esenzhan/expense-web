@@ -227,6 +227,11 @@ debtsRouter.delete("/:id", async (req, res) => {
       await client.query("ROLLBACK");
       return res.status(404).json({ error: "Долг не найден" });
     }
+    // Same rule as settling one — see POST /:id/payments.
+    if (debt.created_by !== req.user.id) {
+      await client.query("ROLLBACK");
+      return res.status(403).json({ error: "Удалить долг может только тот, кто его создал" });
+    }
     const remaining = Number(debt.remaining);
     const amount = Number(debt.amount);
     const untouched = remaining === amount;
