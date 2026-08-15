@@ -9,6 +9,8 @@ export const capitalRouter = Router();
 capitalRouter.get("/", async (req, res) => {
   const { rows } = await pool.query(`
     SELECT s.id, s.created_at, u.name AS created_by_name,
+      COALESCE(SUM(i.amount) FILTER (WHERE i.kind = 'asset'), 0) AS assets_total,
+      COALESCE(SUM(i.amount) FILTER (WHERE i.kind = 'liability'), 0) AS liabilities_total,
       COALESCE(SUM(i.amount) FILTER (WHERE i.kind = 'asset'), 0)
         - COALESCE(SUM(i.amount) FILTER (WHERE i.kind = 'liability'), 0) AS total
     FROM capital_snapshots s
