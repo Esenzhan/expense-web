@@ -152,8 +152,23 @@ export function useSwipeDismissRight(pageRef, onClose) {
       const dx = event.touches[0].clientX - state.startX;
       const dy = event.touches[0].clientY - state.startY;
       if (!state.pulling) {
-        // Leftward or vertical intent (scrolling the list) — stand down
-        if (dx < -4 || Math.abs(dy) > Math.abs(dx)) return;
+        // Leftward or vertical intent (scrolling the page) — stand down
+        // and let the page's own overflow-y:auto handle it natively...
+        if (dx < -4 || Math.abs(dy) > Math.abs(dx)) {
+          // ...except right at its own scroll boundary (or when there's
+          // nothing to scroll at all, which is always "at both boundaries"
+          // at once). overscroll-behavior: contain alone doesn't reliably
+          // stop iOS Safari from chaining the rubber-band past there to
+          // the next scrollable ancestor — the list behind this page —
+          // same leak useSwipeDismiss already guards against for bottom
+          // sheets, just never ported to this full-page variant.
+          const atTop = el.scrollTop <= 0;
+          const atBottom = el.scrollTop + el.clientHeight >= el.scrollHeight - 1;
+          if ((dy > 4 && atTop) || (dy < -4 && atBottom)) {
+            event.preventDefault();
+          }
+          return;
+        }
         if (dx < 10) return;
         state.pulling = true;
       }
