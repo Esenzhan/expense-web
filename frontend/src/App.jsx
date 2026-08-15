@@ -24,6 +24,9 @@ import WalletsSheet from "./components/WalletsSheet";
 import NewWalletSheet from "./components/NewWalletSheet";
 import WalletTransferSheet from "./components/WalletTransferSheet";
 import BalanceHistorySheet from "./components/BalanceHistorySheet";
+import DebtsSheet from "./components/DebtsSheet";
+import NewDebtSheet from "./components/NewDebtSheet";
+import DebtDetailSheet from "./components/DebtDetailSheet";
 import PeriodPickerSheet from "./components/PeriodPickerSheet";
 import SearchSheet from "./components/SearchSheet";
 import AccountBalanceRow from "./components/AccountBalanceRow";
@@ -196,6 +199,10 @@ export default function App() {
   const [newWalletOpen, setNewWalletOpen] = useState(false);
   const [editingWallet, setEditingWallet] = useState(null);
   const [transferOpen, setTransferOpen] = useState(false);
+  const [debtsOpen, setDebtsOpen] = useState(false);
+  const [newDebtOpen, setNewDebtOpen] = useState(false);
+  const [selectedDebt, setSelectedDebt] = useState(null);
+  const [debtsRefreshKey, setDebtsRefreshKey] = useState(0);
   const [selectedWallet, setSelectedWallet] = useState(
     () => localStorage.getItem("traty-wallet") || null
   );
@@ -808,8 +815,15 @@ export default function App() {
           >
             <HeaderIcon><circle cx="11" cy="11" r="6" /><path d="m16 16 4 4" /></HeaderIcon>
           </button>
-          <button className="header-icon" aria-label="Статистика">
-            <HeaderIcon><circle cx="12" cy="12" r="8" /><path d="M12 4v8h8" /></HeaderIcon>
+          <button
+            className="header-icon"
+            aria-label="Долги"
+            onClick={() => {
+              haptic();
+              setDebtsOpen(true);
+            }}
+          >
+            <HeaderIcon><rect x="5" y="4" width="14" height="16" rx="2" /><path d="M9 9h6M9 13h4" /><circle cx="15.5" cy="16.5" r="2.5" /></HeaderIcon>
           </button>
           <button className="header-icon" aria-label="Кошельки">
             <HeaderIcon><ellipse cx="12" cy="7" rx="7" ry="2.5" /><path d="M5 7v10c0 1.4 3.1 2.5 7 2.5s7-1.1 7-2.5V7" /><path d="M5 12c0 1.4 3.1 2.5 7 2.5s7-1.1 7-2.5" /></HeaderIcon>
@@ -951,6 +965,40 @@ export default function App() {
       {themeOpen && <ThemeSheet theme={theme} onChange={changeTheme} onClose={() => setThemeOpen(false)} />}
 
       {balanceHistoryOpen && <BalanceHistorySheet onClose={() => setBalanceHistoryOpen(false)} />}
+
+      {debtsOpen && (
+        <DebtsSheet
+          refreshKey={debtsRefreshKey}
+          onClose={() => setDebtsOpen(false)}
+          onOpenNewDebt={() => setNewDebtOpen(true)}
+          onOpenDebt={(debt) => setSelectedDebt(debt)}
+        />
+      )}
+
+      {newDebtOpen && (
+        <NewDebtSheet
+          onClose={() => setNewDebtOpen(false)}
+          onCreated={async () => {
+            setNewDebtOpen(false);
+            setDebtsRefreshKey((k) => k + 1);
+            // A debt tied to a wallet just moved its balance on the backend
+            // (see routes/debts.js) — re-fetch so the main screen's "Баланс"
+            // and the Счета sheet reflect it immediately, same as a transfer.
+            setWalletBalances(await fetchWalletBalances());
+          }}
+        />
+      )}
+
+      {selectedDebt && (
+        <DebtDetailSheet
+          debt={selectedDebt}
+          onClose={() => setSelectedDebt(null)}
+          onChanged={async () => {
+            setDebtsRefreshKey((k) => k + 1);
+            setWalletBalances(await fetchWalletBalances());
+          }}
+        />
+      )}
 
       {categoriesOpen && (
         <CategoriesSheet

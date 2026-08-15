@@ -150,6 +150,50 @@ export async function fetchWallets() {
   return res.json();
 }
 
+export async function fetchDebts() {
+  const res = await apiFetch(`/api/debts`);
+  return res.json();
+}
+
+export async function fetchDebtPayments(debtId) {
+  const res = await apiFetch(`/api/debts/${debtId}/payments`);
+  return res.json();
+}
+
+export async function createDebt(payload) {
+  const res = await apiFetch(`/api/debts`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    throw new Error(body.error || "Не удалось сохранить долг");
+  }
+  return res.json();
+}
+
+export async function payDebt(debtId, amount, wallet) {
+  const res = await apiFetch(`/api/debts/${debtId}/payments`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ amount, wallet: wallet || null }),
+  });
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    throw new Error(body.error || "Не удалось сохранить платёж");
+  }
+  return res.json();
+}
+
+export async function deleteDebt(debtId) {
+  const res = await apiFetch(`/api/debts/${debtId}`, { method: "DELETE" });
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    throw new Error(body.error || "Не удалось удалить долг");
+  }
+}
+
 export async function createWallet(payload) {
   const res = await apiFetch(`/api/wallets`, {
     method: "POST",

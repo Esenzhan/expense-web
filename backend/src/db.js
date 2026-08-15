@@ -341,4 +341,49 @@ export async function initSchema() {
   await pool.query(`
     CREATE INDEX IF NOT EXISTS balance_history_wallet_idx ON balance_history (wallet, changed_at DESC);
   `);
+
+  // Долги — "owed_to_us" (someone owes us) or "we_owe" (we owe someone).
+  // `user_id NULL` = family-scoped (both accounts see/settle it, same split
+  // as wallet_balances' shared row); set = personal to that account only.
+  // `remaining` is the live "how much is left" figure — decremented by each
+  // debt_payments row rather than recomputed from a SUM, since (unlike
+  // expenses) payments never get edited/deleted after the fact, so there's
+  // no drift risk from storing it directly, and it's what most reads need.
+  // `wallet` is optional: only set when the loan/borrow actually moved
+  // through a tracked account, in which case creating/paying it also
+  // re-bases that wallet's balance (see routes/debts.js) so the site's
+  // number doesn't drift from the real bank balance once money changes
+  // hands for real.
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS debts (
+      id SERIAL PRIMARY KEY,
+      direction TEXT NOT NULL CHECK (direction IN ('owed_to_us', 'we_owe')),
+      user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+      counterparty TEXT NOT NULL,
+      description TEXT,
+      amount NUMERIC NOT NULL CHECK (amount > 0),
+      remaining NUMERIC NOT NULL,
+      wallet TEXT REFERENCES wallets(name) ON DELETE SET NULL,
+      status TEXT NOT NULL DEFAULT 'open' CHECK (status IN ('open', 'closed')),
+      created_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+      closed_at TIMESTAMPTZ
+    );
+  `);
+  await pool.query(`
+    CREATE INDEX IF NOT EXISTS debts_status_idx ON debts (status, created_at DESC);
+  `);
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS debt_payments (
+      id SERIAL PRIMARY KEY,
+      debt_id INTEGER NOT NULL REFERENCES debts(id) ON DELETE CASCADE,
+      amount NUMERIC NOT NULL CHECK (amount > 0),
+      wallet TEXT REFERENCES wallets(name) ON DELETE SET NULL,
+      changed_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+    );
+  `);
+  await pool.query(`
+    CREATE INDEX IF NOT EXISTS debt_payments_debt_idx ON debt_payments (debt_id, created_at);
+  `);
 }
