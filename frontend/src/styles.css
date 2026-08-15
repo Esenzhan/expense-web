@@ -1051,6 +1051,19 @@ body {
   box-shadow: 0 12px 30px rgba(20, 20, 26, 0.15);
   overflow: hidden;
   z-index: 5;
+  transform-origin: top right;
+  animation: menu-pop 0.16s cubic-bezier(0.2, 0.9, 0.3, 1);
+}
+
+@keyframes menu-pop {
+  from {
+    opacity: 0;
+    transform: scale(0.9) translateY(-4px);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
 }
 
 .menu-item {
@@ -1068,6 +1081,26 @@ body {
 
 .menu-item.danger {
   color: var(--danger);
+}
+
+/* Re-keyed on confirmDelete flip (see EditExpenseSheet.jsx) so "Удалить"
+   -> "Точно удалить?" replays this instead of snapping instantly. */
+.menu-item-text {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  animation: menu-text-in 0.16s ease;
+}
+
+@keyframes menu-text-in {
+  from {
+    opacity: 0;
+    transform: translateY(-3px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
 /* Flexible middle zone: soaks up the free vertical space so everything

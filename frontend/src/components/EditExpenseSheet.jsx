@@ -3,6 +3,7 @@ import { createExpense, updateExpense } from "../api";
 import { enqueueExpense, updatePendingExpense, removePendingExpense, syncPendingExpenses } from "../offlineQueue";
 import { listCategories, getCategoryIcon } from "../categoryIcons";
 import CategoryGlyph from "./CategoryGlyph";
+import TrashIcon from "./TrashIcon";
 import { listWallets } from "../wallets";
 import { haptic, hapticTick } from "../haptics";
 import { useSwipeDismiss } from "../sheetGestures";
@@ -360,7 +361,10 @@ export default function EditExpenseSheet({
                     onClick={confirmDelete ? handleDelete : () => setConfirmDelete(true)}
                     disabled={saving}
                   >
-                    {confirmDelete ? "Точно удалить?" : "Удалить"} 🗑
+                    <span className="menu-item-text" key={confirmDelete ? "confirm" : "ask"}>
+                      {confirmDelete ? "Точно удалить?" : "Удалить"}
+                      <TrashIcon size={16} />
+                    </span>
                   </button>
                 </div>
               )}

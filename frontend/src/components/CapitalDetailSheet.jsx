@@ -3,6 +3,7 @@ import { fetchCapitalSnapshot, deleteCapitalSnapshot } from "../api";
 import { haptic, hapticHeavy } from "../haptics";
 import { useSwipeDismiss } from "../sheetGestures";
 import { almaty } from "../insights";
+import TrashIcon from "./TrashIcon";
 
 function formatAmount(amount) {
   return `${Number(amount).toLocaleString("ru-RU")} ₸`;
@@ -25,6 +26,7 @@ export default function CapitalDetailSheet({ snapshot, previousTotal, onClose, o
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
   const [confirmingDelete, setConfirmingDelete] = useState(false);
+  const [menuOpen, setMenuOpen] = useState(false);
 
   useEffect(() => {
     fetchCapitalSnapshot(snapshot.id)
@@ -64,7 +66,32 @@ export default function CapitalDetailSheet({ snapshot, previousTotal, onClose, o
             ✕
           </button>
           <span className="cats-title">{formatDate(snapshot.created_at)}</span>
-          <span className="icon-button-spacer" />
+          <div className="edit-menu-wrap">
+            <button
+              className="icon-button"
+              onClick={() => {
+                setMenuOpen((open) => !open);
+                setConfirmingDelete(false);
+              }}
+              aria-label="Меню"
+            >
+              ⋮
+            </button>
+            {menuOpen && (
+              <div className="edit-menu">
+                <button
+                  className="menu-item danger"
+                  onClick={confirmingDelete ? handleDelete : () => setConfirmingDelete(true)}
+                  disabled={saving}
+                >
+                  <span className="menu-item-text" key={confirmingDelete ? "confirm" : "ask"}>
+                    {confirmingDelete ? "Точно удалить?" : "Удалить"}
+                    <TrashIcon size={16} />
+                  </span>
+                </button>
+              </div>
+            )}
+          </div>
         </div>
 
         <div className="settings-group">
@@ -119,10 +146,6 @@ export default function CapitalDetailSheet({ snapshot, previousTotal, onClose, o
             </div>
           </>
         )}
-
-        <button className="sheet-delete" onClick={handleDelete} disabled={saving}>
-          {confirmingDelete ? "Точно удалить снимок?" : "Удалить снимок"}
-        </button>
       </div>
     </div>
   );
