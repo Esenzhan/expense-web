@@ -2094,6 +2094,16 @@ body {
   animation: sheet-up 0.32s cubic-bezier(0.2, 0.9, 0.3, 1);
 }
 
+/* Without this, flex's default flex-shrink:1 compresses children (and
+   their overflow:hidden descendants, like .settings-group) below their
+   natural height once total content exceeds the fixed 92vh — silently
+   clipping the last rows of earlier blocks instead of leaving overflow-y
+   above to scroll to them. Most content here stayed short enough that
+   this never came up until DebtDetailSheet's payment list grew past it. */
+.categories-sheet > * {
+  flex-shrink: 0;
+}
+
 .cats-header {
   display: flex;
   align-items: center;

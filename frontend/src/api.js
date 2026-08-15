@@ -173,11 +173,11 @@ export async function createDebt(payload) {
   return res.json();
 }
 
-export async function payDebt(debtId, amount, wallet) {
+export async function payDebt(debtId, amount) {
   const res = await apiFetch(`/api/debts/${debtId}/payments`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ amount, wallet: wallet || null }),
+    body: JSON.stringify({ amount }),
   });
   if (!res.ok) {
     const body = await res.json().catch(() => ({}));

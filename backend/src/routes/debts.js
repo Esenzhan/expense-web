@@ -105,13 +105,10 @@ debtsRouter.post("/", async (req, res) => {
 
 debtsRouter.post("/:id/payments", async (req, res) => {
   const { id } = req.params;
-  const { amount, wallet } = req.body;
+  const { amount } = req.body;
 
   if (typeof amount !== "number" || !Number.isFinite(amount) || amount <= 0) {
     return res.status(400).json({ error: "Некорректная сумма" });
-  }
-  if (wallet != null && !(await isValidWallet(wallet))) {
-    return res.status(400).json({ error: "Некорректный счёт" });
   }
 
   const client = await pool.connect();
@@ -136,15 +133,19 @@ debtsRouter.post("/:id/payments", async (req, res) => {
       return res.status(400).json({ error: "Сумма больше остатка долга" });
     }
 
-    if (wallet) {
-      const shared = await isSharedWallet(wallet);
-      const oldAmount = (await getCurrentBalance(client, wallet, req.user.id)) ?? 0;
+    // Repayment always returns to the same wallet the debt was created
+    // against (or nowhere, if it was created without one) — no picking a
+    // different one at repayment time, so the balance always reconciles
+    // with the account the money actually moved through.
+    if (debt.wallet) {
+      const shared = await isSharedWallet(debt.wallet);
+      const oldAmount = (await getCurrentBalance(client, debt.wallet, req.user.id)) ?? 0;
       // owed_to_us: they're paying us back, so it arrives. we_owe: we're
       // paying it back, so it leaves.
       const delta = debt.direction === "owed_to_us" ? amount : -amount;
-      await setBalance(client, wallet, req.user.id, shared, oldAmount + delta);
+      await setBalance(client, debt.wallet, req.user.id, shared, oldAmount + delta);
       await logBalanceChange(client, {
-        wallet,
+        wallet: debt.wallet,
         oldAmount,
         newAmount: oldAmount + delta,
         reason: debt.direction === "owed_to_us" ? "debt_repay_in" : "debt_repay_out",
@@ -154,7 +155,7 @@ debtsRouter.post("/:id/payments", async (req, res) => {
 
     await client.query(
       `INSERT INTO debt_payments (debt_id, amount, wallet, changed_by) VALUES ($1, $2, $3, $4)`,
-      [id, amount, wallet || null, req.user.id]
+      [id, amount, debt.wallet || null, req.user.id]
     );
 
     const newRemaining = Number(debt.remaining) - amount;

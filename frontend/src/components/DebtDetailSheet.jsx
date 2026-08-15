@@ -1,11 +1,8 @@
 import { useEffect, useRef, useState } from "react";
-import { listWallets } from "../wallets";
 import { fetchDebtPayments, payDebt, deleteDebt } from "../api";
 import { haptic, hapticHeavy } from "../haptics";
 import { useSwipeDismiss } from "../sheetGestures";
 import { almaty } from "../insights";
-import CategoryGlyph from "./CategoryGlyph";
-import { catIconVars } from "../catIconVars";
 
 function formatAmount(amount) {
   return `${Number(amount).toLocaleString("ru-RU", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ₸`;
@@ -26,12 +23,10 @@ export default function DebtDetailSheet({ debt: initialDebt, onClose, onChanged 
   const sheetRef = useRef(null);
   useSwipeDismiss(sheetRef, onClose);
 
-  const wallets = listWallets();
   const [debt, setDebt] = useState(initialDebt);
   const [payments, setPayments] = useState([]);
   const [loadingPayments, setLoadingPayments] = useState(true);
   const [payAmount, setPayAmount] = useState("");
-  const [payWallet, setPayWallet] = useState(debt.wallet || null);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const [confirmingDelete, setConfirmingDelete] = useState(false);
@@ -56,7 +51,7 @@ export default function DebtDetailSheet({ debt: initialDebt, onClose, onChanged 
     setSaving(true);
     setError("");
     try {
-      const updated = await payDebt(debt.id, num, payWallet);
+      const updated = await payDebt(debt.id, num);
       hapticHeavy();
       setDebt(updated);
       setPayAmount("");
@@ -180,37 +175,13 @@ export default function DebtDetailSheet({ debt: initialDebt, onClose, onChanged 
               Погасить полностью
             </button>
 
-            <div className="wallet-pick-row" style={{ marginTop: 8 }}>
-              <button
-                type="button"
-                className={`wallet-pick ${payWallet === null ? "active" : ""}`}
-                onClick={() => {
-                  haptic();
-                  setPayWallet(null);
-                }}
-              >
-                <span className="wallet-pick-icon" style={{ background: "var(--surface)", color: "var(--ink-soft)" }}>
-                  ⃠
-                </span>
-                <span className="wallet-pick-label">Без счёта</span>
-              </button>
-              {wallets.map((w) => (
-                <button
-                  key={w.name}
-                  type="button"
-                  className={`wallet-pick ${payWallet === w.name ? "active" : ""}`}
-                  onClick={() => {
-                    haptic();
-                    setPayWallet(w.name);
-                  }}
-                >
-                  <span className="wallet-pick-icon" style={catIconVars(w.bg, w.fg)}>
-                    <CategoryGlyph emoji={w.emoji} size={18} />
-                  </span>
-                  <span className="wallet-pick-label">{w.name}</span>
-                </button>
-              ))}
-            </div>
+            <p className="debt-hint">
+              {debt.wallet
+                ? debt.direction === "owed_to_us"
+                  ? `Сумма зачислится на баланс «${debt.wallet}» — счёт, выбранный при создании долга.`
+                  : `Сумма спишется с баланса «${debt.wallet}» — счёт, выбранный при создании долга.`
+                : "Долг создан без привязки к счёту — баланс не изменится."}
+            </p>
 
             {error && <p className="sheet-error">{error}</p>}
 
