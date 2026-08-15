@@ -1,7 +1,7 @@
 import { Router } from "express";
 import { pool } from "../db.js";
 import { isValidWallet } from "../wallets.js";
-import { isSharedWallet, getCurrentBalance, setBalance, logBalanceChange } from "../services/balanceHistory.js";
+import { getCurrentBalance, setBalance, logBalanceChange } from "../services/balanceHistory.js";
 
 export const walletTransfersRouter = Router();
 
@@ -24,7 +24,6 @@ walletTransfersRouter.post("/", async (req, res) => {
     return res.status(400).json({ error: "Некорректная сумма" });
   }
 
-  const [fromShared, toShared] = await Promise.all([isSharedWallet(from), isSharedWallet(to)]);
   const client = await pool.connect();
   try {
     await client.query("BEGIN");
@@ -33,8 +32,8 @@ walletTransfersRouter.post("/", async (req, res) => {
     const fromNew = fromOld - amount;
     const toNew = toOld + amount;
 
-    const fromUpdated = await setBalance(client, from, req.user.id, fromShared, fromNew);
-    const toUpdated = await setBalance(client, to, req.user.id, toShared, toNew);
+    const fromUpdated = await setBalance(client, from, req.user.id, fromNew);
+    const toUpdated = await setBalance(client, to, req.user.id, toNew);
 
     await logBalanceChange(client, {
       wallet: from,

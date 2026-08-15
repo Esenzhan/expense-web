@@ -1,7 +1,7 @@
 import { Router } from "express";
 import { pool } from "../db.js";
 import { isValidWallet } from "../wallets.js";
-import { isSharedWallet, getCurrentBalance, setBalance, logBalanceChange } from "../services/balanceHistory.js";
+import { getCurrentBalance, setBalance, logBalanceChange } from "../services/balanceHistory.js";
 
 export const debtsRouter = Router();
 
@@ -9,8 +9,9 @@ function isValidDirection(direction) {
   return direction === "owed_to_us" || direction === "we_owe";
 }
 
-// Family-scoped debts (user_id NULL) are visible to both accounts, same
-// split as wallet_balances' shared row; personal ones only to their owner.
+// Family-scoped debts (user_id NULL) are visible to both accounts (though
+// only the creator can settle/pay one — see POST /:id/payments); personal
+// ones only to their owner.
 debtsRouter.get("/", async (req, res) => {
   const { rows } = await pool.query(
     `SELECT d.*, u.name AS created_by_name
@@ -77,12 +78,13 @@ debtsRouter.post("/", async (req, res) => {
     await client.query("BEGIN");
 
     if (wallet) {
-      const shared = await isSharedWallet(wallet);
       const oldAmount = (await getCurrentBalance(client, wallet, req.user.id)) ?? 0;
       // owed_to_us: we're lending it out, so it leaves the wallet. we_owe:
-      // we're borrowing it, so it arrives.
+      // we're borrowing it, so it arrives. Only the acting (creating)
+      // account's own balance on this wallet moves — same as any other
+      // balance-affecting action now, see balanceHistory.js.
       const delta = direction === "owed_to_us" ? -amount : amount;
-      await setBalance(client, wallet, req.user.id, shared, oldAmount + delta);
+      await setBalance(client, wallet, req.user.id, oldAmount + delta);
       await logBalanceChange(client, {
         wallet,
         oldAmount,
@@ -144,6 +146,14 @@ debtsRouter.post("/:id/payments", async (req, res) => {
       await client.query("ROLLBACK");
       return res.status(404).json({ error: "Долг не найден" });
     }
+    // Family-scoped debts are visible to both accounts, but only whoever
+    // actually created it can settle it — a payment re-bases the wallet
+    // balance (below), and that must stay tied to the person who agreed to
+    // the debt in the first place, not whichever account taps «Погасить» first.
+    if (debt.created_by !== req.user.id) {
+      await client.query("ROLLBACK");
+      return res.status(403).json({ error: "Погасить долг может только тот, кто его создал" });
+    }
     if (debt.status !== "open") {
       await client.query("ROLLBACK");
       return res.status(400).json({ error: "Долг уже закрыт" });
@@ -158,12 +168,11 @@ debtsRouter.post("/:id/payments", async (req, res) => {
     // different one at repayment time, so the balance always reconciles
     // with the account the money actually moved through.
     if (debt.wallet) {
-      const shared = await isSharedWallet(debt.wallet);
       const oldAmount = (await getCurrentBalance(client, debt.wallet, req.user.id)) ?? 0;
       // owed_to_us: they're paying us back, so it arrives. we_owe: we're
       // paying it back, so it leaves.
       const delta = debt.direction === "owed_to_us" ? amount : -amount;
-      await setBalance(client, debt.wallet, req.user.id, shared, oldAmount + delta);
+      await setBalance(client, debt.wallet, req.user.id, oldAmount + delta);
       await logBalanceChange(client, {
         wallet: debt.wallet,
         oldAmount,
@@ -228,10 +237,9 @@ debtsRouter.delete("/:id", async (req, res) => {
     }
 
     if (debt.wallet && untouched) {
-      const shared = await isSharedWallet(debt.wallet);
       const oldAmount = (await getCurrentBalance(client, debt.wallet, req.user.id)) ?? 0;
       const delta = debt.direction === "owed_to_us" ? amount : -amount;
-      await setBalance(client, debt.wallet, req.user.id, shared, oldAmount + delta);
+      await setBalance(client, debt.wallet, req.user.id, oldAmount + delta);
       await logBalanceChange(client, {
         wallet: debt.wallet,
         oldAmount,

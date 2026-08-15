@@ -1,21 +1,19 @@
 import { Router } from "express";
 import { pool } from "../db.js";
 import { isValidWallet } from "../wallets.js";
-import { isSharedWallet, getCurrentBalance, setBalance, logBalanceChange } from "../services/balanceHistory.js";
+import { getCurrentBalance, setBalance, logBalanceChange } from "../services/balanceHistory.js";
 
 export const walletBalancesRouter = Router();
 
-// Every wallet that has a balance set up for the current account (shared
-// wallets always resolve to the one shared row; "Личные" only to this
-// user's own row) — the frontend treats a missing wallet as "not set up
-// yet". current_balance is computed here, not stored, so it's always
+// Every wallet that has a balance set up for the current account — each
+// account has its own row on every wallet now, "Семья"/shared ones
+// included, so this only ever returns THIS account's own checkpoints.
+// The frontend treats a missing wallet as "not set up yet" for this
+// account. current_balance is computed here, not stored, so it's always
 // consistent with whatever's in `expenses` regardless of how a given row
-// got there (manual, voice, bot, offline sync, edit, delete).
-//
-// The expense subtraction is scoped to THIS request's user even for a
-// shared wallet's row — see the matching comment on getCurrentBalance in
-// services/balanceHistory.js for why (the other account's spending must
-// not move a balance you set, only your own does).
+// got there (manual, voice, bot, offline sync, edit, delete) — and always
+// scoped to this account's own expenses, even on a shared wallet (the
+// other account's spending must not move a balance you set).
 walletBalancesRouter.get("/", async (req, res) => {
   const { rows } = await pool.query(
     `SELECT wb.wallet, wb.base_amount, wb.base_at,
@@ -24,7 +22,7 @@ walletBalancesRouter.get("/", async (req, res) => {
          WHERE e.wallet = wb.wallet AND e.created_at > wb.base_at AND e.user_id = $1
        ), 0) AS current_balance
      FROM wallet_balances wb
-     WHERE wb.user_id IS NULL OR wb.user_id = $1`,
+     WHERE wb.user_id = $1`,
     [req.user.id]
   );
   res.json(rows);
@@ -41,12 +39,11 @@ walletBalancesRouter.put("/:wallet", async (req, res) => {
     return res.status(400).json({ error: "Некорректная сумма" });
   }
 
-  const shared = await isSharedWallet(wallet);
   const client = await pool.connect();
   try {
     await client.query("BEGIN");
     const oldAmount = await getCurrentBalance(client, wallet, req.user.id);
-    const updated = await setBalance(client, wallet, req.user.id, shared, amount);
+    const updated = await setBalance(client, wallet, req.user.id, amount);
     await logBalanceChange(client, {
       wallet,
       oldAmount,

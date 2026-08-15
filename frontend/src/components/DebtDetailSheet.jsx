@@ -26,7 +26,7 @@ function formatDate(value) {
 // и форма погашения (полного или частичного). Удаление доступно только пока
 // не было ни одного платежа (см. routes/debts.js — иначе пришлось бы
 // откатывать историю баланса по каждому платежу).
-export default function DebtDetailSheet({ debt: initialDebt, onClose, onChanged }) {
+export default function DebtDetailSheet({ debt: initialDebt, currentUserId, onClose, onChanged }) {
   const sheetRef = useRef(null);
   useSwipeDismiss(sheetRef, onClose);
 
@@ -93,6 +93,10 @@ export default function DebtDetailSheet({ debt: initialDebt, onClose, onChanged 
   }
 
   const canDelete = Number(debt.remaining) === Number(debt.amount);
+  // Family-scoped debts are visible to both accounts, but only whoever
+  // created it can settle it (see routes/debts.js's POST /:id/payments) —
+  // otherwise its wallet re-basing would end up tied to the wrong account.
+  const canPay = debt.created_by === currentUserId;
 
   return (
     <div className="sheet-backdrop" onClick={onClose}>
@@ -164,7 +168,7 @@ export default function DebtDetailSheet({ debt: initialDebt, onClose, onChanged 
           </>
         )}
 
-        {debt.status === "open" && (
+        {debt.status === "open" && canPay && (
           <>
             <p className="newcat-group-title">Погасить</p>
             <div className="balance-row">
@@ -206,6 +210,10 @@ export default function DebtDetailSheet({ debt: initialDebt, onClose, onChanged 
               {saving ? "Сохраняю…" : "Погасить"}
             </button>
           </>
+        )}
+
+        {debt.status === "open" && !canPay && (
+          <p className="debt-hint">Погасить может только тот, кто создал этот долг.</p>
         )}
 
         {canDelete && (

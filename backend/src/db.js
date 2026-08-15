@@ -264,9 +264,9 @@ export async function initSchema() {
   // all separate paths into `expenses`). Instead the live balance is always
   // computed as base_amount minus the sum of this wallet's expenses created
   // AFTER base_at (see routes/walletBalances.js) — self-consistent no matter
-  // how those expenses got there. Same shared/private split as
-  // category_limits above, for the same reason (Личные is one row per
-  // account, the rest are one shared row).
+  // how those expenses got there. One row per (wallet, user) always, even
+  // for a shared wallet like "Семья" — each account tracks its own balance
+  // on every wallet, see the migration just below for why.
   await pool.query(`
     CREATE TABLE IF NOT EXISTS wallet_balances (
       id SERIAL PRIMARY KEY,
@@ -277,13 +277,40 @@ export async function initSchema() {
     );
   `);
   await pool.query(`
-    CREATE UNIQUE INDEX IF NOT EXISTS wallet_balances_shared_uidx
-      ON wallet_balances (wallet) WHERE user_id IS NULL;
-  `);
-  await pool.query(`
     CREATE UNIQUE INDEX IF NOT EXISTS wallet_balances_private_uidx
       ON wallet_balances (wallet, user_id) WHERE user_id IS NOT NULL;
   `);
+
+  // Migrates away from the old shared/pooled row (one wallet_balances row
+  // with user_id NULL, covering both accounts) — every account now tracks
+  // its own balance on every wallet, "Семья" included, so one account's
+  // spending/debts/transfers never move the number the other account sees.
+  // Splits any surviving shared row into one copy per real user, all
+  // starting from that same last-known checkpoint; a no-op once it's run
+  // (no more user_id IS NULL rows ever get created after this point).
+  await pool.query(`
+    DO $$
+    DECLARE
+      shared_row RECORD;
+      u RECORD;
+      is_first BOOLEAN;
+    BEGIN
+      FOR shared_row IN SELECT * FROM wallet_balances WHERE user_id IS NULL LOOP
+        is_first := TRUE;
+        FOR u IN SELECT id FROM users ORDER BY id LOOP
+          IF is_first THEN
+            UPDATE wallet_balances SET user_id = u.id WHERE id = shared_row.id;
+            is_first := FALSE;
+          ELSE
+            INSERT INTO wallet_balances (wallet, user_id, base_amount, base_at)
+            VALUES (shared_row.wallet, u.id, shared_row.base_amount, shared_row.base_at)
+            ON CONFLICT DO NOTHING;
+          END IF;
+        END LOOP;
+      END LOOP;
+    END $$;
+  `);
+  await pool.query(`DROP INDEX IF EXISTS wallet_balances_shared_uidx;`);
 
   // Daily reminder ("did you forget to log an expense") settings — one row
   // per account. days uses ISO weekday numbers (1=Пн..7=Вс) to match "Первый

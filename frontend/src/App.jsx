@@ -1030,6 +1030,7 @@ export default function App() {
       {selectedDebt && (
         <DebtDetailSheet
           debt={selectedDebt}
+          currentUserId={user.id}
           onClose={() => setSelectedDebt(null)}
           onChanged={async () => {
             setDebtsRefreshKey((k) => k + 1);
