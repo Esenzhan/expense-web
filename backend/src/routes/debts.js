@@ -47,7 +47,7 @@ debtsRouter.get("/:id/payments", async (req, res) => {
 // (we_owe) is cash arriving — otherwise the site's balance silently drifts
 // from the real account the moment that money actually changes hands.
 debtsRouter.post("/", async (req, res) => {
-  const { direction, scope, counterparty, description, amount, wallet, dueDate } = req.body;
+  const { direction, scope, counterparty, description, amount, wallet, dueDate, issueDate } = req.body;
 
   if (!isValidDirection(direction)) {
     return res.status(400).json({ error: "Некорректное направление долга" });
@@ -66,6 +66,9 @@ debtsRouter.post("/", async (req, res) => {
   }
   if (dueDate != null && !/^\d{4}-\d{2}-\d{2}$/.test(dueDate)) {
     return res.status(400).json({ error: "Некорректная дата погашения" });
+  }
+  if (issueDate != null && !/^\d{4}-\d{2}-\d{2}$/.test(issueDate)) {
+    return res.status(400).json({ error: "Некорректная дата передачи долга" });
   }
 
   const userId = scope === "family" ? null : req.user.id;
@@ -94,10 +97,20 @@ debtsRouter.post("/", async (req, res) => {
     }
 
     const { rows } = await client.query(
-      `INSERT INTO debts (direction, user_id, counterparty, description, amount, remaining, wallet, created_by, due_date)
-       VALUES ($1, $2, $3, $4, $5, $5, $6, $7, $8)
+      `INSERT INTO debts (direction, user_id, counterparty, description, amount, remaining, wallet, created_by, due_date, created_at)
+       VALUES ($1, $2, $3, $4, $5, $5, $6, $7, $8, COALESCE($9::timestamptz, now()))
        RETURNING *`,
-      [direction, userId, counterparty.trim(), description || null, amount, wallet || null, req.user.id, dueDate || null]
+      [
+        direction,
+        userId,
+        counterparty.trim(),
+        description || null,
+        amount,
+        wallet || null,
+        req.user.id,
+        dueDate || null,
+        issueDate || null,
+      ]
     );
 
     await client.query("COMMIT");
