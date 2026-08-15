@@ -196,10 +196,13 @@ debtsRouter.post("/:id/payments", async (req, res) => {
   }
 });
 
-// Only while nothing's been paid yet — reverses the creation-time wallet
-// adjustment (if any) so deleting a just-added mistake doesn't leave a
-// phantom balance change behind. Once a payment exists the debt is no
-// longer a clean "undo": settle it down to 0 instead of deleting it.
+// Two safe cases: nothing paid yet (reverse the creation-time wallet
+// adjustment, if any, so deleting a just-added mistake doesn't leave a
+// phantom balance change behind), or fully settled (remaining 0 — the
+// creation delta was already unwound by the repayments themselves, so no
+// wallet adjustment is needed). A debt with only a *partial* payment is
+// the one case left blocked: neither reversal is complete, so it has to be
+// settled down to 0 instead of deleted.
 debtsRouter.delete("/:id", async (req, res) => {
   const { id } = req.params;
   const client = await pool.connect();
@@ -215,15 +218,19 @@ debtsRouter.delete("/:id", async (req, res) => {
       await client.query("ROLLBACK");
       return res.status(404).json({ error: "Долг не найден" });
     }
-    if (Number(debt.remaining) !== Number(debt.amount)) {
+    const remaining = Number(debt.remaining);
+    const amount = Number(debt.amount);
+    const untouched = remaining === amount;
+    const fullySettled = debt.status === "closed" && remaining <= 0;
+    if (!untouched && !fullySettled) {
       await client.query("ROLLBACK");
       return res.status(400).json({ error: "По долгу уже были платежи — его нельзя удалить, только погасить" });
     }
 
-    if (debt.wallet) {
+    if (debt.wallet && untouched) {
       const shared = await isSharedWallet(debt.wallet);
       const oldAmount = (await getCurrentBalance(client, debt.wallet, req.user.id)) ?? 0;
-      const delta = debt.direction === "owed_to_us" ? Number(debt.amount) : -Number(debt.amount);
+      const delta = debt.direction === "owed_to_us" ? amount : -amount;
       await setBalance(client, debt.wallet, req.user.id, shared, oldAmount + delta);
       await logBalanceChange(client, {
         wallet: debt.wallet,
