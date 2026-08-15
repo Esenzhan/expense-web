@@ -11,13 +11,17 @@ export const walletBalancesRouter = Router();
 // yet". current_balance is computed here, not stored, so it's always
 // consistent with whatever's in `expenses` regardless of how a given row
 // got there (manual, voice, bot, offline sync, edit, delete).
+//
+// The expense subtraction is scoped to THIS request's user even for a
+// shared wallet's row — see the matching comment on getCurrentBalance in
+// services/balanceHistory.js for why (the other account's spending must
+// not move a balance you set, only your own does).
 walletBalancesRouter.get("/", async (req, res) => {
   const { rows } = await pool.query(
     `SELECT wb.wallet, wb.base_amount, wb.base_at,
        wb.base_amount - COALESCE((
          SELECT SUM(e.amount) FROM expenses e
-         WHERE e.wallet = wb.wallet AND e.created_at > wb.base_at
-           AND (wb.user_id IS NULL OR e.user_id = wb.user_id)
+         WHERE e.wallet = wb.wallet AND e.created_at > wb.base_at AND e.user_id = $1
        ), 0) AS current_balance
      FROM wallet_balances wb
      WHERE wb.user_id IS NULL OR wb.user_id = $1`,

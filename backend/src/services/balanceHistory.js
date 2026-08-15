@@ -11,12 +11,20 @@ export async function isSharedWallet(wallet) {
 // Null means this wallet has never had a starting balance set — distinct
 // from an actual 0 balance, so a first-ever edit's history row correctly
 // logs old_amount as null instead of a misleading 0.
+//
+// The expense subtraction is always scoped to the requesting user's OWN
+// spending — including on a shared wallet's single row (wb.user_id IS
+// NULL). A shared wallet's balance you set is a personal correction
+// against the real account as you last checked it; someone else logging
+// their own coffee shouldn't silently move the number you see, only your
+// own spending should. Debts/transfers still re-base that one shared row
+// for both accounts via setBalance below — those represent an actual
+// agreed change to the real account, not routine day-to-day expenses.
 export async function getCurrentBalance(client, wallet, userId) {
   const { rows } = await client.query(
     `SELECT wb.base_amount - COALESCE((
          SELECT SUM(e.amount) FROM expenses e
-         WHERE e.wallet = wb.wallet AND e.created_at > wb.base_at
-           AND (wb.user_id IS NULL OR e.user_id = wb.user_id)
+         WHERE e.wallet = wb.wallet AND e.created_at > wb.base_at AND e.user_id = $2
        ), 0) AS current_balance
      FROM wallet_balances wb
      WHERE wb.wallet = $1 AND (wb.user_id IS NULL OR wb.user_id = $2)`,
