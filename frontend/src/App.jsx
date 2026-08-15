@@ -480,12 +480,24 @@ export default function App() {
       baseExp = baseExp.filter((e) => e.user_id === user.id);
     }
 
-    const mergedExpenses = [...pendingForList, ...baseExp].map((e) =>
+    // A synced-shadow row (real server id already) can briefly coexist with
+    // that same row freshly arrived in baseExp/baseInsightsRows —
+    // clearConfirmedSynced only drops the shadow once a refetch *issued
+    // after* the sync lands, but a refetch issued earlier can still resolve
+    // later (cold start, browser's per-origin connection cap) and
+    // legitimately already contain it. Drop any shadow/queued row the fresh
+    // data already has for real rather than relying on that timing alone,
+    // so it never renders, counts toward a total, or feeds insights twice.
+    const baseIds = new Set(baseExp.map((e) => e.id));
+    const insightsBaseIds = new Set(baseInsightsRows.map((e) => e.id));
+    const unconfirmedForList = pendingForList.filter((p) => !baseIds.has(p.id));
+    const mergedExpenses = [...unconfirmedForList, ...baseExp].map((e) =>
       exitingRef.current.has(e.id) ? { ...e, exiting: true } : e
     );
 
     const pendingByWallet = new Map();
     for (const p of pending) {
+      if (baseIds.has(p.id)) continue;
       pendingByWallet.set(p.wallet, (pendingByWallet.get(p.wallet) || 0) + Number(p.amount));
     }
     for (const { wallet: excludedWallet, amount: excludedAmount } of excluded.values()) {
@@ -513,6 +525,7 @@ export default function App() {
     // the same way server rows already are.
     const { start: periodStart, end: periodEnd } = periodRange(currentPeriod);
     const pendingInPeriod = pendingForList.filter((p) => {
+      if (insightsBaseIds.has(p.id)) return false;
       const createdAt = new Date(p.created_at);
       return createdAt >= periodStart && createdAt < periodEnd;
     });
