@@ -210,6 +210,37 @@ export async function deleteDebt(debtId) {
   }
 }
 
+export async function fetchCapitalSnapshots() {
+  const res = await apiFetch(`/api/capital`);
+  return res.json();
+}
+
+export async function fetchCapitalSnapshot(id) {
+  const res = await apiFetch(`/api/capital/${id}`);
+  return res.json();
+}
+
+export async function createCapitalSnapshot(items) {
+  const res = await apiFetch(`/api/capital`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ items }),
+  });
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    throw new Error(body.error || "Не удалось сохранить снимок капитала");
+  }
+  return res.json();
+}
+
+export async function deleteCapitalSnapshot(id) {
+  const res = await apiFetch(`/api/capital/${id}`, { method: "DELETE" });
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    throw new Error(body.error || "Не удалось удалить снимок");
+  }
+}
+
 export async function createWallet(payload) {
   const res = await apiFetch(`/api/wallets`, {
     method: "POST",

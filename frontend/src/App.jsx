@@ -28,6 +28,9 @@ import BalanceHistorySheet from "./components/BalanceHistorySheet";
 import DebtsSheet from "./components/DebtsSheet";
 import NewDebtSheet from "./components/NewDebtSheet";
 import DebtDetailSheet from "./components/DebtDetailSheet";
+import CapitalSheet from "./components/CapitalSheet";
+import NewCapitalSnapshotSheet from "./components/NewCapitalSnapshotSheet";
+import CapitalDetailSheet from "./components/CapitalDetailSheet";
 import PeriodPickerSheet from "./components/PeriodPickerSheet";
 import SearchSheet from "./components/SearchSheet";
 import AccountBalanceRow from "./components/AccountBalanceRow";
@@ -205,6 +208,10 @@ export default function App() {
   const [newDebtOpen, setNewDebtOpen] = useState(false);
   const [selectedDebt, setSelectedDebt] = useState(null);
   const [debtsRefreshKey, setDebtsRefreshKey] = useState(0);
+  const [capitalOpen, setCapitalOpen] = useState(false);
+  const [newCapitalOpen, setNewCapitalOpen] = useState(false);
+  const [selectedCapitalSnapshot, setSelectedCapitalSnapshot] = useState(null);
+  const [capitalRefreshKey, setCapitalRefreshKey] = useState(0);
   const [selectedWallet, setSelectedWallet] = useState(
     () => localStorage.getItem("traty-wallet") || null
   );
@@ -840,7 +847,14 @@ export default function App() {
           >
             <HeaderIcon><rect x="5" y="4" width="14" height="16" rx="2" /><path d="M9 9h6M9 13h4" /><circle cx="15.5" cy="16.5" r="2.5" /></HeaderIcon>
           </button>
-          <button className="header-icon" aria-label="Кошельки">
+          <button
+            className="header-icon"
+            aria-label="Капитал"
+            onClick={() => {
+              haptic();
+              setCapitalOpen(true);
+            }}
+          >
             <HeaderIcon><ellipse cx="12" cy="7" rx="7" ry="2.5" /><path d="M5 7v10c0 1.4 3.1 2.5 7 2.5s7-1.1 7-2.5V7" /><path d="M5 12c0 1.4 3.1 2.5 7 2.5s7-1.1 7-2.5" /></HeaderIcon>
           </button>
           <button
@@ -1020,6 +1034,39 @@ export default function App() {
           onChanged={async () => {
             setDebtsRefreshKey((k) => k + 1);
             setWalletBalances(await fetchWalletBalances());
+          }}
+        />
+      )}
+
+      {capitalOpen && (
+        <CapitalSheet
+          refreshKey={capitalRefreshKey}
+          onClose={() => setCapitalOpen(false)}
+          onOpenNew={() => setNewCapitalOpen(true)}
+          onOpenSnapshot={(snapshot, previousTotal) =>
+            setSelectedCapitalSnapshot({ snapshot, previousTotal })
+          }
+        />
+      )}
+
+      {newCapitalOpen && (
+        <NewCapitalSnapshotSheet
+          onClose={() => setNewCapitalOpen(false)}
+          onCreated={() => {
+            setNewCapitalOpen(false);
+            setCapitalRefreshKey((k) => k + 1);
+          }}
+        />
+      )}
+
+      {selectedCapitalSnapshot && (
+        <CapitalDetailSheet
+          snapshot={selectedCapitalSnapshot.snapshot}
+          previousTotal={selectedCapitalSnapshot.previousTotal}
+          onClose={() => setSelectedCapitalSnapshot(null)}
+          onDeleted={() => {
+            setSelectedCapitalSnapshot(null);
+            setCapitalRefreshKey((k) => k + 1);
           }}
         />
       )}

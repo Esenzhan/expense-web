@@ -402,4 +402,36 @@ export async function initSchema() {
   await pool.query(`
     CREATE INDEX IF NOT EXISTS debt_payments_debt_idx ON debt_payments (debt_id, created_at);
   `);
+
+  // Family net-worth tracking ("Капитал") — a snapshot per time the family
+  // does the count (irregular cadence, whenever they sit down and do it),
+  // each holding a free-form list of named assets/liabilities. No user_id:
+  // unlike debts this is always family-wide, both accounts see every
+  // snapshot. Total/growth are computed from capital_items on read rather
+  // than stored, same reasoning as debts' remaining being the only thing
+  // persisted — there's nothing here a stored total could get out of sync
+  // with except by a bug, and snapshot row counts are tiny.
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS capital_snapshots (
+      id SERIAL PRIMARY KEY,
+      created_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+    );
+  `);
+  await pool.query(`
+    CREATE INDEX IF NOT EXISTS capital_snapshots_created_at_idx ON capital_snapshots (created_at);
+  `);
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS capital_items (
+      id SERIAL PRIMARY KEY,
+      snapshot_id INTEGER NOT NULL REFERENCES capital_snapshots(id) ON DELETE CASCADE,
+      kind TEXT NOT NULL CHECK (kind IN ('asset', 'liability')),
+      name TEXT NOT NULL,
+      amount NUMERIC NOT NULL,
+      sort_order INT NOT NULL DEFAULT 0
+    );
+  `);
+  await pool.query(`
+    CREATE INDEX IF NOT EXISTS capital_items_snapshot_idx ON capital_items (snapshot_id);
+  `);
 }

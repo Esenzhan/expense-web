@@ -2621,3 +2621,75 @@ button.wallet-chip {
 .scan-merge-btn:disabled {
   opacity: 0.6;
 }
+
+/* Капитал */
+.capital-growth {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.capital-growth.up {
+  color: #2f8f4e;
+}
+
+.capital-growth.down {
+  color: var(--danger);
+}
+
+.capital-item-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.capital-item-name {
+  flex: 1;
+  min-width: 0;
+}
+
+.capital-item-amount {
+  width: 110px;
+  text-align: right;
+}
+
+.capital-item-remove {
+  width: 32px;
+  height: 32px;
+  flex-shrink: 0;
+  border: none;
+  border-radius: 50%;
+  background: var(--surface-soft);
+  color: var(--ink-soft);
+  font-size: 13px;
+}
+
+.capital-item-remove:disabled {
+  opacity: 0.4;
+}
+
+.capital-add-row {
+  border: none;
+  background: none;
+  color: var(--ink-soft);
+  font-weight: 600;
+  font-size: 13px;
+  padding: 4px 0 12px;
+}
+
+.capital-total-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: var(--surface-soft);
+  border-radius: 12px;
+  padding: 12px 14px;
+  margin: 4px 0 12px;
+  font-size: 14px;
+}
+
+.capital-total-row strong {
+  font-family: var(--font-mono);
+  font-size: 15px;
+}
