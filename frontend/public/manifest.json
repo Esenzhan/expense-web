@@ -1,7 +1,9 @@
 {
   "name": "Траты — голосовой учёт",
   "short_name": "Траты",
+  "id": "/",
   "start_url": "/",
+  "scope": "/",
   "display": "standalone",
   "background_color": "#F4F4F6",
   "theme_color": "#F4F4F6",
