@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { haptic, hapticHeavy } from "../haptics";
+import { formatAmountDisplay, sanitizeAmountInput } from "../amountInput";
 
 // "Баланс" — tap the number to correct it against your real bank balance.
 // `editable` is false for the "Все счета" aggregate (nothing single to edit
@@ -47,11 +48,14 @@ export default function AccountBalanceRow({ balance, editable, onSave }) {
           <span className="balance-label">Баланс</span>
           <input
             className="balance-input"
-            type="number"
+            type="text"
             inputMode="decimal"
             autoFocus
-            value={value}
-            onChange={(event) => setValue(event.target.value)}
+            value={formatAmountDisplay(value)}
+            onChange={(event) => {
+              const raw = sanitizeAmountInput(event.target.value);
+              if (raw !== null) setValue(raw);
+            }}
             onBlur={commit}
             onKeyDown={(event) => event.key === "Enter" && event.currentTarget.blur()}
           />

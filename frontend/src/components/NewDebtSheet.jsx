@@ -5,15 +5,7 @@ import { haptic, hapticHeavy } from "../haptics";
 import { useSwipeDismiss } from "../sheetGestures";
 import CategoryGlyph from "./CategoryGlyph";
 import { catIconVars } from "../catIconVars";
-
-// Groups the integer part with spaces as the user types (1000000 -> "1 000
-// 000"), keeping a single "," or "." decimal separator untouched — so big
-// round numbers stay readable without needing to count zeros.
-function formatAmountDisplay(raw) {
-  const [intPart, ...rest] = raw.split(/([.,])/);
-  const grouped = intPart.replace(/\B(?=(\d{3})+(?!\d))/g, " ");
-  return grouped + rest.join("");
-}
+import { formatAmountDisplay, sanitizeAmountInput } from "../amountInput";
 
 // «Новый долг» — свайп-down шторка, открывается «+» в DebtsSheet. Счёт
 // опционален: указан только когда деньги реально прошли через отслеживаемый
@@ -139,8 +131,8 @@ export default function NewDebtSheet({ initialDirection, onClose, onCreated }) {
           placeholder="Сумма"
           value={formatAmountDisplay(amount)}
           onChange={(event) => {
-            const raw = event.target.value.replace(/\s/g, "");
-            if (/^\d*[.,]?\d*$/.test(raw)) {
+            const raw = sanitizeAmountInput(event.target.value);
+            if (raw !== null) {
               setAmount(raw);
               setError("");
             }
