@@ -11,11 +11,24 @@ const REASON_LABEL = {
   manual: "Ручное изменение",
   transfer_out: (row) => `Перевод → ${row.counterpart_wallet}`,
   transfer_in: (row) => `Перевод ← ${row.counterpart_wallet}`,
+  // Долги — counterpart_wallet здесь не счёт, а имя должника/кредитора
+  // (см. routes/debts.js, logBalanceChange вызовы).
+  debt_lend: (row) => `Долг выдан → ${row.counterpart_wallet}`,
+  debt_borrow: (row) => `Долг получен ← ${row.counterpart_wallet}`,
+  debt_repay_in: (row) => `Долг возвращён ← ${row.counterpart_wallet}`,
+  debt_repay_out: (row) => `Долг погашен → ${row.counterpart_wallet}`,
+  debt_delete: (row) => `Долг отменён (${row.counterpart_wallet})`,
 };
 
 function reasonLabel(row) {
   const label = REASON_LABEL[row.reason];
-  return typeof label === "function" ? label(row) : label || row.reason;
+  if (typeof label === "function") return label(row);
+  if (label) return label;
+  // Falls back to a de-snake_cased version of the raw reason instead of
+  // the literal code, in case a new reason ever ships without its label
+  // added here too (this exact gap is why debt_lend/debt_repay_in etc.
+  // showed up raw before this fix).
+  return row.reason.replace(/_/g, " ");
 }
 
 function formatAmount(amount) {

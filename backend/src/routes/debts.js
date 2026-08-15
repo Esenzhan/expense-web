@@ -82,6 +82,10 @@ debtsRouter.post("/", async (req, res) => {
         oldAmount,
         newAmount: oldAmount + delta,
         reason: direction === "owed_to_us" ? "debt_lend" : "debt_borrow",
+        // Not actually a wallet for debt rows — reused to carry who the
+        // debt is with, so "История балансов" can show it (see
+        // BalanceHistorySheet.jsx's REASON_LABEL).
+        counterpartWallet: counterparty.trim(),
         changedBy: req.user.id,
       });
     }
@@ -149,6 +153,7 @@ debtsRouter.post("/:id/payments", async (req, res) => {
         oldAmount,
         newAmount: oldAmount + delta,
         reason: debt.direction === "owed_to_us" ? "debt_repay_in" : "debt_repay_out",
+        counterpartWallet: debt.counterparty,
         changedBy: req.user.id,
       });
     }
@@ -209,6 +214,7 @@ debtsRouter.delete("/:id", async (req, res) => {
         oldAmount,
         newAmount: oldAmount + delta,
         reason: "debt_delete",
+        counterpartWallet: debt.counterparty,
         changedBy: req.user.id,
       });
     }
