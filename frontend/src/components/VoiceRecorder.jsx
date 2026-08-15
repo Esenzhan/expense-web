@@ -67,7 +67,7 @@ function StopIcon() {
 const WS_RETRY_WINDOW_MS = 80000;
 
 // phase: idle -> listening -> processing -> confirming -> idle
-export default function VoiceRecorder({ onSaved, onManualAdd, onScanned, onScannedMultiple }) {
+export default function VoiceRecorder({ onSaved, onManualAdd, onScanned }) {
   const [phase, setPhase] = useState("idle");
   const [transcript, setTranscript] = useState("");
   const [proposal, setProposal] = useState(null);
@@ -90,20 +90,17 @@ export default function VoiceRecorder({ onSaved, onManualAdd, onScanned, onScann
 
   // mode comes from the camera sheet's "Одной операцией"/"Раздельно" pill —
   // split hits a different endpoint that returns one proposal per line item
-  // instead of a single combined total.
+  // instead of a single combined total. onScanned always gets an array (of
+  // one, for a plain single-total scan) so the caller has one review flow
+  // for either case.
   async function handleCaptured(imageDataUrl, mode) {
     setCameraOpen(false);
     haptic();
     setErrorMessage("");
     setScanning(true);
     try {
-      if (mode === "split") {
-        const proposals = await scanReceiptItems(imageDataUrl);
-        onScannedMultiple?.(proposals);
-      } else {
-        const proposal = await scanReceipt(imageDataUrl);
-        onScanned?.(proposal);
-      }
+      const items = mode === "split" ? await scanReceiptItems(imageDataUrl) : [await scanReceipt(imageDataUrl)];
+      onScanned?.(items);
     } catch (err) {
       setErrorMessage(err.message || "Не удалось распознать чек");
     } finally {

@@ -7,7 +7,7 @@ import ExpenseRow from "./ExpenseRow";
 // device's own timezone — otherwise a device set to a different timezone
 // would group/label rows into a different day than the period pills and
 // Insights sheet agree "today" is.
-function formatDateHeader(dateStr) {
+export function formatDateHeader(dateStr) {
   const date = new Date(dateStr);
   const diffDays = Math.round((startOfAlmatyDay(new Date()) - startOfAlmatyDay(date)) / 86400000);
 

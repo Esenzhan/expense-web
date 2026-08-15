@@ -15,6 +15,7 @@ import ExpenseList from "./components/ExpenseList";
 import InsightsSheet from "./components/InsightsSheet";
 import InsightsButton from "./components/InsightsButton";
 import EditExpenseSheet from "./components/EditExpenseSheet";
+import ScanReviewSheet from "./components/ScanReviewSheet";
 import SettingsSheet from "./components/SettingsSheet";
 import RemindersSheet from "./components/RemindersSheet";
 import ThemeSheet from "./components/ThemeSheet";
@@ -183,17 +184,10 @@ export default function App() {
   const [searchOpen, setSearchOpen] = useState(false);
   const [editingExpense, setEditingExpense] = useState(null);
   const [addingExpense, setAddingExpense] = useState(false);
-  // Receipt scan result, prefilling a new (not-yet-saved) expense — separate
-  // from `addingExpense` since it carries data instead of being a flag.
-  const [scanExpense, setScanExpense] = useState(null);
-  // "Раздельно" scans return one proposal per line item — scanExpense holds
-  // whichever one is currently being reviewed, scanQueue the rest still to
-  // come. scanChainKey forces EditExpenseSheet to remount between items
-  // (same component stays mounted across the chain, so its own state —
-  // amount, category, the dismiss animation flag — would otherwise carry
-  // over from the previous item instead of resetting).
-  const [scanQueue, setScanQueue] = useState([]);
-  const [scanChainKey, setScanChainKey] = useState(0);
+  // Receipt scan result — an array of one or more detected expenses (one
+  // for a plain scan, several for "Раздельно"), reviewed together in
+  // ScanReviewSheet rather than opening EditExpenseSheet.
+  const [scanItems, setScanItems] = useState(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [categoriesOpen, setCategoriesOpen] = useState(false);
   const [remindersOpen, setRemindersOpen] = useState(false);
@@ -911,16 +905,7 @@ export default function App() {
       <VoiceRecorder
         onSaved={() => refreshAll(period)}
         onManualAdd={() => setAddingExpense(true)}
-        onScanned={(proposal) => {
-          setScanChainKey((k) => k + 1);
-          setScanExpense(proposal);
-        }}
-        onScannedMultiple={(proposals) => {
-          const [first, ...rest] = proposals;
-          setScanChainKey((k) => k + 1);
-          setScanExpense(first);
-          setScanQueue(rest);
-        }}
+        onScanned={(items) => setScanItems(items)}
       />
 
       {insightsOpen && (
@@ -956,34 +941,30 @@ export default function App() {
         />
       )}
 
-      {(addingExpense || scanExpense) && (
+      {addingExpense && (
         <EditExpenseSheet
-          key={scanChainKey}
           defaultWallet={selectedWallet}
-          initial={scanExpense}
-          onClose={() => {
-            setAddingExpense(false);
-            setScanExpense(null);
-            // Closing mid-chain (✕ on item 2 of a split scan) abandons
-            // whatever's left rather than silently skipping ahead to it.
-            setScanQueue([]);
-          }}
+          onClose={() => setAddingExpense(false)}
           onCommitted={() => refreshAll(period)}
           onSaved={(saved) => {
-            // Split-scan chain: move straight to the next line item instead
-            // of closing — same sheet, fresh state (see scanChainKey above).
-            if (scanQueue.length) {
-              const [next, ...rest] = scanQueue;
-              setScanChainKey((k) => k + 1);
-              setScanExpense(next);
-              setScanQueue(rest);
-              return;
-            }
             setAddingExpense(false);
-            setScanExpense(null);
             // Jump to the wallet the expense was actually saved under —
             // otherwise it's saved but invisible, still looking at whatever
             // wallet was selected before.
+            if (saved?.wallet && saved.wallet !== selectedWallet) {
+              selectWallet(saved.wallet);
+            }
+          }}
+        />
+      )}
+
+      {scanItems && (
+        <ScanReviewSheet
+          items={scanItems}
+          onClose={() => setScanItems(null)}
+          onCommitted={() => refreshAll(period)}
+          onSaved={(saved) => {
+            setScanItems(null);
             if (saved?.wallet && saved.wallet !== selectedWallet) {
               selectWallet(saved.wallet);
             }

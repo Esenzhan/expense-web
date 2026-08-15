@@ -2579,3 +2579,45 @@ button.wallet-chip {
 .camera-shutter:disabled {
   opacity: 0.5;
 }
+
+/* Scan review sheet ("Операции с изображения") */
+.scan-review-title {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.scan-review-subtitle {
+  text-align: center;
+  font-size: 13px;
+  color: var(--ink-soft);
+  margin: -6px 0 0;
+}
+
+.scan-review-date-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-family: var(--font-mono);
+}
+
+.scan-wallet-tag {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.scan-merge-btn {
+  align-self: center;
+  border: none;
+  background: var(--surface-soft);
+  color: var(--ink);
+  font-weight: 600;
+  font-size: 13px;
+  padding: 9px 18px;
+  border-radius: 999px;
+}
+
+.scan-merge-btn:disabled {
+  opacity: 0.6;
+}
