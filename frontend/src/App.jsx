@@ -1065,6 +1065,10 @@ export default function App() {
           snapshot={selectedCapitalSnapshot.snapshot}
           previousTotal={selectedCapitalSnapshot.previousTotal}
           onClose={() => setSelectedCapitalSnapshot(null)}
+          onSaved={() => {
+            setSelectedCapitalSnapshot(null);
+            setCapitalRefreshKey((k) => k + 1);
+          }}
           onDeleted={() => {
             setSelectedCapitalSnapshot(null);
             setCapitalRefreshKey((k) => k + 1);

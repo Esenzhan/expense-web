@@ -1,9 +1,10 @@
 import { useEffect, useRef, useState } from "react";
-import { fetchCapitalSnapshot, deleteCapitalSnapshot } from "../api";
+import { fetchCapitalSnapshot, updateCapitalSnapshot, deleteCapitalSnapshot } from "../api";
 import { haptic, hapticHeavy } from "../haptics";
 import { useSwipeDismiss } from "../sheetGestures";
 import { almaty } from "../insights";
 import TrashIcon from "./TrashIcon";
+import CapitalItemsEditor, { emptyRow, rowsFromItems, rowTotal, rowsToItems } from "./CapitalItemsEditor";
 
 function formatAmount(amount) {
   return `${Number(amount).toLocaleString("ru-RU")} ₸`;
@@ -14,26 +15,51 @@ function formatDate(iso) {
   return shifted.toLocaleDateString("ru-RU", { day: "2-digit", month: "long", year: "numeric", timeZone: "UTC" });
 }
 
-// Открывается тапом по строке в CapitalSheet — полный разбор одного снимка
-// (какие именно активы/обязательства в него вошли) плюс удаление, если
-// снимок занесли по ошибке.
-export default function CapitalDetailSheet({ snapshot, previousTotal, onClose, onDeleted }) {
+// Открывается тапом по строке в CapitalSheet — тот же редактор строк, что и
+// «Новый снимок» (CapitalItemsEditor), только предзаполненный этим
+// снимком, плюс удаление всего снимка через «⋮» (как в EditExpenseSheet).
+export default function CapitalDetailSheet({ snapshot, previousTotal, onClose, onSaved, onDeleted }) {
   const sheetRef = useRef(null);
   useSwipeDismiss(sheetRef, onClose);
 
-  const [detail, setDetail] = useState(null);
+  const [assets, setAssets] = useState([emptyRow()]);
+  const [liabilities, setLiabilities] = useState([emptyRow()]);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
   const [confirmingDelete, setConfirmingDelete] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
 
   useEffect(() => {
     fetchCapitalSnapshot(snapshot.id)
-      .then(setDetail)
+      .then((detail) => {
+        const loadedAssets = rowsFromItems(detail.items.filter((item) => item.kind === "asset"));
+        const loadedLiabilities = rowsFromItems(detail.items.filter((item) => item.kind === "liability"));
+        setAssets(loadedAssets.length ? loadedAssets : [emptyRow()]);
+        setLiabilities(loadedLiabilities.length ? loadedLiabilities : [emptyRow()]);
+      })
       .catch(() => setError("Не удалось загрузить снимок"))
       .finally(() => setLoading(false));
   }, [snapshot.id]);
+
+  async function handleSave() {
+    const items = rowsToItems(assets, liabilities);
+    if (!items.length) {
+      setError("Добавьте хотя бы одну позицию");
+      return;
+    }
+    haptic();
+    setSaving(true);
+    setError("");
+    try {
+      await updateCapitalSnapshot(snapshot.id, items);
+      hapticHeavy();
+      onSaved();
+    } catch (err) {
+      setError(err.message);
+      setSaving(false);
+    }
+  }
 
   async function handleDelete() {
     if (!confirmingDelete) {
@@ -54,9 +80,8 @@ export default function CapitalDetailSheet({ snapshot, previousTotal, onClose, o
     }
   }
 
-  const assets = detail?.items.filter((item) => item.kind === "asset") || [];
-  const liabilities = detail?.items.filter((item) => item.kind === "liability") || [];
-  const growth = previousTotal != null ? Number(snapshot.total) - Number(previousTotal) : null;
+  const total = rowTotal(assets) - rowTotal(liabilities);
+  const growth = previousTotal != null ? total - Number(previousTotal) : null;
 
   return (
     <div className="sheet-backdrop" onClick={onClose}>
@@ -94,57 +119,33 @@ export default function CapitalDetailSheet({ snapshot, previousTotal, onClose, o
           </div>
         </div>
 
-        <div className="settings-group">
-          <div className="settings-row">
-            <span className="settings-row-label">Итого</span>
-            <span className="settings-row-value">{formatAmount(snapshot.total)}</span>
-          </div>
-          {growth != null && (
-            <div className="settings-row">
-              <span className="settings-row-label">Прирост</span>
-              <span className={`settings-row-value capital-growth ${growth >= 0 ? "up" : "down"}`}>
-                {growth >= 0 ? "+" : "−"}
-                {formatAmount(Math.abs(growth))}
-              </span>
-            </div>
-          )}
-          {snapshot.created_by_name && (
+        {growth != null && (
+          <p className={`capital-growth-hint capital-growth ${growth >= 0 ? "up" : "down"}`}>
+            {growth >= 0 ? "+" : "−"}
+            {formatAmount(Math.abs(growth))} к предыдущему снимку
+          </p>
+        )}
+
+        {snapshot.created_by_name && (
+          <div className="settings-group">
             <div className="settings-row">
               <span className="settings-row-label">Посчитал(а)</span>
               <span className="settings-row-value">{snapshot.created_by_name}</span>
             </div>
-          )}
-        </div>
-
-        {loading && <p className="empty-hint">Загрузка…</p>}
-        {error && <p className="reminder-hint reminder-hint-error">{error}</p>}
-
-        {!loading && assets.length > 0 && (
-          <>
-            <p className="newcat-group-title">Активы</p>
-            <div className="settings-group">
-              {assets.map((item) => (
-                <div className="settings-row" key={item.id}>
-                  <span className="settings-row-label">{item.name}</span>
-                  <span className="settings-row-value">{formatAmount(item.amount)}</span>
-                </div>
-              ))}
-            </div>
-          </>
+          </div>
         )}
 
-        {!loading && liabilities.length > 0 && (
-          <>
-            <p className="newcat-group-title">Обязательства</p>
-            <div className="settings-group">
-              {liabilities.map((item) => (
-                <div className="settings-row" key={item.id}>
-                  <span className="settings-row-label">{item.name}</span>
-                  <span className="settings-row-value">{formatAmount(item.amount)}</span>
-                </div>
-              ))}
-            </div>
-          </>
+        {loading && <p className="empty-hint">Загрузка…</p>}
+        {error && <p className="sheet-error">{error}</p>}
+
+        {!loading && (
+          <CapitalItemsEditor assets={assets} setAssets={setAssets} liabilities={liabilities} setLiabilities={setLiabilities} />
+        )}
+
+        {!loading && (
+          <button className="sheet-close" onClick={handleSave} disabled={saving}>
+            {saving ? "Сохраняю…" : "Сохранить"}
+          </button>
         )}
       </div>
     </div>

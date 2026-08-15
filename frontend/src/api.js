@@ -233,6 +233,19 @@ export async function createCapitalSnapshot(items) {
   return res.json();
 }
 
+export async function updateCapitalSnapshot(id, items) {
+  const res = await apiFetch(`/api/capital/${id}`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ items }),
+  });
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    throw new Error(body.error || "Не удалось сохранить изменения");
+  }
+  return res.json();
+}
+
 export async function deleteCapitalSnapshot(id) {
   const res = await apiFetch(`/api/capital/${id}`, { method: "DELETE" });
   if (!res.ok) {

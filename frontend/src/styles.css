@@ -2909,3 +2909,7 @@ button.wallet-chip {
   color: var(--ink);
   margin-top: 4px;
 }
+
+.capital-growth-hint {
+  margin: -6px 0 14px;
+}
