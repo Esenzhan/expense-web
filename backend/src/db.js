@@ -367,9 +367,12 @@ export async function initSchema() {
       status TEXT NOT NULL DEFAULT 'open' CHECK (status IN ('open', 'closed')),
       created_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
       created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-      closed_at TIMESTAMPTZ
+      closed_at TIMESTAMPTZ,
+      due_date DATE
     );
   `);
+  // Idempotent for the debts table created before due_date existed.
+  await pool.query(`ALTER TABLE debts ADD COLUMN IF NOT EXISTS due_date DATE`);
   await pool.query(`
     CREATE INDEX IF NOT EXISTS debts_status_idx ON debts (status, created_at DESC);
   `);

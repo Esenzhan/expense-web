@@ -20,6 +20,7 @@ export default function NewDebtSheet({ initialDirection, onClose, onCreated }) {
   const [counterparty, setCounterparty] = useState("");
   const [amount, setAmount] = useState("");
   const [description, setDescription] = useState("");
+  const [dueDate, setDueDate] = useState("");
   const [wallet, setWallet] = useState(null);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
@@ -44,6 +45,7 @@ export default function NewDebtSheet({ initialDirection, onClose, onCreated }) {
         description: description.trim() || null,
         amount: num,
         wallet,
+        dueDate: dueDate || null,
       });
       hapticHeavy();
       onCreated();
@@ -141,6 +143,11 @@ export default function NewDebtSheet({ initialDirection, onClose, onCreated }) {
           maxLength={200}
           onChange={(event) => setDescription(event.target.value)}
         />
+
+        <label className="period-picker-field" style={{ marginTop: 12 }}>
+          <span>Дата погашения (необязательно)</span>
+          <input type="date" value={dueDate} onChange={(event) => setDueDate(event.target.value)} />
+        </label>
 
         <p className="newcat-group-title">Счёт (необязательно)</p>
         <div className="wallet-pick-row">

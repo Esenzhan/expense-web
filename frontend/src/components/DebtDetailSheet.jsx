@@ -15,6 +15,13 @@ function formatWhen(iso) {
   return `${date}, ${time}`;
 }
 
+// created_at is a full timestamp, due_date a plain YYYY-MM-DD — both just
+// need the calendar date here, no time-of-day.
+function formatDate(value) {
+  const shifted = almaty(new Date(value));
+  return shifted.toLocaleDateString("ru-RU", { day: "2-digit", month: "long", year: "numeric", timeZone: "UTC" });
+}
+
 // Открывается тапом по строке в DebtsSheet — детали долга, история платежей
 // и форма погашения (полного или частичного). Удаление доступно только пока
 // не было ни одного платежа (см. routes/debts.js — иначе пришлось бы
@@ -114,9 +121,19 @@ export default function DebtDetailSheet({ debt: initialDebt, onClose, onChanged 
             <span className="settings-row-value">{formatAmount(debt.amount)}</span>
           </div>
           <div className="settings-row">
+            <span className="settings-row-label">Дата выдачи</span>
+            <span className="settings-row-value">{formatDate(debt.created_at)}</span>
+          </div>
+          <div className="settings-row">
             <span className="settings-row-label">Осталось</span>
             <span className="settings-row-value">
               {debt.status === "closed" ? "Погашено" : formatAmount(debt.remaining)}
+            </span>
+          </div>
+          <div className="settings-row">
+            <span className="settings-row-label">Дата погашения</span>
+            <span className="settings-row-value">
+              {debt.due_date ? formatDate(debt.due_date) : "Не указана"}
             </span>
           </div>
           {debt.description && (
