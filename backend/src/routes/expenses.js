@@ -3,7 +3,7 @@ import { pool } from "../db.js";
 import { isValidWallet, sharedWalletNames } from "../wallets.js";
 import { isValidCategory } from "../categories.js";
 import { appendExpenseRow, updateExpenseRow, deleteExpenseRow } from "../services/sheets.js";
-import { parseReceiptFromImage } from "../services/parseReceipt.js";
+import { parseReceiptFromImage, parseReceiptItemsFromImage } from "../services/parseReceipt.js";
 import { tryLogScan, DAILY_SCAN_LIMIT } from "../services/receiptScans.js";
 
 export const expensesRouter = Router();
@@ -137,8 +137,13 @@ expensesRouter.post("/scan", async (req, res) => {
 
   const [, mediaType, base64Data] = match;
   try {
-    const proposal = await parseReceiptFromImage(base64Data, mediaType);
-    res.json({ proposal });
+    if (req.body.mode === "split") {
+      const proposals = await parseReceiptItemsFromImage(base64Data, mediaType);
+      res.json({ proposals });
+    } else {
+      const proposal = await parseReceiptFromImage(base64Data, mediaType);
+      res.json({ proposal });
+    }
   } catch (err) {
     res.status(422).json({ error: err.message });
   }

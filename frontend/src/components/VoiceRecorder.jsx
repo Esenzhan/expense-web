@@ -1,11 +1,12 @@
 import { useRef, useState } from "react";
-import { WS_URL, createExpense, scanReceipt } from "../api";
+import { WS_URL, createExpense, scanReceipt, scanReceiptItems } from "../api";
 import { enqueueExpense, syncPendingExpenses } from "../offlineQueue";
 import { getToken } from "../auth";
 import { getCategoryIcon } from "../categoryIcons";
 import CategoryGlyph from "./CategoryGlyph";
 import { haptic, hapticHeavy } from "../haptics";
 import { catIconVars } from "../catIconVars";
+import ReceiptCameraSheet from "./ReceiptCameraSheet";
 
 const CANDIDATE_MIME_TYPES = [
   "audio/webm;codecs=opus",
@@ -18,30 +19,6 @@ function pickMimeType() {
     CANDIDATE_MIME_TYPES.find((type) => window.MediaRecorder?.isTypeSupported?.(type)) ||
     ""
   );
-}
-
-// Phone camera photos can be several MB — downscale/recompress client-side
-// before it ever hits the wire (faster upload, and keeps well under both
-// the backend's body-size limit and Claude's recommended image size).
-function resizeImageFile(file, maxDim = 1600, quality = 0.82) {
-  return new Promise((resolve, reject) => {
-    const img = new Image();
-    const url = URL.createObjectURL(file);
-    img.onload = () => {
-      const scale = Math.min(1, maxDim / Math.max(img.width, img.height));
-      const canvas = document.createElement("canvas");
-      canvas.width = Math.round(img.width * scale);
-      canvas.height = Math.round(img.height * scale);
-      canvas.getContext("2d").drawImage(img, 0, 0, canvas.width, canvas.height);
-      URL.revokeObjectURL(url);
-      resolve(canvas.toDataURL("image/jpeg", quality));
-    };
-    img.onerror = () => {
-      URL.revokeObjectURL(url);
-      reject(new Error("Не удалось прочитать фото"));
-    };
-    img.src = url;
-  });
 }
 
 // One consistent line-icon set for the bottom dock
@@ -90,7 +67,7 @@ function StopIcon() {
 const WS_RETRY_WINDOW_MS = 80000;
 
 // phase: idle -> listening -> processing -> confirming -> idle
-export default function VoiceRecorder({ onSaved, onManualAdd, onScanned }) {
+export default function VoiceRecorder({ onSaved, onManualAdd, onScanned, onScannedMultiple }) {
   const [phase, setPhase] = useState("idle");
   const [transcript, setTranscript] = useState("");
   const [proposal, setProposal] = useState(null);
@@ -102,7 +79,7 @@ export default function VoiceRecorder({ onSaved, onManualAdd, onScanned }) {
   // (that one's owned by the voice websocket flow) — idle whenever it's not
   // actively uploading/parsing a photo.
   const [scanning, setScanning] = useState(false);
-  const fileInputRef = useRef(null);
+  const [cameraOpen, setCameraOpen] = useState(false);
 
   const wsRef = useRef(null);
   const sessionRef = useRef(null);
@@ -111,17 +88,22 @@ export default function VoiceRecorder({ onSaved, onManualAdd, onScanned }) {
   const fallbackTimerRef = useRef(null);
   const transmitRef = useRef(null);
 
-  async function handleScanFile(event) {
-    const file = event.target.files?.[0];
-    event.target.value = ""; // lets the same photo be picked again later
-    if (!file) return;
+  // mode comes from the camera sheet's "Одной операцией"/"Раздельно" pill —
+  // split hits a different endpoint that returns one proposal per line item
+  // instead of a single combined total.
+  async function handleCaptured(imageDataUrl, mode) {
+    setCameraOpen(false);
     haptic();
     setErrorMessage("");
     setScanning(true);
     try {
-      const imageDataUrl = await resizeImageFile(file);
-      const proposal = await scanReceipt(imageDataUrl);
-      onScanned?.(proposal);
+      if (mode === "split") {
+        const proposals = await scanReceiptItems(imageDataUrl);
+        onScannedMultiple?.(proposals);
+      } else {
+        const proposal = await scanReceipt(imageDataUrl);
+        onScanned?.(proposal);
+      }
     } catch (err) {
       setErrorMessage(err.message || "Не удалось распознать чек");
     } finally {
@@ -411,20 +393,12 @@ export default function VoiceRecorder({ onSaved, onManualAdd, onScanned }) {
               className="side-button"
               onClick={() => {
                 haptic();
-                fileInputRef.current?.click();
+                setCameraOpen(true);
               }}
               aria-label="Сканировать чек"
             >
               <ScanIcon />
             </button>
-            <input
-              ref={fileInputRef}
-              type="file"
-              accept="image/*"
-              capture="environment"
-              style={{ display: "none" }}
-              onChange={handleScanFile}
-            />
             <button className="mic-button" onClick={startRecording} aria-label="Начать запись">
               <MicIcon />
             </button>
@@ -456,6 +430,17 @@ export default function VoiceRecorder({ onSaved, onManualAdd, onScanned }) {
           </div>
         )}
       </div>
+
+      {cameraOpen && (
+        <ReceiptCameraSheet
+          onClose={() => setCameraOpen(false)}
+          onCapture={handleCaptured}
+          onError={(message) => {
+            setCameraOpen(false);
+            setErrorMessage(message);
+          }}
+        />
+      )}
     </>
   );
 }

@@ -86,6 +86,22 @@ export async function scanReceipt(imageDataUrl) {
   return body.proposal;
 }
 
+// Same photo, but for a receipt with several line items ("Раздельно" in the
+// scan camera) — each item comes back as its own expense proposal instead
+// of one combined total.
+export async function scanReceiptItems(imageDataUrl) {
+  const res = await apiFetch(`/api/expenses/scan`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ image: imageDataUrl, mode: "split" }),
+  });
+  const body = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    throw new Error(body.error || "Не удалось распознать чек");
+  }
+  return body.proposals;
+}
+
 export async function updateExpense(id, payload) {
   const res = await apiFetch(`/api/expenses/${id}`, {
     method: "PUT",
