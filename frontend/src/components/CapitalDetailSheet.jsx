@@ -3,8 +3,16 @@ import { fetchCapitalSnapshot, updateCapitalSnapshot, deleteCapitalSnapshot } fr
 import { haptic, hapticHeavy } from "../haptics";
 import { useSwipeDismiss } from "../sheetGestures";
 import { almaty } from "../insights";
+import { loadCached, saveCached } from "../offlineCache";
 import TrashIcon from "./TrashIcon";
 import CapitalItemsEditor, { emptyRow, rowsFromItems, rowTotal, rowsToItems } from "./CapitalItemsEditor";
+
+// Shared with NewCapitalSnapshotSheet's prefill fetch — same snapshot id,
+// same cached detail, so a snapshot viewed once is available offline both
+// for re-editing and for prefilling the next new snapshot.
+export function capitalDetailCacheKey(id) {
+  return `traty-capital-detail-${id}`;
+}
 
 function formatAmount(amount) {
   return `${Number(amount).toLocaleString("ru-RU")} ₸`;
@@ -18,29 +26,45 @@ function formatDate(iso) {
 // Открывается тапом по строке в CapitalSheet — тот же редактор строк, что и
 // «Новый снимок» (CapitalItemsEditor), только предзаполненный этим
 // снимком, плюс удаление всего снимка через «⋮» (как в EditExpenseSheet).
-export default function CapitalDetailSheet({ snapshot, previousTotal, onClose, onSaved, onDeleted }) {
+export default function CapitalDetailSheet({ user, snapshot, previousTotal, onClose, onSaved, onDeleted }) {
+  const email = user?.email;
   const sheetRef = useRef(null);
   useSwipeDismiss(sheetRef, onClose);
 
-  const [assets, setAssets] = useState([emptyRow()]);
-  const [liabilities, setLiabilities] = useState([emptyRow()]);
-  const [loading, setLoading] = useState(true);
+  const cacheKey = capitalDetailCacheKey(snapshot.id);
+  const cachedItems = loadCached(cacheKey, email);
+  const [assets, setAssets] = useState(() => {
+    const rows = cachedItems ? rowsFromItems(cachedItems.filter((item) => item.kind === "asset")) : [];
+    return rows.length ? rows : [emptyRow()];
+  });
+  const [liabilities, setLiabilities] = useState(() => {
+    const rows = cachedItems ? rowsFromItems(cachedItems.filter((item) => item.kind === "liability")) : [];
+    return rows.length ? rows : [emptyRow()];
+  });
+  const [loading, setLoading] = useState(() => !cachedItems);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const [confirmingDelete, setConfirmingDelete] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
 
   useEffect(() => {
+    const cached = loadCached(cacheKey, email);
     fetchCapitalSnapshot(snapshot.id)
       .then((detail) => {
         const loadedAssets = rowsFromItems(detail.items.filter((item) => item.kind === "asset"));
         const loadedLiabilities = rowsFromItems(detail.items.filter((item) => item.kind === "liability"));
         setAssets(loadedAssets.length ? loadedAssets : [emptyRow()]);
         setLiabilities(loadedLiabilities.length ? loadedLiabilities : [emptyRow()]);
+        if (email) saveCached(cacheKey, email, detail.items);
       })
-      .catch(() => setError("Не удалось загрузить снимок"))
+      .catch(() => {
+        // Offline or the request failed — if this snapshot's items were
+        // already cached (hydrated at mount), leave those showing instead
+        // of blocking on an error.
+        if (!cached) setError("Не удалось загрузить снимок");
+      })
       .finally(() => setLoading(false));
-  }, [snapshot.id]);
+  }, [snapshot.id, email]);
 
   async function handleSave() {
     const items = rowsToItems(assets, liabilities);

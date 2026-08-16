@@ -4,6 +4,7 @@ import { haptic } from "../haptics";
 import { useSwipeDismissRight } from "../sheetGestures";
 import { avatarColorFor, avatarInitial, formatDueDate, overdueDays, formatOverdue } from "../debtDisplay";
 import { catIconVars } from "../catIconVars";
+import { loadCached, saveCached } from "../offlineCache";
 
 function formatAmount(amount) {
   return `${Number(amount).toLocaleString("ru-RU", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ₸`;
@@ -19,26 +20,6 @@ function pluralPeople(n) {
 
 const CACHE_KEY = "traty-debts-cache-v1";
 
-// Same account-scoped localStorage cache-first pattern as CapitalSheet —
-// paints instantly (offline included) from the last fetch, then refreshes
-// quietly in the background.
-function loadDebtsCache(email) {
-  try {
-    const parsed = JSON.parse(localStorage.getItem(CACHE_KEY));
-    return parsed && parsed.owner === email && Array.isArray(parsed.debts) ? parsed.debts : null;
-  } catch {
-    return null;
-  }
-}
-
-function saveDebtsCache(email, debts) {
-  try {
-    localStorage.setItem(CACHE_KEY, JSON.stringify({ owner: email, debts }));
-  } catch {
-    // storage full/unavailable — fine, just skip caching
-  }
-}
-
 // «Долги» (Настройки-стиль полноэкранная страница, открывается с иконки
 // «Статистика» в шапке — см. App.jsx): нам должны / мы должны, каждое —
 // личное или семейное (та же приватность, что у кошельков). Выдача и
@@ -47,8 +28,8 @@ function saveDebtsCache(email, debts) {
 // список, вся логика подсчёта на бэкенде (routes/debts.js).
 export default function DebtsSheet({ user, onClose, onOpenNewDebt, onOpenDebt, refreshKey }) {
   const email = user?.email;
-  const [debts, setDebts] = useState(() => loadDebtsCache(email) || []);
-  const [loading, setLoading] = useState(() => !loadDebtsCache(email));
+  const [debts, setDebts] = useState(() => loadCached(CACHE_KEY, email) || []);
+  const [loading, setLoading] = useState(() => !loadCached(CACHE_KEY, email));
   const [error, setError] = useState(null);
   const [direction, setDirection] = useState("owed_to_us");
   const [closing, setClosing] = useState(false);
@@ -69,7 +50,7 @@ export default function DebtsSheet({ user, onClose, onOpenNewDebt, onOpenDebt, r
   }
 
   function load() {
-    const cached = loadDebtsCache(email);
+    const cached = loadCached(CACHE_KEY, email);
     if (cached) {
       setDebts(cached);
       setLoading(false);
@@ -80,7 +61,7 @@ export default function DebtsSheet({ user, onClose, onOpenNewDebt, onOpenDebt, r
       .then((data) => {
         setDebts(data);
         setError(null);
-        if (email) saveDebtsCache(email, data);
+        if (email) saveCached(CACHE_KEY, email, data);
       })
       .catch(() => {
         if (!cached) setError("Не удалось загрузить долги");

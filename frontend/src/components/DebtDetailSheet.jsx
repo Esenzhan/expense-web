@@ -3,6 +3,11 @@ import { fetchDebtPayments, payDebt, deleteDebt } from "../api";
 import { haptic, hapticHeavy } from "../haptics";
 import { useSwipeDismiss } from "../sheetGestures";
 import { almaty } from "../insights";
+import { loadCached, saveCached } from "../offlineCache";
+
+function paymentsCacheKey(debtId) {
+  return `traty-debt-payments-${debtId}`;
+}
 
 function formatAmount(amount) {
   return `${Number(amount).toLocaleString("ru-RU", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ₸`;
@@ -26,13 +31,14 @@ function formatDate(value) {
 // и форма погашения (полного или частичного). Удаление доступно только пока
 // не было ни одного платежа (см. routes/debts.js — иначе пришлось бы
 // откатывать историю баланса по каждому платежу).
-export default function DebtDetailSheet({ debt: initialDebt, currentUserId, onClose, onChanged }) {
+export default function DebtDetailSheet({ debt: initialDebt, user, currentUserId, onClose, onChanged }) {
+  const email = user?.email;
   const sheetRef = useRef(null);
   useSwipeDismiss(sheetRef, onClose);
 
   const [debt, setDebt] = useState(initialDebt);
-  const [payments, setPayments] = useState([]);
-  const [loadingPayments, setLoadingPayments] = useState(true);
+  const [payments, setPayments] = useState(() => loadCached(paymentsCacheKey(initialDebt.id), email) || []);
+  const [loadingPayments, setLoadingPayments] = useState(() => !loadCached(paymentsCacheKey(initialDebt.id), email));
   const [payAmount, setPayAmount] = useState("");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
@@ -40,10 +46,13 @@ export default function DebtDetailSheet({ debt: initialDebt, currentUserId, onCl
 
   useEffect(() => {
     fetchDebtPayments(debt.id)
-      .then(setPayments)
+      .then((data) => {
+        setPayments(data);
+        if (email) saveCached(paymentsCacheKey(debt.id), email, data);
+      })
       .catch(() => {})
       .finally(() => setLoadingPayments(false));
-  }, [debt.id]);
+  }, [debt.id, email]);
 
   async function handlePay() {
     const num = Number(payAmount.replace(",", "."));
@@ -64,6 +73,7 @@ export default function DebtDetailSheet({ debt: initialDebt, currentUserId, onCl
       setPayAmount("");
       const freshPayments = await fetchDebtPayments(debt.id);
       setPayments(freshPayments);
+      if (email) saveCached(paymentsCacheKey(debt.id), email, freshPayments);
       onChanged();
     } catch (err) {
       setError(err.message);

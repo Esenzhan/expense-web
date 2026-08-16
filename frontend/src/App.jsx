@@ -925,6 +925,7 @@ export default function App() {
 
       {insightsOpen && (
         <InsightsSheet
+          user={user}
           period={period}
           insights={insights}
           wallet={selectedWallet}
@@ -999,11 +1000,11 @@ export default function App() {
         />
       )}
 
-      {remindersOpen && <RemindersSheet onClose={() => setRemindersOpen(false)} />}
+      {remindersOpen && <RemindersSheet user={user} onClose={() => setRemindersOpen(false)} />}
 
       {themeOpen && <ThemeSheet theme={theme} onChange={changeTheme} onClose={() => setThemeOpen(false)} />}
 
-      {balanceHistoryOpen && <BalanceHistorySheet onClose={() => setBalanceHistoryOpen(false)} />}
+      {balanceHistoryOpen && <BalanceHistorySheet user={user} onClose={() => setBalanceHistoryOpen(false)} />}
 
       {debtsOpen && (
         <DebtsSheet
@@ -1032,6 +1033,7 @@ export default function App() {
       {selectedDebt && (
         <DebtDetailSheet
           debt={selectedDebt}
+          user={user}
           currentUserId={user.id}
           onClose={() => setSelectedDebt(null)}
           onChanged={async () => {
@@ -1058,6 +1060,7 @@ export default function App() {
 
       {newCapitalOpen && (
         <NewCapitalSnapshotSheet
+          user={user}
           previousSnapshotId={newCapitalPrevId}
           onClose={() => setNewCapitalOpen(false)}
           onCreated={() => {
@@ -1069,6 +1072,7 @@ export default function App() {
 
       {selectedCapitalSnapshot && (
         <CapitalDetailSheet
+          user={user}
           snapshot={selectedCapitalSnapshot.snapshot}
           previousTotal={selectedCapitalSnapshot.previousTotal}
           onClose={() => setSelectedCapitalSnapshot(null)}

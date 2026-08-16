@@ -3,6 +3,7 @@ import { fetchCapitalSnapshots } from "../api";
 import { haptic } from "../haptics";
 import { useSwipeDismissRight } from "../sheetGestures";
 import { almaty } from "../insights";
+import { loadCached, saveCached } from "../offlineCache";
 import CapitalChart from "./CapitalChart";
 
 function formatAmount(amount) {
@@ -23,25 +24,6 @@ const RANGE_MONTHS = { "6": 6, "12": 12 };
 
 const CACHE_KEY = "traty-capital-cache-v1";
 
-// Same idea as App.jsx's expenses cache: tagged with the owning account's
-// email so a shared device doesn't flash a different account's snapshots.
-function loadCapitalCache(email) {
-  try {
-    const parsed = JSON.parse(localStorage.getItem(CACHE_KEY));
-    return parsed && parsed.owner === email && Array.isArray(parsed.snapshots) ? parsed.snapshots : null;
-  } catch {
-    return null;
-  }
-}
-
-function saveCapitalCache(email, snapshots) {
-  try {
-    localStorage.setItem(CACHE_KEY, JSON.stringify({ owner: email, snapshots }));
-  } catch {
-    // storage full/unavailable — fine, just skip caching
-  }
-}
-
 // «Капитал» (Настройки-стиль полноэкранная страница, как «Долги») — снимки
 // общего капитала семьи, которые считают раз в месяц-два: сумма активов
 // минус обязательства на конкретный момент. Прирост каждой строки — просто
@@ -49,11 +31,11 @@ function saveCapitalCache(email, snapshots) {
 // created_at DESC на бэкенде, так что это сосед по индексу).
 export default function CapitalSheet({ user, onClose, onOpenNew, onOpenSnapshot, refreshKey }) {
   const email = user?.email;
-  const [snapshots, setSnapshots] = useState(() => loadCapitalCache(email) || []);
+  const [snapshots, setSnapshots] = useState(() => loadCached(CACHE_KEY, email) || []);
   // Only block on the network the first time there's nothing cached to paint
   // from — a cached list should show up instantly, offline included, with
   // the network fetch just refreshing it quietly in the background.
-  const [loading, setLoading] = useState(() => !loadCapitalCache(email));
+  const [loading, setLoading] = useState(() => !loadCached(CACHE_KEY, email));
   const [error, setError] = useState(null);
   const [closing, setClosing] = useState(false);
   const [range, setRange] = useState("all");
@@ -74,7 +56,7 @@ export default function CapitalSheet({ user, onClose, onOpenNew, onOpenSnapshot,
   }
 
   function load() {
-    const cached = loadCapitalCache(email);
+    const cached = loadCached(CACHE_KEY, email);
     if (cached) {
       setSnapshots(cached);
       setLoading(false);
@@ -85,7 +67,7 @@ export default function CapitalSheet({ user, onClose, onOpenNew, onOpenSnapshot,
       .then((data) => {
         setSnapshots(data);
         setError(null);
-        if (email) saveCapitalCache(email, data);
+        if (email) saveCached(CACHE_KEY, email, data);
       })
       .catch(() => {
         // Offline or the request failed — if we already have a cached list

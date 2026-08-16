@@ -3,6 +3,7 @@ import { fetchReminderSettings, saveReminderSettings, subscribeReminderPush } fr
 import { haptic } from "../haptics";
 import { isStandalone, urlBase64ToUint8Array } from "../push";
 import { useSwipeDismissRight } from "../sheetGestures";
+import { loadCached, saveCached } from "../offlineCache";
 
 export const REMINDERS_ENABLED_KEY = "traty-reminders-enabled";
 
@@ -23,14 +24,18 @@ const DEFAULT_SETTINGS = {
   text: "Пора внести расходы и доходы.",
 };
 
-export default function RemindersSheet({ onClose }) {
-  const [settings, setSettings] = useState(DEFAULT_SETTINGS);
-  const [loading, setLoading] = useState(true);
+const CACHE_KEY = "traty-reminders-cache-v1";
+
+export default function RemindersSheet({ user, onClose }) {
+  const email = user?.email;
+  const initialSettings = loadCached(CACHE_KEY, email) || DEFAULT_SETTINGS;
+  const [settings, setSettings] = useState(initialSettings);
+  const [loading, setLoading] = useState(() => !loadCached(CACHE_KEY, email));
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(null);
   const [closing, setClosing] = useState(false);
   const pageRef = useRef(null);
-  const latestRef = useRef(DEFAULT_SETTINGS);
+  const latestRef = useRef(initialSettings);
   const textTimer = useRef(null);
 
   useSwipeDismissRight(pageRef, onClose);
@@ -48,16 +53,24 @@ export default function RemindersSheet({ onClose }) {
   }
 
   useEffect(() => {
+    const cached = loadCached(CACHE_KEY, email);
+    if (cached) setLoading(false);
     fetchReminderSettings()
       .then((data) => {
         const next = { enabled: data.enabled, days: data.days, time: data.time, text: data.text };
         latestRef.current = next;
         setSettings(next);
         localStorage.setItem(REMINDERS_ENABLED_KEY, JSON.stringify(next.enabled));
+        if (email) saveCached(CACHE_KEY, email, next);
       })
-      .catch(() => setError("Не удалось загрузить настройки"))
+      .catch(() => {
+        // Offline or the request failed — if settings were already cached
+        // (hydrated at mount or from this effect's own `cached` above),
+        // leave those showing instead of falling back to defaults+error.
+        if (!cached) setError("Не удалось загрузить настройки");
+      })
       .finally(() => setLoading(false));
-  }, []);
+  }, [email]);
 
   function applyLocal(next) {
     latestRef.current = next;
@@ -69,6 +82,7 @@ export default function RemindersSheet({ onClose }) {
     try {
       await saveReminderSettings(next);
       localStorage.setItem(REMINDERS_ENABLED_KEY, JSON.stringify(next.enabled));
+      if (email) saveCached(CACHE_KEY, email, next);
     } catch (err) {
       setError(err.message);
     }

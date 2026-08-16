@@ -6,6 +6,9 @@ import { haptic } from "../haptics";
 import { useSwipeDismissRight } from "../sheetGestures";
 import CategoryGlyph from "./CategoryGlyph";
 import { catIconVars } from "../catIconVars";
+import { loadCached, saveCached } from "../offlineCache";
+
+const CACHE_KEY = "traty-balance-history-cache-v1";
 
 const REASON_LABEL = {
   manual: "Ручное изменение",
@@ -47,9 +50,10 @@ function formatWhen(iso) {
 // always recoverable by reading back what it used to be — see App.jsx's
 // balance-history feature note for why this exists instead of a periodic
 // snapshot job.
-export default function BalanceHistorySheet({ onClose }) {
-  const [rows, setRows] = useState([]);
-  const [loading, setLoading] = useState(true);
+export default function BalanceHistorySheet({ user, onClose }) {
+  const email = user?.email;
+  const [rows, setRows] = useState(() => loadCached(CACHE_KEY, email) || []);
+  const [loading, setLoading] = useState(() => !loadCached(CACHE_KEY, email));
   const [error, setError] = useState(null);
   const [closing, setClosing] = useState(false);
   const pageRef = useRef(null);
@@ -69,11 +73,24 @@ export default function BalanceHistorySheet({ onClose }) {
   }
 
   useEffect(() => {
+    const cached = loadCached(CACHE_KEY, email);
+    if (cached) {
+      setRows(cached);
+      setLoading(false);
+    } else {
+      setLoading(true);
+    }
     fetchBalanceHistory()
-      .then(setRows)
-      .catch(() => setError("Не удалось загрузить историю"))
+      .then((data) => {
+        setRows(data);
+        setError(null);
+        if (email) saveCached(CACHE_KEY, email, data);
+      })
+      .catch(() => {
+        if (!cached) setError("Не удалось загрузить историю");
+      })
       .finally(() => setLoading(false));
-  }, []);
+  }, [email]);
 
   return (
     <div ref={pageRef} className="settings-page">

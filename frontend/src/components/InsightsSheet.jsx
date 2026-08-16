@@ -8,6 +8,11 @@ import InsightsChart from "./InsightsChart";
 import { catIconVars } from "../catIconVars";
 import { useSwipeDismiss } from "../sheetGestures";
 import { formatPeriodLabel } from "../insights";
+import { loadCached, saveCached } from "../offlineCache";
+
+function categoryLimitsCacheKey(wallet) {
+  return `traty-category-limits-${wallet}`;
+}
 
 function tenge(value) {
   return `${Math.round(value).toLocaleString("ru-RU")} ₸`;
@@ -28,7 +33,8 @@ function daysInCurrentMonth() {
   return new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
 }
 
-export default function InsightsSheet({ period, insights: data, wallet, walletBalance, onClose }) {
+export default function InsightsSheet({ user, period, insights: data, wallet, walletBalance, onClose }) {
+  const email = user?.email;
   const [monthlyLimit, setMonthlyLimit] = useState(() => readLimit(wallet));
   const [editingLimit, setEditingLimit] = useState(false);
   const [limitDraft, setLimitDraft] = useState("");
@@ -68,21 +74,26 @@ export default function InsightsSheet({ period, insights: data, wallet, walletBa
       return;
     }
     const requestId = ++limitsRequestIdRef.current;
-    setCategoryLimitsReady(false);
+    const cached = loadCached(categoryLimitsCacheKey(wallet), email);
+    setCategoryLimits(cached || {});
+    setCategoryLimitsReady(!!cached);
     fetchCategoryLimits(wallet)
       .then((rows) => {
         if (limitsRequestIdRef.current !== requestId) return;
         const map = {};
         for (const row of rows) map[row.category] = Number(row.monthly_limit);
         setCategoryLimits(map);
+        if (email) saveCached(categoryLimitsCacheKey(wallet), email, map);
       })
       .catch(() => {
-        if (limitsRequestIdRef.current === requestId) setCategoryLimits({});
+        // Offline or the request failed — if this wallet's limits were
+        // already cached (hydrated above), leave those showing instead of
+        // wiping them back to "no limits set".
       })
       .finally(() => {
         if (limitsRequestIdRef.current === requestId) setCategoryLimitsReady(true);
       });
-  }, [wallet]);
+  }, [wallet, email]);
 
   function saveCategoryLimit(category) {
     const value = Number(categoryLimitDraft.replace(/[^\d]/g, ""));
@@ -96,6 +107,7 @@ export default function InsightsSheet({ period, insights: data, wallet, walletBa
           const next = { ...current };
           if (value > 0) next[category] = value;
           else delete next[category];
+          if (email) saveCached(categoryLimitsCacheKey(wallet), email, next);
           return next;
         });
         setEditingCategory(null);
