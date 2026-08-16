@@ -21,14 +21,39 @@ function formatDate(iso) {
 
 const RANGE_MONTHS = { "6": 6, "12": 12 };
 
+const CACHE_KEY = "traty-capital-cache-v1";
+
+// Same idea as App.jsx's expenses cache: tagged with the owning account's
+// email so a shared device doesn't flash a different account's snapshots.
+function loadCapitalCache(email) {
+  try {
+    const parsed = JSON.parse(localStorage.getItem(CACHE_KEY));
+    return parsed && parsed.owner === email && Array.isArray(parsed.snapshots) ? parsed.snapshots : null;
+  } catch {
+    return null;
+  }
+}
+
+function saveCapitalCache(email, snapshots) {
+  try {
+    localStorage.setItem(CACHE_KEY, JSON.stringify({ owner: email, snapshots }));
+  } catch {
+    // storage full/unavailable — fine, just skip caching
+  }
+}
+
 // «Капитал» (Настройки-стиль полноэкранная страница, как «Долги») — снимки
 // общего капитала семьи, которые считают раз в месяц-два: сумма активов
 // минус обязательства на конкретный момент. Прирост каждой строки — просто
 // разница с предыдущим по времени снимком (список уже отсортирован по
 // created_at DESC на бэкенде, так что это сосед по индексу).
-export default function CapitalSheet({ onClose, onOpenNew, onOpenSnapshot, refreshKey }) {
-  const [snapshots, setSnapshots] = useState([]);
-  const [loading, setLoading] = useState(true);
+export default function CapitalSheet({ user, onClose, onOpenNew, onOpenSnapshot, refreshKey }) {
+  const email = user?.email;
+  const [snapshots, setSnapshots] = useState(() => loadCapitalCache(email) || []);
+  // Only block on the network the first time there's nothing cached to paint
+  // from — a cached list should show up instantly, offline included, with
+  // the network fetch just refreshing it quietly in the background.
+  const [loading, setLoading] = useState(() => !loadCapitalCache(email));
   const [error, setError] = useState(null);
   const [closing, setClosing] = useState(false);
   const [range, setRange] = useState("all");
@@ -49,14 +74,29 @@ export default function CapitalSheet({ onClose, onOpenNew, onOpenSnapshot, refre
   }
 
   function load() {
-    setLoading(true);
+    const cached = loadCapitalCache(email);
+    if (cached) {
+      setSnapshots(cached);
+      setLoading(false);
+    } else {
+      setLoading(true);
+    }
     fetchCapitalSnapshots()
-      .then(setSnapshots)
-      .catch(() => setError("Не удалось загрузить капитал"))
+      .then((data) => {
+        setSnapshots(data);
+        setError(null);
+        if (email) saveCapitalCache(email, data);
+      })
+      .catch(() => {
+        // Offline or the request failed — if we already have a cached list
+        // on screen (from this load or hydrated at mount), leave it showing
+        // instead of replacing it with an error.
+        if (!cached) setError("Не удалось загрузить капитал");
+      })
       .finally(() => setLoading(false));
   }
 
-  useEffect(load, [refreshKey]);
+  useEffect(load, [refreshKey, email]);
 
   const latest = snapshots[0];
   const previous = snapshots[1];

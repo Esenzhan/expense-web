@@ -1041,6 +1041,7 @@ export default function App() {
 
       {capitalOpen && (
         <CapitalSheet
+          user={user}
           refreshKey={capitalRefreshKey}
           onClose={() => setCapitalOpen(false)}
           onOpenNew={() => setNewCapitalOpen(true)}
