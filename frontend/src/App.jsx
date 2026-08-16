@@ -1007,6 +1007,7 @@ export default function App() {
 
       {debtsOpen && (
         <DebtsSheet
+          user={user}
           refreshKey={debtsRefreshKey}
           onClose={() => setDebtsOpen(false)}
           onOpenNewDebt={() => setNewDebtOpen(true)}

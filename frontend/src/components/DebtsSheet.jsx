@@ -17,15 +17,38 @@ function pluralPeople(n) {
   return "человек";
 }
 
+const CACHE_KEY = "traty-debts-cache-v1";
+
+// Same account-scoped localStorage cache-first pattern as CapitalSheet —
+// paints instantly (offline included) from the last fetch, then refreshes
+// quietly in the background.
+function loadDebtsCache(email) {
+  try {
+    const parsed = JSON.parse(localStorage.getItem(CACHE_KEY));
+    return parsed && parsed.owner === email && Array.isArray(parsed.debts) ? parsed.debts : null;
+  } catch {
+    return null;
+  }
+}
+
+function saveDebtsCache(email, debts) {
+  try {
+    localStorage.setItem(CACHE_KEY, JSON.stringify({ owner: email, debts }));
+  } catch {
+    // storage full/unavailable — fine, just skip caching
+  }
+}
+
 // «Долги» (Настройки-стиль полноэкранная страница, открывается с иконки
 // «Статистика» в шапке — см. App.jsx): нам должны / мы должны, каждое —
 // личное или семейное (та же приватность, что у кошельков). Выдача и
 // погашение могут опционально двигать баланс конкретного счёта (см.
 // NewDebtSheet/DebtDetailSheet) — сюда сайт только читает уже посчитанный
 // список, вся логика подсчёта на бэкенде (routes/debts.js).
-export default function DebtsSheet({ onClose, onOpenNewDebt, onOpenDebt, refreshKey }) {
-  const [debts, setDebts] = useState([]);
-  const [loading, setLoading] = useState(true);
+export default function DebtsSheet({ user, onClose, onOpenNewDebt, onOpenDebt, refreshKey }) {
+  const email = user?.email;
+  const [debts, setDebts] = useState(() => loadDebtsCache(email) || []);
+  const [loading, setLoading] = useState(() => !loadDebtsCache(email));
   const [error, setError] = useState(null);
   const [direction, setDirection] = useState("owed_to_us");
   const [closing, setClosing] = useState(false);
@@ -46,14 +69,26 @@ export default function DebtsSheet({ onClose, onOpenNewDebt, onOpenDebt, refresh
   }
 
   function load() {
-    setLoading(true);
+    const cached = loadDebtsCache(email);
+    if (cached) {
+      setDebts(cached);
+      setLoading(false);
+    } else {
+      setLoading(true);
+    }
     fetchDebts()
-      .then(setDebts)
-      .catch(() => setError("Не удалось загрузить долги"))
+      .then((data) => {
+        setDebts(data);
+        setError(null);
+        if (email) saveDebtsCache(email, data);
+      })
+      .catch(() => {
+        if (!cached) setError("Не удалось загрузить долги");
+      })
       .finally(() => setLoading(false));
   }
 
-  useEffect(load, [refreshKey]);
+  useEffect(load, [refreshKey, email]);
 
   const filtered = debts.filter((d) => d.direction === direction);
   const openDebts = filtered.filter((d) => d.status === "open");
