@@ -62,17 +62,26 @@ function validateItems(items) {
   return null;
 }
 
+// createdAt is optional (YYYY-MM-DD) — lets a snapshot be backfilled for a
+// real past date (e.g. importing years of history from the spreadsheet
+// this replaced) instead of always landing on "now", same idea as
+// expenses'/debts' own created_at overrides.
 capitalRouter.post("/", async (req, res) => {
-  const { items } = req.body;
+  const { items, createdAt } = req.body;
   const error = validateItems(items);
   if (error) return res.status(400).json({ error });
+  if (createdAt != null && !/^\d{4}-\d{2}-\d{2}$/.test(createdAt)) {
+    return res.status(400).json({ error: "Некорректная дата" });
+  }
 
   const client = await pool.connect();
   try {
     await client.query("BEGIN");
     const { rows } = await client.query(
-      `INSERT INTO capital_snapshots (created_by) VALUES ($1) RETURNING id, created_at`,
-      [req.user.id]
+      createdAt
+        ? `INSERT INTO capital_snapshots (created_by, created_at) VALUES ($1, $2) RETURNING id, created_at`
+        : `INSERT INTO capital_snapshots (created_by) VALUES ($1) RETURNING id, created_at`,
+      createdAt ? [req.user.id, createdAt] : [req.user.id]
     );
     const snapshotId = rows[0].id;
     let order = 0;
