@@ -2,9 +2,19 @@ import { useEffect, useRef, useState } from "react";
 import { fetchDebts } from "../api";
 import { haptic } from "../haptics";
 import { useSwipeDismissRight } from "../sheetGestures";
+import { avatarColorFor, avatarInitial, formatDueDate, overdueDays, formatOverdue } from "../debtDisplay";
+import { catIconVars } from "../catIconVars";
 
 function formatAmount(amount) {
   return `${Number(amount).toLocaleString("ru-RU", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ₸`;
+}
+
+function pluralPeople(n) {
+  const mod10 = n % 10;
+  const mod100 = n % 100;
+  if (mod10 === 1 && mod100 !== 11) return "человек";
+  if (mod10 >= 2 && mod10 <= 4 && (mod100 < 10 || mod100 >= 20)) return "человека";
+  return "человек";
 }
 
 // «Долги» (Настройки-стиль полноэкранная страница, открывается с иконки
@@ -46,9 +56,9 @@ export default function DebtsSheet({ onClose, onOpenNewDebt, onOpenDebt, refresh
   useEffect(load, [refreshKey]);
 
   const filtered = debts.filter((d) => d.direction === direction);
-  const openTotal = filtered
-    .filter((d) => d.status === "open")
-    .reduce((sum, d) => sum + Number(d.remaining), 0);
+  const openDebts = filtered.filter((d) => d.status === "open");
+  const openTotal = openDebts.reduce((sum, d) => sum + Number(d.remaining), 0);
+  const overdueCount = openDebts.filter((d) => overdueDays(d) != null).length;
 
   return (
     <div ref={pageRef} className="settings-page">
@@ -90,10 +100,23 @@ export default function DebtsSheet({ onClose, onOpenNewDebt, onOpenDebt, refresh
         </button>
       </div>
 
-      {!loading && !error && (
-        <p className="debt-total">
-          Открыто: <strong>{formatAmount(openTotal)}</strong>
-        </p>
+      {!loading && !error && filtered.length > 0 && (
+        <>
+          <p className="hero-total-label">
+            {direction === "owed_to_us" ? "Мне должны" : "Я должен"} · открыто
+          </p>
+          <div className="hero-total-row">
+            <span className="hero-total">{formatAmount(openTotal)}</span>
+            {overdueCount > 0 && (
+              <span className="debt-overdue-chip">
+                {overdueCount} из {openDebts.length} просрочен{overdueCount === 1 ? "" : "ы"}
+              </span>
+            )}
+          </div>
+          <p className="hero-total-sub">
+            {filtered.length} {pluralPeople(filtered.length)}
+          </p>
+        </>
       )}
 
       {loading && <p className="empty-hint">Загрузка…</p>}
@@ -104,29 +127,43 @@ export default function DebtsSheet({ onClose, onOpenNewDebt, onOpenDebt, refresh
 
       {!loading && filtered.length > 0 && (
         <div className="settings-group">
-          {filtered.map((debt) => (
-            <button
-              key={debt.id}
-              className={`settings-row debt-row ${debt.status === "closed" ? "debt-row-closed" : ""}`}
-              onClick={() => {
-                haptic();
-                onOpenDebt(debt);
-              }}
-            >
-              <span className="debt-row-main">
-                <span className="debt-row-title">
-                  {debt.counterparty}
-                  <span className="debt-row-scope">
-                    {debt.user_id == null ? "Семейный" : "Личный"}
-                  </span>
+          {filtered.map((debt) => {
+            const overdue = overdueDays(debt);
+            const color = avatarColorFor(debt.counterparty);
+            const sub = overdue
+              ? formatOverdue(overdue)
+              : debt.description
+                ? debt.description
+                : debt.due_date
+                  ? `Вернуть до ${formatDueDate(debt.due_date)}`
+                  : null;
+            return (
+              <button
+                key={debt.id}
+                className={`settings-row debt-row ${debt.status === "closed" ? "debt-row-closed" : ""} ${overdue ? "debt-row-overdue" : ""}`}
+                onClick={() => {
+                  haptic();
+                  onOpenDebt(debt);
+                }}
+              >
+                <span className="debt-avatar" style={catIconVars(color.bg, color.fg)}>
+                  {avatarInitial(debt.counterparty)}
                 </span>
-                {debt.description && <span className="debt-row-sub">{debt.description}</span>}
-              </span>
-              <span className="debt-row-amount">
-                {debt.status === "closed" ? "Погашено" : formatAmount(debt.remaining)}
-              </span>
-            </button>
-          ))}
+                <span className="debt-row-main">
+                  <span className="debt-row-title">
+                    {debt.counterparty}
+                    <span className="debt-row-scope">
+                      {debt.user_id == null ? "Семейный" : "Личный"}
+                    </span>
+                  </span>
+                  {sub && <span className={`debt-row-sub ${overdue ? "debt-row-sub-overdue" : ""}`}>{sub}</span>}
+                </span>
+                <span className={`debt-row-amount ${overdue ? "debt-row-amount-overdue" : ""}`}>
+                  {debt.status === "closed" ? "Погашено" : formatAmount(debt.remaining)}
+                </span>
+              </button>
+            );
+          })}
         </div>
       )}
     </div>

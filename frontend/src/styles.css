@@ -591,7 +591,8 @@ body {
 .category-pick,
 .insights-card-icon-badge,
 .newcat-icon,
-.wallet-pick-icon {
+.wallet-pick-icon,
+.debt-avatar {
   background: var(--cat-bg);
   color: var(--cat-fg);
 }
@@ -600,7 +601,8 @@ body {
   .category-pick,
   .insights-card-icon-badge,
   .newcat-icon,
-  .wallet-pick-icon {
+  .wallet-pick-icon,
+  .debt-avatar {
     background: var(--cat-fg);
     color: #fff;
   }
@@ -609,7 +611,8 @@ body {
 :root[data-theme="dark"] .category-pick,
 :root[data-theme="dark"] .insights-card-icon-badge,
 :root[data-theme="dark"] .newcat-icon,
-:root[data-theme="dark"] .wallet-pick-icon {
+:root[data-theme="dark"] .wallet-pick-icon,
+:root[data-theme="dark"] .debt-avatar {
   background: var(--cat-fg);
   color: #fff;
 }
@@ -617,7 +620,8 @@ body {
 :root[data-theme="light"] .category-pick,
 :root[data-theme="light"] .insights-card-icon-badge,
 :root[data-theme="light"] .newcat-icon,
-:root[data-theme="light"] .wallet-pick-icon {
+:root[data-theme="light"] .wallet-pick-icon,
+:root[data-theme="light"] .debt-avatar {
   background: var(--cat-bg);
   color: var(--cat-fg);
 }
@@ -1908,23 +1912,56 @@ body {
   margin-bottom: 12px;
 }
 
-.debt-total {
-  font-size: 14px;
+.hero-total-sub {
+  font-size: 13px;
   color: var(--ink-soft);
-  margin-bottom: 12px;
+  margin: 0 0 14px;
 }
 
-.debt-total strong {
-  color: var(--ink);
+.debt-overdue-chip {
   font-family: var(--font-mono);
+  font-size: 12.5px;
+  font-weight: 700;
+  padding: 4px 9px;
+  border-radius: 999px;
+  color: var(--danger);
+  background: color-mix(in srgb, var(--danger) 14%, transparent);
 }
 
 .debt-row {
   align-items: flex-start;
+  position: relative;
 }
 
 .debt-row-closed {
   opacity: 0.6;
+}
+
+.debt-row-overdue {
+  background: color-mix(in srgb, var(--danger) 5%, transparent);
+}
+
+.debt-row-overdue::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 8px;
+  bottom: 8px;
+  width: 3px;
+  border-radius: 2px;
+  background: var(--danger);
+}
+
+.debt-avatar {
+  width: 38px;
+  height: 38px;
+  min-width: 38px;
+  border-radius: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 800;
+  font-size: 15px;
 }
 
 .debt-row-main {
@@ -1952,8 +1989,13 @@ body {
 }
 
 .debt-row-sub {
-  font-size: 13px;
+  font-size: 12.5px;
   color: var(--ink-soft);
+}
+
+.debt-row-sub-overdue {
+  color: var(--danger);
+  font-weight: 700;
 }
 
 .debt-row-amount {
@@ -1962,6 +2004,11 @@ body {
   color: var(--ink);
   white-space: nowrap;
   flex-shrink: 0;
+  padding-top: 2px;
+}
+
+.debt-row-amount-overdue {
+  color: var(--danger);
 }
 
 .debt-hint {
