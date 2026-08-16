@@ -2677,6 +2677,26 @@ button.wallet-chip {
   margin-bottom: 8px;
 }
 
+.capital-item-icon {
+  width: 30px;
+  height: 30px;
+  min-width: 30px;
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.capital-item-icon.asset {
+  background: color-mix(in srgb, #2f8f4e 14%, transparent);
+  color: #2f8f4e;
+}
+
+.capital-item-icon.liability {
+  background: color-mix(in srgb, var(--danger) 14%, transparent);
+  color: var(--danger);
+}
+
 .capital-item-name {
   flex: 1;
   min-width: 0;

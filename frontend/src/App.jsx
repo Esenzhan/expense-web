@@ -210,6 +210,7 @@ export default function App() {
   const [debtsRefreshKey, setDebtsRefreshKey] = useState(0);
   const [capitalOpen, setCapitalOpen] = useState(false);
   const [newCapitalOpen, setNewCapitalOpen] = useState(false);
+  const [newCapitalPrevId, setNewCapitalPrevId] = useState(null);
   const [selectedCapitalSnapshot, setSelectedCapitalSnapshot] = useState(null);
   const [capitalRefreshKey, setCapitalRefreshKey] = useState(0);
   const [selectedWallet, setSelectedWallet] = useState(
@@ -1044,7 +1045,10 @@ export default function App() {
           user={user}
           refreshKey={capitalRefreshKey}
           onClose={() => setCapitalOpen(false)}
-          onOpenNew={() => setNewCapitalOpen(true)}
+          onOpenNew={(prevId) => {
+            setNewCapitalPrevId(prevId);
+            setNewCapitalOpen(true);
+          }}
           onOpenSnapshot={(snapshot, previousTotal) =>
             setSelectedCapitalSnapshot({ snapshot, previousTotal })
           }
@@ -1053,6 +1057,7 @@ export default function App() {
 
       {newCapitalOpen && (
         <NewCapitalSnapshotSheet
+          previousSnapshotId={newCapitalPrevId}
           onClose={() => setNewCapitalOpen(false)}
           onCreated={() => {
             setNewCapitalOpen(false);

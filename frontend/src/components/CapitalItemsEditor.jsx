@@ -1,5 +1,7 @@
 import { haptic } from "../haptics";
 import { formatAmountDisplay, sanitizeAmountInput } from "../amountInput";
+import { guessCapitalItemIcon } from "../capitalIcons";
+import CategoryGlyph from "./CategoryGlyph";
 
 let nextRowId = 1;
 export function emptyRow() {
@@ -36,12 +38,15 @@ function updateRow(setRows, id, field, value) {
   setRows((rows) => rows.map((row) => (row.id === id ? { ...row, [field]: value } : row)));
 }
 
-function Section({ title, rows, setRows }) {
+function Section({ title, kind, rows, setRows }) {
   return (
     <>
       <p className="newcat-group-title">{title}</p>
       {rows.map((row) => (
         <div className="capital-item-row" key={row.id}>
+          <span className={`capital-item-icon ${kind}`}>
+            <CategoryGlyph emoji={guessCapitalItemIcon(row.name, kind)} size={17} />
+          </span>
           <input
             className="note-input capital-item-name"
             type="text"
@@ -95,8 +100,8 @@ export default function CapitalItemsEditor({ assets, setAssets, liabilities, set
   const total = rowTotal(assets) - rowTotal(liabilities);
   return (
     <>
-      <Section title="Активы" rows={assets} setRows={setAssets} />
-      <Section title="Обязательства" rows={liabilities} setRows={setLiabilities} />
+      <Section title="Активы" kind="asset" rows={assets} setRows={setAssets} />
+      <Section title="Обязательства" kind="liability" rows={liabilities} setRows={setLiabilities} />
       <div className="capital-total-row">
         <span>Итого</span>
         <strong>{total.toLocaleString("ru-RU")} ₸</strong>

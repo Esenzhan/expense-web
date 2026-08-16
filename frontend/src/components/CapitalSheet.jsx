@@ -128,7 +128,7 @@ export default function CapitalSheet({ user, onClose, onOpenNew, onOpenSnapshot,
           className="icon-button"
           onClick={() => {
             haptic();
-            onOpenNew();
+            onOpenNew(latest?.id ?? null);
           }}
           aria-label="Новый снимок"
         >
