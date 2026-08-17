@@ -23,6 +23,14 @@ export default function WalletsSheet({ balances, pendingWalletDeltas, selected, 
   const allBalance = balances.length
     ? balances.reduce((sum, b) => sum + Number(b.current_balance) - (pendingWalletDeltas.get(b.wallet) || 0), 0)
     : null;
+  // "Личные" is the one personal wallet (the un-deletable default/fallback
+  // — see backend/src/routes/wallets.js); every other wallet is shared, so
+  // this is just allBalance minus that one instead of a hardcoded name list.
+  const sharedBalance = balances.length
+    ? balances
+        .filter((b) => b.wallet !== "Личные")
+        .reduce((sum, b) => sum + Number(b.current_balance) - (pendingWalletDeltas.get(b.wallet) || 0), 0)
+    : null;
   const formatBalance = (amount) =>
     amount != null
       ? `${amount.toLocaleString("ru-RU", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ₸`
@@ -65,9 +73,6 @@ export default function WalletsSheet({ balances, pendingWalletDeltas, selected, 
                 <path d="M4 8h13m-3-3 3 3-3 3M20 16H7m3-3-3 3 3 3" />
               </svg>
             </button>
-            <button className="icon-button" aria-label="Сортировка">
-              ⇅
-            </button>
           </div>
         </div>
 
@@ -106,6 +111,11 @@ export default function WalletsSheet({ balances, pendingWalletDeltas, selected, 
               </button>
             </div>
           ))}
+        </div>
+
+        <div className="wallet-row all wallet-row-summary">
+          <span className="cat-name">Общие счета</span>
+          <span className="wallet-row-total">{formatBalance(sharedBalance)}</span>
         </div>
       </div>
     </div>

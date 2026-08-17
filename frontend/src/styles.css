@@ -2188,15 +2188,27 @@ body {
   display: flex;
   align-items: center;
   justify-content: space-between;
+  position: relative;
 }
 
 .cats-header .icon-button {
   font-size: 18px;
 }
 
+/* Absolutely centered on the header itself rather than flex-centered
+   between its neighbors — the left/right sides aren't always equal width
+   (e.g. WalletsSheet's single close button vs. its multi-button actions
+   group), and space-between alone would visibly skew the title toward
+   whichever side is narrower. */
 .cats-title {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
   font-weight: 700;
   font-size: 16px;
+  white-space: nowrap;
+  pointer-events: none;
 }
 
 /* Custom period picker (main screen's "Выбрать период") — sized to its
@@ -2470,6 +2482,15 @@ button.wallet-chip {
 
 .wallet-row.all {
   padding: 14px 12px;
+}
+
+.wallet-row-summary {
+  margin-top: 10px;
+  color: var(--ink-soft);
+}
+
+.wallet-row-summary .wallet-row-total {
+  color: var(--ink-soft);
 }
 
 .wallet-row-total {
