@@ -35,8 +35,14 @@ import PeriodPickerSheet from "./components/PeriodPickerSheet";
 import SearchSheet from "./components/SearchSheet";
 import AccountBalanceRow from "./components/AccountBalanceRow";
 import { useSwipeDismissUp } from "./sheetGestures";
+import { loadCached, saveCached } from "./offlineCache";
 
 const CACHE_KEY = "traty-cache-v4";
+// Wallet balances aren't scoped to a (period, wallet) pair like the cache
+// above — every wallet's current balance is the same regardless of which
+// tab is open — so they get their own flat, account-scoped cache instead of
+// living inside CACHE_KEY's per-selection blobs.
+const BALANCES_CACHE_KEY = "traty-wallet-balances-cache-v1";
 
 // How long a deleted expense can be brought back before the DELETE is
 // actually sent (the reference app's ring takes about this long to drain).
@@ -295,6 +301,7 @@ export default function App() {
     };
     setExpenses(cached.exp || []);
     setWalletTotals(cached.wallets || []);
+    setWalletBalances(loadCached(BALANCES_CACHE_KEY, me.email) || []);
     const pending = listPendingExpenses();
     const wallet = selectedWalletRef.current;
     const pendingForList = wallet ? pending.filter((p) => p.wallet === wallet) : pending;
@@ -625,6 +632,17 @@ export default function App() {
     mergeAndSet(selectedWalletRef.current, periodRef.current);
   }
 
+  // Every call site that needs fresh balances (a debt moving money, a
+  // transfer, a manual "Баланс" edit) goes through here so the offline
+  // cache always reflects whatever was last actually fetched, not just
+  // what refreshAll's own background fetch happened to pull.
+  async function refreshWalletBalances() {
+    const data = await fetchWalletBalances();
+    setWalletBalances(data);
+    if (user) saveCached(BALANCES_CACHE_KEY, user.email, data);
+    return data;
+  }
+
   async function refreshAll(currentPeriod, wallet = selectedWallet) {
     // Already-visited (period, wallet) pair this session — paint it
     // immediately so switching wallets doesn't sit blank/stale while the
@@ -659,8 +677,11 @@ export default function App() {
       dataCacheRef.current.set(cacheKey, fresh);
       // Persisted regardless of whether this selection is still current —
       // it's just building up the cross-session cache for next time, same
-      // as the in-session Map above.
+      // as the in-session Map above. Balances aren't part of this
+      // per-selection blob (see BALANCES_CACHE_KEY's comment) — cached
+      // separately, also regardless of whether this selection is still current.
       if (user) saveCache(cacheKey, fresh, user.email);
+      if (user) saveCached(BALANCES_CACHE_KEY, user.email, balances);
       // Discard if the wallet/period was switched away from while this was
       // in flight — a slower response for an abandoned selection (Render's
       // cold start can take tens of seconds) must not clobber rawRef with
@@ -791,7 +812,7 @@ export default function App() {
 
   async function saveAccountBalance(amount) {
     await setWalletBalance(selectedWallet, amount);
-    setWalletBalances(await fetchWalletBalances());
+    await refreshWalletBalances();
   }
 
   return (
@@ -1025,7 +1046,7 @@ export default function App() {
             // A debt tied to a wallet just moved its balance on the backend
             // (see routes/debts.js) — re-fetch so the main screen's "Баланс"
             // and the Счета sheet reflect it immediately, same as a transfer.
-            setWalletBalances(await fetchWalletBalances());
+            await refreshWalletBalances();
           }}
         />
       )}
@@ -1038,7 +1059,7 @@ export default function App() {
           onClose={() => setSelectedDebt(null)}
           onChanged={async () => {
             setDebtsRefreshKey((k) => k + 1);
-            setWalletBalances(await fetchWalletBalances());
+            await refreshWalletBalances();
           }}
         />
       )}
@@ -1134,7 +1155,7 @@ export default function App() {
           initialFrom={selectedWallet}
           onClose={() => setTransferOpen(false)}
           onTransferred={async () => {
-            setWalletBalances(await fetchWalletBalances());
+            await refreshWalletBalances();
             setTransferOpen(false);
           }}
         />
