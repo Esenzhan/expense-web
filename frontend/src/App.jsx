@@ -508,9 +508,17 @@ export default function App() {
     const baseIds = new Set(baseExp.map((e) => e.id));
     const insightsBaseIds = new Set(baseInsightsRows.map((e) => e.id));
     const unconfirmedForList = pendingForList.filter((p) => !baseIds.has(p.id));
-    const mergedExpenses = [...unconfirmedForList, ...baseExp].map((e) =>
-      exitingRef.current.has(e.id) ? { ...e, exiting: true } : e
-    );
+    // Sorted by date, not just concatenated — a pending row used to always
+    // be "just now" so prepending it was harmless, but a backdated one
+    // (custom date picked in EditExpenseSheet) needs to land in its actual
+    // chronological slot. Otherwise it splits its day's group into two
+    // non-contiguous chunks sharing the same key (ExpenseList's groupByDay
+    // only merges *consecutive* same-day rows), which hands React duplicate
+    // keys — it then reuses the wrong row's DOM node across renders, so a
+    // swipe-delete tap silently binds to a stale instance until a reload.
+    const mergedExpenses = [...unconfirmedForList, ...baseExp]
+      .sort((a, b) => new Date(b.created_at) - new Date(a.created_at))
+      .map((e) => (exitingRef.current.has(e.id) ? { ...e, exiting: true } : e));
 
     const pendingByWallet = new Map();
     for (const p of pending) {
