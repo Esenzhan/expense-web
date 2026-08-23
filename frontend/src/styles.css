@@ -70,6 +70,30 @@
   box-sizing: border-box;
 }
 
+/* Press feedback for the app's most-tapped surfaces — a quick scale-down on
+   :active so a tap reads as registered before whatever it triggers (a sheet
+   opening, a save) actually lands. Shared here instead of repeated per
+   selector since it's the same token everywhere it applies. */
+.key,
+.icon-button,
+.sheet-close,
+.btn-primary,
+.btn-secondary,
+.wallet-chip,
+.header-icon {
+  transition: transform 160ms ease-out;
+}
+
+.key:active,
+.icon-button:active,
+.sheet-close:active,
+.btn-primary:active,
+.btn-secondary:active,
+.wallet-chip:active,
+.header-icon:active {
+  transform: scale(0.97);
+}
+
 html,
 body,
 #root {
@@ -1154,11 +1178,13 @@ body {
   display: inline-block;
 }
 
-/* A freshly typed digit pops in, reference-style */
+/* A freshly typed digit settles in — the app's highest-frequency animation
+   (every digit of every amount), so it stays subtle: scale(0.5) read as a
+   "pop" here, too much motion for something this repetitive. */
 @keyframes digit-in {
   from {
     opacity: 0;
-    transform: translateY(10px) scale(0.5);
+    transform: scale(0.9);
   }
   to {
     opacity: 1;
