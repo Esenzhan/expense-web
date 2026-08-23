@@ -2314,8 +2314,41 @@ body {
   padding-bottom: 4px;
 }
 
+/* Clips the grid's slide-in animation to the sheet's width — the grid
+   itself is remounted (keyed by year+month) every time the month changes,
+   whether that's a swipe or an arrow tap, so both play the same transition. */
+.dt-grid-viewport {
+  overflow: hidden;
+}
+
 .dt-grid {
   row-gap: 4px;
+}
+
+.dt-grid[data-dir="next"] {
+  animation: dt-month-in-next 0.24s cubic-bezier(0.2, 0.9, 0.3, 1);
+}
+
+.dt-grid[data-dir="prev"] {
+  animation: dt-month-in-prev 0.24s cubic-bezier(0.2, 0.9, 0.3, 1);
+}
+
+@keyframes dt-month-in-next {
+  from {
+    transform: translateX(100%);
+  }
+  to {
+    transform: translateX(0);
+  }
+}
+
+@keyframes dt-month-in-prev {
+  from {
+    transform: translateX(-100%);
+  }
+  to {
+    transform: translateX(0);
+  }
 }
 
 .dt-day,
