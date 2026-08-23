@@ -4,10 +4,20 @@ import { enqueueExpense, updatePendingExpense, removePendingExpense, syncPending
 import { listCategories, getCategoryIcon } from "../categoryIcons";
 import CategoryGlyph from "./CategoryGlyph";
 import TrashIcon from "./TrashIcon";
+import DateTimePickerSheet from "./DateTimePickerSheet";
 import { listWallets } from "../wallets";
 import { haptic, hapticTick } from "../haptics";
 import { useSwipeDismiss } from "../sheetGestures";
 import { catIconVars } from "../catIconVars";
+
+function CalendarIcon() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+      <rect x="4" y="5" width="16" height="16" rx="2" />
+      <path d="M4 10h16M8 3v4M16 3v4" />
+    </svg>
+  );
+}
 
 function toNumber(raw) {
   return parseFloat(raw.replace(",", ".")) || 0;
@@ -177,6 +187,11 @@ export default function EditExpenseSheet({
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
+  // Only set once the user actually picks a date — left null, a new expense
+  // keeps recording at the exact moment it's saved (server/enqueue "now"),
+  // matching the reference: untouched date = current minute/second.
+  const [customDate, setCustomDate] = useState(null);
+  const [dateTimePickerOpen, setDateTimePickerOpen] = useState(false);
 
   const sheetRef = useRef(null);
   useSwipeDismiss(sheetRef, onClose);
@@ -286,6 +301,7 @@ export default function EditExpenseSheet({
     }
     setError("");
     const payload = { wallet, amount, category, description: note || null };
+    if (isNew && customDate) payload.created_at = customDate.toISOString();
 
     if (isNew) {
       // Never block on the network here: queue it like the offline path
@@ -329,7 +345,8 @@ export default function EditExpenseSheet({
   }
 
   return (
-    <div className={`sheet-backdrop ${closing ? "closing" : ""}`} onClick={() => dismiss(onClose)}>
+    <>
+      <div className={`sheet-backdrop ${closing ? "closing" : ""}`} onClick={() => dismiss(onClose)}>
       <div
         className={`edit-sheet ${closing ? "closing" : ""}`}
         ref={sheetRef}
@@ -341,7 +358,16 @@ export default function EditExpenseSheet({
           </button>
           <span className="expense-type-badge">↗ Расход</span>
           {isNew ? (
-            <span className="icon-button-spacer" />
+            <button
+              className={`icon-button ${customDate ? "active" : ""}`}
+              onClick={() => {
+                haptic();
+                setDateTimePickerOpen(true);
+              }}
+              aria-label="Дата и время"
+            >
+              <CalendarIcon />
+            </button>
           ) : (
             <div className="edit-menu-wrap">
               <button
@@ -481,5 +507,17 @@ export default function EditExpenseSheet({
         </button>
       </div>
     </div>
+
+    {dateTimePickerOpen && (
+      <DateTimePickerSheet
+        initial={customDate || new Date()}
+        onClose={() => setDateTimePickerOpen(false)}
+        onApply={(picked) => {
+          setCustomDate(picked);
+          setDateTimePickerOpen(false);
+        }}
+      />
+    )}
+    </>
   );
 }

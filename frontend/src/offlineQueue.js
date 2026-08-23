@@ -60,7 +60,10 @@ export function enqueueExpense(payload) {
   const entry = {
     localId: `local-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
     payload,
-    createdAt: new Date().toISOString(),
+    // A backdated expense (custom created_at from the date picker) must
+    // show up under its own day/period locally too, not just after the
+    // server round-trip confirms it.
+    createdAt: payload.created_at || new Date().toISOString(),
   };
   queue.unshift(entry); // newest first, matching the server's expense order
   saveQueue(queue);

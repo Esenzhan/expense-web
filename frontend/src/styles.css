@@ -124,6 +124,11 @@ body {
   display: flex;
   align-items: center;
   justify-content: space-between;
+  /* A guaranteed minimum gap between the wallet chip and the nav icons —
+     space-between alone only spaces them if the chip's own width leaves
+     room; a long balance (e.g. a real account balance with kopecks) can
+     grow the chip right up against the icons with nothing enforcing a gap. */
+  gap: 10px;
 }
 
 /* "Отменить" banner shown for a few seconds after deleting an expense */
@@ -1012,6 +1017,11 @@ body {
 .icon-button-spacer {
   width: 36px;
   height: 36px;
+}
+
+.icon-button.active {
+  background: var(--accent);
+  color: var(--on-accent);
 }
 
 .expense-type-badge {
