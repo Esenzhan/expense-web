@@ -2263,6 +2263,106 @@ body {
   outline: none;
 }
 
+/* Custom date/time picker for backdating an added expense (EditExpenseSheet's
+   calendar button) — a full month grid instead of the native <input
+   type=date>, matching the reference. */
+.dt-cal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.dt-cal-month {
+  font-weight: 700;
+  font-size: 16px;
+}
+
+.dt-cal-nav {
+  display: flex;
+  gap: 6px;
+}
+
+.dt-cal-nav-btn {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  border: none;
+  background: var(--surface-soft);
+  color: var(--ink);
+  font-size: 16px;
+  font-family: var(--font-ui);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.dt-cal-nav-btn:disabled {
+  opacity: 0.35;
+}
+
+.dt-weekdays,
+.dt-grid {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+}
+
+.dt-weekdays {
+  color: var(--ink-soft);
+  font-size: 12px;
+  font-weight: 600;
+  text-align: center;
+  padding-bottom: 4px;
+}
+
+.dt-grid {
+  row-gap: 4px;
+}
+
+.dt-day,
+.dt-day-empty {
+  aspect-ratio: 1;
+  width: 100%;
+}
+
+.dt-day {
+  border: none;
+  background: none;
+  color: var(--ink);
+  font-family: var(--font-ui);
+  font-size: 14px;
+  font-weight: 600;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.dt-day.selected {
+  background: var(--ink);
+  color: var(--surface);
+}
+
+.dt-day.disabled {
+  color: var(--ink-soft);
+  opacity: 0.35;
+}
+
+.dt-time-row {
+  cursor: pointer;
+}
+
+.dt-time-input {
+  border: none;
+  background: none;
+  font-family: var(--font-mono);
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--ink);
+  text-align: right;
+  padding: 0;
+  outline: none;
+}
+
 .period-picker-field input:focus {
   border-color: var(--ink-soft);
 }
