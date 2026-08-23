@@ -844,7 +844,9 @@ export default function App() {
           <div className="wallet-chip-text">
             <div className="wallet-chip-name">{selectedWallet || "Все счета"}</div>
             <div className="wallet-chip-balance">
-              −{walletBalance.toLocaleString("ru-RU")} ₸
+              {accountBalance != null
+                ? `${accountBalance.toLocaleString("ru-RU", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ₸`
+                : "—"}
             </div>
           </div>
         </button>
