@@ -282,8 +282,6 @@ export default function App() {
   // comment for why.
   const [undoBannerEl, setUndoBannerEl] = useState(null);
   useSwipeDismissUp(undoBannerEl, dismissUndoBanner);
-  const undoBannerElRef = useRef(null);
-  undoBannerElRef.current = undoBannerEl;
 
   // Paints straight from this account's last cached snapshot — used both
   // by the offline-first bootstrap below and, once fetchMe() actually
@@ -601,28 +599,15 @@ export default function App() {
     if (pendingDeleteRef.current) commitDelete(pendingDeleteRef.current);
     haptic();
     exitingRef.current.add(expense.id);
-    // A stray inline transform/opacity from a previous swipe's exit
-    // animation (see animateBannerOut) would otherwise carry over onto this
-    // reused banner element — reset it before it shows again for the new entry.
-    resetBannerStyle();
     // startedAt gives the undo banner's countdown ring a fresh key each
     // time, so swiping a second row while the banner is already showing
     // remounts it instead of leaving it mid-animation from the last one.
     const entry = { expense, startedAt: Date.now(), timeoutId: null };
     entry.timeoutId = setTimeout(() => {
       if (pendingDeleteRef.current === entry) {
-        // Same slide-up-and-fade the swipe-to-dismiss path plays (see
-        // animateBannerOut) — the banner used to just vanish instantly when
-        // the countdown ran out, the one exit that skipped it.
-        animateBannerOut(() => {
-          // Re-check: "Отменить" (or a newer swipe force-committing this
-          // one) can land during the exit animation's ~250ms — without this,
-          // the deferred commit below would still fire and delete anyway.
-          if (pendingDeleteRef.current !== entry) return;
-          pendingDeleteRef.current = null;
-          setPendingDelete(null);
-          commitDelete(entry);
-        });
+        pendingDeleteRef.current = null;
+        setPendingDelete(null);
+        commitDelete(entry);
       }
     }, UNDO_WINDOW_MS);
     pendingDeleteRef.current = entry;
@@ -632,36 +617,6 @@ export default function App() {
       exitingRef.current.delete(expense.id);
       mergeAndSet(selectedWalletRef.current, periodRef.current);
     }, ROW_EXIT_MS);
-  }
-
-  // Mirrors sheetGestures.js's useSwipeDismissUp exit exactly (same
-  // transform/opacity/duration) so the banner leaves the same way regardless
-  // of whether it was swiped away or timed out.
-  function animateBannerOut(onDone) {
-    const el = undoBannerElRef.current;
-    if (!el) {
-      onDone();
-      return;
-    }
-    el.style.transition = "transform 0.22s ease, opacity 0.22s ease";
-    el.style.transform = "translateY(-140%)";
-    el.style.opacity = "0";
-    let done = false;
-    const finish = () => {
-      if (done) return;
-      done = true;
-      onDone();
-    };
-    el.addEventListener("transitionend", finish, { once: true });
-    setTimeout(finish, 260); // fallback if transitionend never fires
-  }
-
-  function resetBannerStyle() {
-    const el = undoBannerElRef.current;
-    if (!el) return;
-    el.style.transition = "";
-    el.style.transform = "";
-    el.style.opacity = "";
   }
 
   // Swiped away instead of waiting out the countdown — commits the deletion
@@ -868,36 +823,8 @@ export default function App() {
     await refreshWalletBalances();
   }
 
-  // Any full-screen sheet/page open at all — not just Insights — shrinks
-  // the main screen behind it for the same depth cue (matches the reference:
-  // every modal pushes the parent layer back, not just one of them).
-  const anySheetOpen =
-    insightsOpen ||
-    searchOpen ||
-    !!editingExpense ||
-    addingExpense ||
-    !!scanItems ||
-    settingsOpen ||
-    remindersOpen ||
-    themeOpen ||
-    balanceHistoryOpen ||
-    debtsOpen ||
-    newDebtOpen ||
-    !!selectedDebt ||
-    capitalOpen ||
-    newCapitalOpen ||
-    !!selectedCapitalSnapshot ||
-    categoriesOpen ||
-    !!newCategoryWallet ||
-    !!editingCategory ||
-    walletsOpen ||
-    transferOpen ||
-    periodPickerOpen ||
-    newWalletOpen ||
-    !!editingWallet;
-
   return (
-    <div className={`app ${anySheetOpen ? "app-behind" : ""}`}>
+    <div className={`app ${insightsOpen ? "app-behind" : ""}`}>
       {pendingDelete && (
         <div className="undo-banner" ref={setUndoBannerEl}>
           <UndoTimerRing key={pendingDelete.startedAt} durationMs={UNDO_WINDOW_MS} />
