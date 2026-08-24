@@ -4,7 +4,7 @@ import { loadLocalTheme, setLocalTheme } from "./theme";
 import { getToken, setToken } from "./auth";
 import { listPendingExpenses, syncPendingExpenses, hasPendingExpenses, removePendingExpense, clearConfirmedSynced } from "./offlineQueue";
 import { computeInsights, periodRange, formatPeriodLabel } from "./insights";
-import { hydrateCategories, hydrateIncomeCategories } from "./categoryIcons";
+import { hydrateCategories, hydrateIncomeCategories, getCategoryIcon, getIncomeCategoryIcon } from "./categoryIcons";
 import { hydrateWallets, getWalletIcon } from "./wallets";
 import { haptic } from "./haptics";
 import { catIconVars } from "./catIconVars";
@@ -32,6 +32,7 @@ import CapitalSheet from "./components/CapitalSheet";
 import NewCapitalSnapshotSheet from "./components/NewCapitalSnapshotSheet";
 import CapitalDetailSheet from "./components/CapitalDetailSheet";
 import PeriodPickerSheet from "./components/PeriodPickerSheet";
+import CategoryFilterSheet from "./components/CategoryFilterSheet";
 import SearchSheet from "./components/SearchSheet";
 import AccountBalanceRow from "./components/AccountBalanceRow";
 import { useSwipeDismissUp } from "./sheetGestures";
@@ -191,6 +192,13 @@ export default function App() {
   const [onlyMine, setOnlyMine] = useState(false);
   const onlyMineRef = useRef(onlyMine);
   onlyMineRef.current = onlyMine;
+  // Filters the main list down to one category — a "type:category" key
+  // (income and expense categories can share a name) or null for all.
+  // Built from whatever's actually in `expenses` (see below), so it never
+  // resets on its own except when the wallet changes, since each wallet has
+  // its own category list.
+  const [categoryFilter, setCategoryFilter] = useState(null);
+  const [categoryFilterOpen, setCategoryFilterOpen] = useState(false);
   const [hasOtherAuthor, setHasOtherAuthor] = useState(false);
   const [insights, setInsights] = useState(() => computeInsights({ period: "month", rows: [] }));
   const [insightsOpen, setInsightsOpen] = useState(false);
@@ -773,10 +781,13 @@ export default function App() {
     refreshAll(period, selectedWallet);
   }, [user, period, selectedWallet]);
 
-  // Switching wallets drops the filter — otherwise it silently keeps hiding
-  // rows on a wallet the user never toggled it on for.
+  // Switching wallets drops both filters — otherwise they silently keep
+  // hiding rows on a wallet the user never set them on for (categories are
+  // scoped per wallet, so a filter picked on one wallet may not even exist
+  // on another).
   useEffect(() => {
     setOnlyMine(false);
+    setCategoryFilter(null);
   }, [selectedWallet]);
 
   // No network round-trip needed — same cached rows, just re-merged with the
@@ -837,6 +848,23 @@ export default function App() {
   const walletBalance = selectedWallet
     ? Number(walletTotals.find((w) => w.wallet === selectedWallet)?.total || 0)
     : walletTotals.reduce((sum, w) => sum + Number(w.total), 0);
+
+  // Category filter options for the main list — derived from whatever rows
+  // are actually loaded (not the full category registry), so the dropdown
+  // never offers a category that would filter the list down to empty.
+  const categoryFilterOptions = [];
+  const seenFilterKeys = new Set();
+  for (const e of expenses) {
+    const key = `${e.type}:${e.category}`;
+    if (seenFilterKeys.has(key)) continue;
+    seenFilterKeys.add(key);
+    const icon =
+      e.type === "income" ? getIncomeCategoryIcon(e.wallet, e.category) : getCategoryIcon(e.wallet, e.category);
+    categoryFilterOptions.push({ key, type: e.type, name: e.category, icon });
+  }
+  const displayedExpenses = categoryFilter
+    ? expenses.filter((e) => `${e.type}:${e.category}` === categoryFilter)
+    : expenses;
   const chipIcon = selectedWallet ? getWalletIcon(selectedWallet) : null;
   const customPeriodValue = customRange ? `custom:${customRange.from}:${customRange.to}` : null;
 
@@ -981,7 +1009,7 @@ export default function App() {
       </div>
 
       <ExpenseList
-        expenses={expenses}
+        expenses={displayedExpenses}
         onSelect={setEditingExpense}
         onDeleteRequest={requestDeleteExpense}
         currentUserId={user.id}
@@ -990,6 +1018,13 @@ export default function App() {
         onToggleOnlyMine={() => {
           haptic();
           setOnlyMine((v) => !v);
+        }}
+        categoryFilterOptions={categoryFilterOptions}
+        categoryFilter={categoryFilter}
+        categoryFilterActive={!!categoryFilter}
+        onOpenCategoryFilter={() => {
+          haptic();
+          setCategoryFilterOpen(true);
         }}
       />
 
@@ -1226,6 +1261,16 @@ export default function App() {
             setPeriod(`custom:${from}:${to}`);
             setPeriodPickerOpen(false);
           }}
+        />
+      )}
+
+      {categoryFilterOpen && (
+        <CategoryFilterSheet
+          expenseCategories={categoryFilterOptions.filter((c) => c.type !== "income")}
+          incomeCategories={categoryFilterOptions.filter((c) => c.type === "income")}
+          selected={categoryFilter}
+          onSelect={setCategoryFilter}
+          onClose={() => setCategoryFilterOpen(false)}
         />
       )}
 

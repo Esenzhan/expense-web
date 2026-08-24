@@ -1,6 +1,16 @@
 import { getCategoryIcon, getIncomeCategoryIcon } from "../categoryIcons";
 import { almaty, startOfAlmatyDay } from "../insights";
 import ExpenseRow from "./ExpenseRow";
+import CategoryGlyph from "./CategoryGlyph";
+import { catIconVars } from "../catIconVars";
+
+function FilterIcon() {
+  return (
+    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M4 5h16l-6.5 7.5v6L10.5 21v-8.5L4 5Z" />
+    </svg>
+  );
+}
 
 // Both the header label and the day-bucket grouping below are anchored to
 // Asia/Almaty (like everywhere else in insights.js) rather than the
@@ -43,24 +53,51 @@ export default function ExpenseList({
   showMineToggle,
   onlyMine,
   onToggleOnlyMine,
+  categoryFilterOptions,
+  categoryFilter,
+  onOpenCategoryFilter,
+  categoryFilterActive,
 }) {
   const groups = groupByDay(expenses);
+  const selectedFilterIcon = categoryFilter
+    ? categoryFilterOptions?.find((c) => c.key === categoryFilter)?.icon
+    : null;
 
   return (
     <div>
       <div className="section-title-row">
         <p className="section-title">Последние траты</p>
-        {showMineToggle && (
-          <button className="mine-toggle" onClick={onToggleOnlyMine}>
-            <span>Только мои</span>
-            <span className={`switch switch-sm ${onlyMine ? "on" : ""}`}>
-              <span className="switch-knob" />
-            </span>
-          </button>
-        )}
+        <div className="list-filters">
+          {categoryFilterOptions?.length > 0 && (
+            <button
+              className={`category-filter-chip ${categoryFilter ? "active" : ""}`}
+              onClick={onOpenCategoryFilter}
+            >
+              <span
+                className="category-icon category-filter-chip-icon"
+                style={selectedFilterIcon ? catIconVars(selectedFilterIcon.bg, selectedFilterIcon.fg) : undefined}
+              >
+                {selectedFilterIcon ? <CategoryGlyph emoji={selectedFilterIcon.emoji} size={12} /> : <FilterIcon />}
+              </span>
+              <span>{categoryFilterOptions.find((c) => c.key === categoryFilter)?.name || "Категория"}</span>
+            </button>
+          )}
+          {showMineToggle && (
+            <button className="mine-toggle" onClick={onToggleOnlyMine}>
+              <span>Только мои</span>
+              <span className={`switch switch-sm ${onlyMine ? "on" : ""}`}>
+                <span className="switch-knob" />
+              </span>
+            </button>
+          )}
+        </div>
       </div>
       {expenses.length === 0 && (
-        <p className="empty-hint">Пока пусто — скажи что-нибудь вроде «500 на такси».</p>
+        <p className="empty-hint">
+          {categoryFilterActive
+            ? "В этой категории пока пусто."
+            : "Пока пусто — скажи что-нибудь вроде «500 на такси»."}
+        </p>
       )}
       {groups.map((group) => (
         <div className="expense-group" key={group.key}>

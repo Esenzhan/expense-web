@@ -413,6 +413,12 @@ body {
   margin: 0;
 }
 
+.list-filters {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
 .mine-toggle {
   display: flex;
   align-items: center;
@@ -423,6 +429,39 @@ body {
   font-size: 13px;
   color: var(--ink-soft);
   cursor: pointer;
+}
+
+.category-filter-chip {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: var(--surface-soft);
+  border: 1.5px solid transparent;
+  border-radius: 999px;
+  padding: 4px 10px 4px 4px;
+  margin-bottom: 10px;
+  font-size: 12px;
+  font-weight: 600;
+  font-family: var(--font-ui);
+  color: var(--ink-soft);
+  white-space: nowrap;
+}
+
+.category-filter-chip.active {
+  border-color: var(--ink);
+  color: var(--ink);
+}
+
+/* Combined with .category-icon (not standalone) so the chip's icon picks
+   up that class's light/dark --cat-bg/--cat-fg swap for free — this rule
+   only needs to shrink it down from the 38px row-icon size, and the
+   doubled class keeps that override winning regardless of source order. */
+.category-icon.category-filter-chip-icon {
+  width: 20px;
+  height: 20px;
+  min-width: 20px;
+  border-radius: 50%;
+  font-size: 12px;
 }
 
 .empty-hint {
