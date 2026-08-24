@@ -32,7 +32,6 @@ import CapitalSheet from "./components/CapitalSheet";
 import NewCapitalSnapshotSheet from "./components/NewCapitalSnapshotSheet";
 import CapitalDetailSheet from "./components/CapitalDetailSheet";
 import PeriodPickerSheet from "./components/PeriodPickerSheet";
-import CategoryFilterSheet from "./components/CategoryFilterSheet";
 import SearchSheet from "./components/SearchSheet";
 import AccountBalanceRow from "./components/AccountBalanceRow";
 import { useSwipeDismissUp } from "./sheetGestures";
@@ -198,7 +197,6 @@ export default function App() {
   // resets on its own except when the wallet changes, since each wallet has
   // its own category list.
   const [categoryFilter, setCategoryFilter] = useState(null);
-  const [categoryFilterOpen, setCategoryFilterOpen] = useState(false);
   const [hasOtherAuthor, setHasOtherAuthor] = useState(false);
   const [insights, setInsights] = useState(() => computeInsights({ period: "month", rows: [] }));
   const [insightsOpen, setInsightsOpen] = useState(false);
@@ -1022,10 +1020,7 @@ export default function App() {
         categoryFilterOptions={categoryFilterOptions}
         categoryFilter={categoryFilter}
         categoryFilterActive={!!categoryFilter}
-        onOpenCategoryFilter={() => {
-          haptic();
-          setCategoryFilterOpen(true);
-        }}
+        onCategoryFilterChange={setCategoryFilter}
       />
 
       <VoiceRecorder
@@ -1261,16 +1256,6 @@ export default function App() {
             setPeriod(`custom:${from}:${to}`);
             setPeriodPickerOpen(false);
           }}
-        />
-      )}
-
-      {categoryFilterOpen && (
-        <CategoryFilterSheet
-          expenseCategories={categoryFilterOptions.filter((c) => c.type !== "income")}
-          incomeCategories={categoryFilterOptions.filter((c) => c.type === "income")}
-          selected={categoryFilter}
-          onSelect={setCategoryFilter}
-          onClose={() => setCategoryFilterOpen(false)}
         />
       )}
 

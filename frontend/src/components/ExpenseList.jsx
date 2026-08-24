@@ -1,7 +1,10 @@
+import { useState } from "react";
 import { getCategoryIcon, getIncomeCategoryIcon } from "../categoryIcons";
 import { almaty, startOfAlmatyDay } from "../insights";
+import { haptic } from "../haptics";
 import ExpenseRow from "./ExpenseRow";
 import CategoryGlyph from "./CategoryGlyph";
+import CategoryFilterDropdown from "./CategoryFilterDropdown";
 import { catIconVars } from "../catIconVars";
 
 function FilterIcon() {
@@ -55,13 +58,14 @@ export default function ExpenseList({
   onToggleOnlyMine,
   categoryFilterOptions,
   categoryFilter,
-  onOpenCategoryFilter,
+  onCategoryFilterChange,
   categoryFilterActive,
 }) {
   const groups = groupByDay(expenses);
   const selectedFilterIcon = categoryFilter
     ? categoryFilterOptions?.find((c) => c.key === categoryFilter)?.icon
     : null;
+  const [dropdownOpen, setDropdownOpen] = useState(false);
 
   return (
     <div>
@@ -69,18 +73,32 @@ export default function ExpenseList({
         <p className="section-title">Последние траты</p>
         <div className="list-filters">
           {categoryFilterOptions?.length > 0 && (
-            <button
-              className={`category-filter-chip ${categoryFilter ? "active" : ""}`}
-              onClick={onOpenCategoryFilter}
-            >
-              <span
-                className="category-icon category-filter-chip-icon"
-                style={selectedFilterIcon ? catIconVars(selectedFilterIcon.bg, selectedFilterIcon.fg) : undefined}
+            <div className="category-filter-wrap">
+              <button
+                className={`category-filter-chip ${categoryFilter ? "active" : ""}`}
+                onClick={() => {
+                  haptic();
+                  setDropdownOpen((v) => !v);
+                }}
               >
-                {selectedFilterIcon ? <CategoryGlyph emoji={selectedFilterIcon.emoji} size={12} /> : <FilterIcon />}
-              </span>
-              <span>{categoryFilterOptions.find((c) => c.key === categoryFilter)?.name || "Категория"}</span>
-            </button>
+                <span
+                  className="category-icon category-filter-chip-icon"
+                  style={selectedFilterIcon ? catIconVars(selectedFilterIcon.bg, selectedFilterIcon.fg) : undefined}
+                >
+                  {selectedFilterIcon ? <CategoryGlyph emoji={selectedFilterIcon.emoji} size={12} /> : <FilterIcon />}
+                </span>
+                <span>{categoryFilterOptions.find((c) => c.key === categoryFilter)?.name || "Категория"}</span>
+              </button>
+              {dropdownOpen && (
+                <CategoryFilterDropdown
+                  expenseCategories={categoryFilterOptions.filter((c) => c.type !== "income")}
+                  incomeCategories={categoryFilterOptions.filter((c) => c.type === "income")}
+                  selected={categoryFilter}
+                  onSelect={onCategoryFilterChange}
+                  onClose={() => setDropdownOpen(false)}
+                />
+              )}
+            </div>
           )}
           {showMineToggle && (
             <button className="mine-toggle" onClick={onToggleOnlyMine}>

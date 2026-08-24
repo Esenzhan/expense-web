@@ -431,6 +431,10 @@ body {
   cursor: pointer;
 }
 
+.category-filter-wrap {
+  position: relative;
+}
+
 .category-filter-chip {
   display: flex;
   align-items: center;
@@ -462,6 +466,76 @@ body {
   min-width: 20px;
   border-radius: 50%;
   font-size: 12px;
+}
+
+/* Popover dropdown for the "Категория" chip — same visual language as
+   EditExpenseSheet's .edit-menu (absolute, right-anchored, menu-pop), just
+   wider and scrollable to fit an icon + name per row. */
+.category-filter-dropdown {
+  position: absolute;
+  top: 38px;
+  right: 0;
+  min-width: 220px;
+  max-width: min(78vw, 300px);
+  max-height: 340px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  box-shadow: 0 12px 30px rgba(20, 20, 26, 0.15);
+  z-index: 8;
+  transform-origin: top right;
+  animation: menu-pop 0.16s cubic-bezier(0.2, 0.9, 0.3, 1);
+}
+
+.dropdown-group-label {
+  font-size: 11px;
+  color: var(--ink-soft);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin: 6px 8px 2px;
+}
+
+.dropdown-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  border: none;
+  background: none;
+  border-radius: 10px;
+  padding: 8px;
+  font-size: 14px;
+  font-weight: 600;
+  font-family: var(--font-ui);
+  color: var(--ink);
+  text-align: left;
+}
+
+.dropdown-item.current {
+  background: var(--surface-soft);
+}
+
+.dropdown-item-name {
+  flex: 1;
+}
+
+.dropdown-item-check {
+  color: var(--ink-soft);
+  font-size: 13px;
+}
+
+.category-icon.dropdown-item-icon {
+  width: 26px;
+  height: 26px;
+  min-width: 26px;
+  border-radius: 9px;
+  font-size: 13px;
 }
 
 .empty-hint {
