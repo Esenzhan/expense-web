@@ -4,32 +4,7 @@ import { haptic, hapticHeavy } from "../haptics";
 import { useSwipeDismiss } from "../sheetGestures";
 import CategoryGlyph from "./CategoryGlyph";
 import { catIconVars } from "../catIconVars";
-
-// bg = pastel tile, fg = strong accent (shown in the palette swatch)
-const PALETTE = [
-  { bg: "#e9e9ec", fg: "#3a3a40" },
-  { bg: "#fde2e1", fg: "#c23b3b" },
-  { bg: "#ffe6d1", fg: "#c2681f" },
-  { bg: "#fff2cf", fg: "#a9790a" },
-  { bg: "#ecf7d4", fg: "#5f8f1f" },
-  { bg: "#e1f3e3", fg: "#2f8f4e" },
-  { bg: "#d8f5f1", fg: "#1f9e8c" },
-  { bg: "#dff0fb", fg: "#1f7fae" },
-  { bg: "#e3ecfd", fg: "#2f5fc2" },
-  { bg: "#eee3fd", fg: "#7440c2" },
-  { bg: "#fde1ef", fg: "#c23b8f" },
-  { bg: "#ece3d8", fg: "#8a6a3f" },
-];
-
-const ICON_GROUPS = [
-  { title: "Покупки", icons: ["🛍️", "👜", "🧥", "👕", "👟", "⌚", "👗", "🧢", "🧦", "👠", "🕶️", "💄"] },
-  { title: "Еда", icons: ["🍴", "☕", "🍕", "🍔", "🥗", "🍱", "🍜", "🧁", "🍩", "🍺", "🥡", "🍎"] },
-  { title: "Транспорт", icons: ["🚕", "🚌", "🚗", "⛽", "🚲", "✈️", "🚇", "🛴", "🚄", "⛴️"] },
-  { title: "Дом", icons: ["🏠", "🛋️", "🛏️", "🚪", "🧹", "🧺", "🔧", "💡", "🪴", "🧴"] },
-  { title: "Развлечения", icons: ["🎮", "🎬", "🎵", "🎢", "🎳", "🎨", "📚", "🎟️", "🎤", "⚽"] },
-  { title: "Здоровье", icons: ["💊", "🏥", "🦷", "🏋️", "🧘", "💆", "🩺", "🧖"] },
-  { title: "Другое", icons: ["💳", "📱", "🎁", "🐶", "🐱", "👶", "🎓", "💼", "✂️", "🌿", "⚡", "💧", "📦", "🔄", "💍", "🎄"] },
-];
+import { PALETTE, ICON_GROUPS } from "../pickerOptions";
 
 // Typing a name surfaces matching icons, like the reference's Suggestions row
 const SUGGESTION_KEYWORDS = [

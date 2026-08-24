@@ -4,28 +4,7 @@ import { haptic, hapticHeavy } from "../haptics";
 import { useSwipeDismiss } from "../sheetGestures";
 import CategoryGlyph from "./CategoryGlyph";
 import { catIconVars } from "../catIconVars";
-
-const PALETTE = [
-  { bg: "#e9e9ec", fg: "#3a3a40" },
-  { bg: "#fde2e1", fg: "#c23b3b" },
-  { bg: "#ffe6d1", fg: "#c2681f" },
-  { bg: "#fff2cf", fg: "#a9790a" },
-  { bg: "#ecf7d4", fg: "#5f8f1f" },
-  { bg: "#d7f5e9", fg: "#159969" },
-  { bg: "#d8f5f1", fg: "#1f9e8c" },
-  { bg: "#dff0fb", fg: "#1f7fae" },
-  { bg: "#e3ecfd", fg: "#2f5fc2" },
-  { bg: "#eee3fd", fg: "#7440c2" },
-  { bg: "#fde1ef", fg: "#c23b8f" },
-  { bg: "#ece3d8", fg: "#8a6a3f" },
-];
-
-const ICON_GROUPS = [
-  { title: "Деньги", icons: ["👛", "💰", "💳", "🏦", "💵", "🐷", "🪙", "📈"] },
-  { title: "Работа", icons: ["💼", "🤝", "🏢", "🧑‍💻", "🛠️", "📊"] },
-  { title: "Семья и дом", icons: ["👨‍👩‍👧", "🏠", "👶", "🐶", "🔨", "🛋️"] },
-  { title: "Цели", icons: ["✈️", "🎓", "🚗", "💍", "🏖️", "🎁", "⛑️", "🌱"] },
-];
+import { PALETTE, ICON_GROUPS } from "../pickerOptions";
 
 const SUGGESTION_KEYWORDS = [
   { match: ["бизнес", "работ", "ип", "компан"], icons: ["🤝", "💼", "🏢", "📊"] },
