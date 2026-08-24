@@ -165,13 +165,20 @@ expensesRouter.post("/scan", async (req, res) => {
 // actually logged an expense can edit or delete it — the other side sees
 // it greyed out and read-only in the UI.
 expensesRouter.put("/:id", async (req, res) => {
-  const { wallet, amount, category, description } = req.body;
+  const { wallet, amount, category, description, created_at } = req.body;
 
   if (!(await isValidWallet(wallet))) {
     return res.status(400).json({ error: "Некорректный кошелёк" });
   }
   if (typeof amount !== "number" || !Number.isFinite(amount) || amount <= 0) {
     return res.status(400).json({ error: "Некорректная сумма" });
+  }
+  let createdAt = null;
+  if (created_at != null) {
+    createdAt = new Date(created_at);
+    if (Number.isNaN(createdAt.getTime())) {
+      return res.status(400).json({ error: "Некорректная дата" });
+    }
   }
 
   const { rows: existingRows } = await pool.query(
@@ -194,9 +201,14 @@ expensesRouter.put("/:id", async (req, res) => {
   }
 
   const { rows } = await pool.query(
-    `UPDATE expenses SET wallet = $1, amount = $2, category = $3, description = $4, type = $6
-     WHERE id = $5 RETURNING *`,
-    [wallet, amount, finalCategory, description || null, req.params.id, type]
+    createdAt
+      ? `UPDATE expenses SET wallet = $1, amount = $2, category = $3, description = $4, type = $6, created_at = $7
+         WHERE id = $5 RETURNING *`
+      : `UPDATE expenses SET wallet = $1, amount = $2, category = $3, description = $4, type = $6
+         WHERE id = $5 RETURNING *`,
+    createdAt
+      ? [wallet, amount, finalCategory, description || null, req.params.id, type, createdAt]
+      : [wallet, amount, finalCategory, description || null, req.params.id, type]
   );
 
   updateExpenseRow(req.user, rows[0], existing.wallet);

@@ -75,7 +75,11 @@ export function updatePendingExpense(localId, payload) {
   const queue = loadQueue();
   const index = queue.findIndex((e) => e.localId === localId);
   if (index === -1) return null;
-  queue[index] = { ...queue[index], payload };
+  const entry = { ...queue[index], payload };
+  // Mirrors enqueueExpense: a picked created_at must move the row's local
+  // date/grouping too, not just what eventually gets POSTed once online.
+  if (payload.created_at) entry.createdAt = payload.created_at;
+  queue[index] = entry;
   saveQueue(queue);
   return toExpenseShape(queue[index]);
 }

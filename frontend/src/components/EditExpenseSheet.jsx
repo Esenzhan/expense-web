@@ -193,10 +193,15 @@ export default function EditExpenseSheet({
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
-  // Only set once the user actually picks a date — left null, a new expense
-  // keeps recording at the exact moment it's saved (server/enqueue "now"),
-  // matching the reference: untouched date = current minute/second.
-  const [customDate, setCustomDate] = useState(null);
+  // For a new expense this is only set once the user actually picks a date —
+  // left null, it keeps recording at the exact moment it's saved
+  // (server/enqueue "now"), matching the reference: untouched date = current
+  // minute/second. For an existing expense it starts at the row's own
+  // created_at (so the picker opens showing when it actually happened) and
+  // is always sent back on save; `dateChanged` only controls the calendar
+  // button's highlight.
+  const [customDate, setCustomDate] = useState(() => (expense ? new Date(expense.created_at) : null));
+  const [dateChanged, setDateChanged] = useState(false);
   const [dateTimePickerOpen, setDateTimePickerOpen] = useState(false);
 
   const sheetRef = useRef(null);
@@ -328,7 +333,7 @@ export default function EditExpenseSheet({
     }
     setError("");
     const payload = { wallet, amount, category, description: note || null, type };
-    if (isNew && customDate) payload.created_at = customDate.toISOString();
+    if (customDate) payload.created_at = customDate.toISOString();
 
     if (isNew) {
       // Never block on the network here: queue it like the offline path
@@ -411,31 +416,43 @@ export default function EditExpenseSheet({
               <CalendarIcon />
             </button>
           ) : (
-            <div className="edit-menu-wrap">
+            <div className="edit-header-actions">
               <button
-                className="icon-button"
+                className={`icon-button ${dateChanged ? "active" : ""}`}
                 onClick={() => {
-                  setMenuOpen((open) => !open);
-                  setConfirmDelete(false);
+                  haptic();
+                  setDateTimePickerOpen(true);
                 }}
-                aria-label="Меню"
+                aria-label="Дата и время"
               >
-                ⋮
+                <CalendarIcon />
               </button>
-              {menuOpen && (
-                <div className="edit-menu">
-                  <button
-                    className="menu-item danger"
-                    onClick={confirmDelete ? handleDelete : () => setConfirmDelete(true)}
-                    disabled={saving}
-                  >
-                    <span className="menu-item-text" key={confirmDelete ? "confirm" : "ask"}>
-                      {confirmDelete ? "Точно удалить?" : "Удалить"}
-                      <TrashIcon size={16} />
-                    </span>
-                  </button>
-                </div>
-              )}
+              <div className="edit-menu-wrap">
+                <button
+                  className="icon-button"
+                  onClick={() => {
+                    setMenuOpen((open) => !open);
+                    setConfirmDelete(false);
+                  }}
+                  aria-label="Меню"
+                >
+                  ⋮
+                </button>
+                {menuOpen && (
+                  <div className="edit-menu">
+                    <button
+                      className="menu-item danger"
+                      onClick={confirmDelete ? handleDelete : () => setConfirmDelete(true)}
+                      disabled={saving}
+                    >
+                      <span className="menu-item-text" key={confirmDelete ? "confirm" : "ask"}>
+                        {confirmDelete ? "Точно удалить?" : "Удалить"}
+                        <TrashIcon size={16} />
+                      </span>
+                    </button>
+                  </div>
+                )}
+              </div>
             </div>
           )}
         </div>
@@ -557,6 +574,7 @@ export default function EditExpenseSheet({
         onClose={() => setDateTimePickerOpen(false)}
         onApply={(picked) => {
           setCustomDate(picked);
+          if (!isNew) setDateChanged(true);
           setDateTimePickerOpen(false);
         }}
       />
