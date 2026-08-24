@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { searchExpenses } from "../api";
-import { getCategoryIcon } from "../categoryIcons";
+import { getCategoryIcon, getIncomeCategoryIcon } from "../categoryIcons";
 import { almaty } from "../insights";
 import CategoryGlyph from "./CategoryGlyph";
 import { useSwipeDismiss } from "../sheetGestures";
@@ -85,7 +85,10 @@ export default function SearchSheet({ wallet, currentUserId, onSelect, onClose }
           {results !== null && !loading && results.length > 0 && (
             <div className="search-result-list">
               {results.map((expense) => {
-                const icon = getCategoryIcon(expense.wallet, expense.category);
+                const icon =
+                  expense.type === "income"
+                    ? getIncomeCategoryIcon(expense.wallet, expense.category)
+                    : getCategoryIcon(expense.wallet, expense.category);
                 // Shared-wallet rows from the other account show up here
                 // too, but only whoever logged them can edit/delete —
                 // same rule as the main list (ExpenseRow's `readonly`).
@@ -102,8 +105,9 @@ export default function SearchSheet({ wallet, currentUserId, onSelect, onClose }
                     <span className="search-result-text">
                       <span className="search-result-head">
                         <span className="search-result-category">{expense.category}</span>
-                        <span className="search-result-amount">
-                          −{Number(expense.amount).toLocaleString("ru-RU")} ₸
+                        <span className={`search-result-amount ${expense.type === "income" ? "income" : ""}`}>
+                          {expense.type === "income" ? "+" : "−"}
+                          {Number(expense.amount).toLocaleString("ru-RU")} ₸
                         </span>
                       </span>
                       <span className="search-result-sub">

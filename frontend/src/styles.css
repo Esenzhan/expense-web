@@ -677,6 +677,11 @@ body {
   white-space: nowrap;
 }
 
+.expense-row .amount.income,
+.search-result-amount.income {
+  color: #2f8f4e;
+}
+
 /* Voice recorder */
 .recorder-backdrop {
   position: fixed;
@@ -1024,31 +1029,31 @@ body {
   color: var(--on-accent);
 }
 
-.expense-type-badge {
-  background: #ffe6d1;
-  color: #c2681f;
-  font-weight: 700;
-  font-size: 13px;
-  padding: 8px 16px;
-  border-radius: 999px;
-}
-
 @media (prefers-color-scheme: dark) {
-  .expense-type-badge,
   .type-side.expense.active {
     background: #c2681f;
     color: #fff;
   }
+  .type-side.income.active {
+    background: #159969;
+    color: #fff;
+  }
 }
-:root[data-theme="dark"] .expense-type-badge,
 :root[data-theme="dark"] .type-side.expense.active {
   background: #c2681f;
   color: #fff;
 }
-:root[data-theme="light"] .expense-type-badge,
+:root[data-theme="dark"] .type-side.income.active {
+  background: #159969;
+  color: #fff;
+}
 :root[data-theme="light"] .type-side.expense.active {
   background: #ffe6d1;
   color: #c2681f;
+}
+:root[data-theme="light"] .type-side.income.active {
+  background: #d7f5e9;
+  color: #159969;
 }
 
 .edit-menu-wrap {
@@ -1148,6 +1153,10 @@ body {
   font-family: var(--font-mono);
   font-size: 40px;
   font-weight: 700;
+}
+
+.edit-amount.income {
+  color: #2f8f4e;
 }
 
 .amount-digits span {
@@ -2411,6 +2420,9 @@ body {
 }
 
 .type-side {
+  border: none;
+  background: none;
+  font-family: var(--font-ui);
   padding: 7px 12px;
   border-radius: 999px;
   font-size: 13px;
@@ -2425,6 +2437,11 @@ body {
 .type-side.expense.active {
   background: #ffe6d1;
   color: #c2681f;
+}
+
+.type-side.income.active {
+  background: #d7f5e9;
+  color: #159969;
 }
 
 .wallet-tabs {

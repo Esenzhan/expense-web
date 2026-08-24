@@ -1,7 +1,7 @@
 import { useEffect, useLayoutEffect, useReducer, useRef, useState } from "react";
 import { createExpense, updateExpense } from "../api";
 import { enqueueExpense, updatePendingExpense, removePendingExpense, syncPendingExpenses } from "../offlineQueue";
-import { listCategories, getCategoryIcon } from "../categoryIcons";
+import { listCategories, getCategoryIcon, listIncomeCategories, getIncomeCategoryIcon } from "../categoryIcons";
 import CategoryGlyph from "./CategoryGlyph";
 import TrashIcon from "./TrashIcon";
 import DateTimePickerSheet from "./DateTimePickerSheet";
@@ -180,7 +180,13 @@ export default function EditExpenseSheet({
   const wallets = listWallets();
   const walletNames = wallets.map((w) => w.name);
   const [wallet, setWallet] = useState(expense?.wallet || defaultWallet || walletNames[0]);
-  const categoryNames = listCategories(wallet).map((c) => c.name);
+  // "Расход"/"Доход" — each has its own category list (see categoryIcons.js)
+  // and moves the wallet's balance in the opposite direction (backend:
+  // routes/expenses.js + walletBalances.js).
+  const [type, setType] = useState(expense?.type === "income" ? "income" : "expense");
+  const categoryNames = (type === "income" ? listIncomeCategories(wallet) : listCategories(wallet)).map(
+    (c) => c.name
+  );
   const [category, setCategory] = useState(expense?.category || categoryNames[0]);
   const [note, setNote] = useState(expense?.description || "");
   const [menuOpen, setMenuOpen] = useState(false);
@@ -216,9 +222,10 @@ export default function EditExpenseSheet({
     return row.scrollLeft + (childRect.left + childRect.width / 2) - (rowRect.left + rowRect.width / 2);
   }
 
-  // Runs on mount AND whenever the wallet changes — each wallet has its own
-  // category list, so switching wallets must drop a category that no longer
-  // applies and re-center the carousel on whatever replaces it.
+  // Runs on mount AND whenever the wallet or type changes — each
+  // wallet+type pair has its own category list, so switching either must
+  // drop a category that no longer applies and re-center the carousel on
+  // whatever replaces it.
   useEffect(() => {
     const row = categoryRowRef.current;
     if (!row) return;
@@ -230,7 +237,7 @@ export default function EditExpenseSheet({
     }
     row.scrollLeft = centerOf(row, Math.max(0, categoryNames.indexOf(validCategory)));
     applyCarouselScales(row);
-  }, [wallet]);
+  }, [wallet, type]);
 
   // Like the reference: each tile's scale follows the scroll position
   // continuously — full size fades in as the tile approaches the center,
@@ -287,11 +294,18 @@ export default function EditExpenseSheet({
     dispatch(action);
   }
 
+  function switchType(next) {
+    if (next === type) return;
+    haptic();
+    setType(next);
+  }
+
   function finalAmount() {
     return evaluateTokens(calc.tokens);
   }
 
-  const icon = getCategoryIcon(wallet, category);
+  const icon =
+    type === "income" ? getIncomeCategoryIcon(wallet, category) : getCategoryIcon(wallet, category);
 
   async function handleSave() {
     const amount = finalAmount();
@@ -300,7 +314,7 @@ export default function EditExpenseSheet({
       return;
     }
     setError("");
-    const payload = { wallet, amount, category, description: note || null };
+    const payload = { wallet, amount, category, description: note || null, type };
     if (isNew && customDate) payload.created_at = customDate.toISOString();
 
     if (isNew) {
@@ -356,7 +370,22 @@ export default function EditExpenseSheet({
           <button className="icon-button" onClick={() => dismiss(onClose)} aria-label="Закрыть">
             ✕
           </button>
-          <span className="expense-type-badge">↗ Расход</span>
+          <div className="type-toggle">
+            <button
+              type="button"
+              className={`type-side income ${type === "income" ? "active" : ""}`}
+              onClick={() => switchType("income")}
+            >
+              ↙{type === "income" && " Доход"}
+            </button>
+            <button
+              type="button"
+              className={`type-side expense ${type === "expense" ? "active" : ""}`}
+              onClick={() => switchType("expense")}
+            >
+              ↗{type === "expense" && " Расход"}
+            </button>
+          </div>
           {isNew ? (
             <button
               className={`icon-button ${customDate ? "active" : ""}`}
@@ -404,7 +433,7 @@ export default function EditExpenseSheet({
               {calc.tokens.map((t) => (isOp(t) ? t : formatDisplay(t))).join(" ")}
             </div>
           )}
-          <div className="edit-amount">
+          <div className={`edit-amount ${type === "income" ? "income" : ""}`}>
             <AnimatedAmount
               text={formatDisplay(
                 calc.tokens.length === 1 ? calc.tokens[0] : resultToDisplay(evaluateTokens(calc.tokens))
@@ -443,7 +472,8 @@ export default function EditExpenseSheet({
 
         <div className="category-row" ref={categoryRowRef} onScroll={onCategoryScroll}>
           {categoryNames.map((cat, index) => {
-            const catIcon = getCategoryIcon(wallet, cat);
+            const catIcon =
+              type === "income" ? getIncomeCategoryIcon(wallet, cat) : getCategoryIcon(wallet, cat);
             return (
               <button
                 key={cat}

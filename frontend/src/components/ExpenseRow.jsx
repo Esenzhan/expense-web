@@ -130,8 +130,9 @@ export default function ExpenseRow({ expense, icon, readonly, onSelect, onDelete
           <span className="category">{expense.category}</span>
           {expense.description && <span className="sub">{expense.description}</span>}
         </div>
-        <span className="amount">
-          −{Number(expense.amount).toLocaleString("ru-RU")} ₸
+        <span className={`amount ${expense.type === "income" ? "income" : ""}`}>
+          {expense.type === "income" ? "+" : "−"}
+          {Number(expense.amount).toLocaleString("ru-RU")} ₸
           {expense.pending && (
             <span className="pending-badge" title="Сохранено на телефоне, отправится при подключении к сети">
               ⏳

@@ -4,7 +4,7 @@ import { loadLocalTheme, setLocalTheme } from "./theme";
 import { getToken, setToken } from "./auth";
 import { listPendingExpenses, syncPendingExpenses, hasPendingExpenses, removePendingExpense, clearConfirmedSynced } from "./offlineQueue";
 import { computeInsights, periodRange, formatPeriodLabel } from "./insights";
-import { hydrateCategories } from "./categoryIcons";
+import { hydrateCategories, hydrateIncomeCategories } from "./categoryIcons";
 import { hydrateWallets, getWalletIcon } from "./wallets";
 import { haptic } from "./haptics";
 import { catIconVars } from "./catIconVars";
@@ -173,12 +173,16 @@ export default function App() {
   const [expenses, setExpenses] = useState([]);
   const [walletTotals, setWalletTotals] = useState([]);
   const [walletBalances, setWalletBalances] = useState([]);
-  // Per-wallet net delta between what the last server fetch said and what's
-  // showing right now (offline-queued expenses not yet synced = positive,
-  // an in-flight/undo-window delete = negative) — same numbers `mergeAndSet`
-  // already applies to `walletTotals`, kept here too so "Баланс" updates in
-  // the same instant as the rest of the card instead of lagging behind
-  // until the undo window's real DELETE lands and refreshAll() re-fetches.
+  // Per-wallet delta between what the last server fetch said "Баланс" was
+  // and what it should read right now — an offline-queued expense not yet
+  // synced is positive (balance is lower than the server knows), a pending
+  // income is negative (balance is higher), an in-flight/undo-window
+  // delete flips whichever of those the deleted row was. Computed by
+  // mergeAndSet's balanceDeltaByWallet — a separate map from the one it
+  // applies to `walletTotals`, since "Расходы" (expense-only) and "Баланс"
+  // (expense AND income) react to a pending income row oppositely. Kept
+  // here so "Баланс" updates in the same instant as the rest of the card
+  // instead of lagging behind until refreshAll() re-fetches.
   const [pendingWalletDeltas, setPendingWalletDeltas] = useState(new Map());
   // "Только мои" — hides the other account's rows on a shared wallet
   // (Семья/Бизнес/Ремонт). Whether to even show the toggle is derived from
@@ -418,6 +422,13 @@ export default function App() {
     } catch {
       // offline — keep whatever we have
     }
+    try {
+      const incomeList = await fetchCategories({ type: "income" });
+      hydrateIncomeCategories(incomeList);
+      localStorage.setItem("traty-income-categories", JSON.stringify(incomeList));
+    } catch {
+      // offline — keep whatever we have
+    }
   }
 
   useEffect(() => {
@@ -425,6 +436,11 @@ export default function App() {
       hydrateCategories(JSON.parse(localStorage.getItem("traty-categories")));
     } catch {
       // no cached categories yet
+    }
+    try {
+      hydrateIncomeCategories(JSON.parse(localStorage.getItem("traty-income-categories")));
+    } catch {
+      // no cached income categories yet
     }
     try {
       hydrateWallets(JSON.parse(localStorage.getItem("traty-wallets")));
@@ -470,7 +486,7 @@ export default function App() {
     const excluded = new Map(committingRef.current);
     if (pendingDeleteRef.current) {
       const { expense } = pendingDeleteRef.current;
-      excluded.set(expense.id, { wallet: expense.wallet, amount: expense.amount });
+      excluded.set(expense.id, { wallet: expense.wallet, amount: expense.amount, type: expense.type });
     }
     // Totals/insights drop an excluded row immediately, but the rendered
     // list keeps it a beat longer (ROW_EXIT_MS) so ExpenseRow can play its
@@ -520,19 +536,43 @@ export default function App() {
       .sort((a, b) => new Date(b.created_at) - new Date(a.created_at))
       .map((e) => (exitingRef.current.has(e.id) ? { ...e, exiting: true } : e));
 
-    const pendingByWallet = new Map();
+    // Two separate deltas, not one: `walletTotals` (backend: SUM of
+    // type='expense' only) must never move for an income row, while
+    // `accountBalance` (backend: base_amount minus expense plus income)
+    // moves for both — in OPPOSITE directions for the same row depending on
+    // whether it's being added (not yet reflected server-side, so it's
+    // added to the delta) or excluded/deleted (already reflected
+    // server-side, so its contribution is subtracted back out). See
+    // addDelta calls below for the four resulting sign combinations.
+    const spendDeltaByWallet = new Map();
+    const balanceDeltaByWallet = new Map();
+    function addDelta(map, walletName, amount) {
+      map.set(walletName, (map.get(walletName) || 0) + amount);
+    }
     for (const p of pending) {
       if (baseIds.has(p.id)) continue;
-      pendingByWallet.set(p.wallet, (pendingByWallet.get(p.wallet) || 0) + Number(p.amount));
+      const amt = Number(p.amount);
+      if (p.type === "income") {
+        addDelta(balanceDeltaByWallet, p.wallet, -amt);
+      } else {
+        addDelta(spendDeltaByWallet, p.wallet, amt);
+        addDelta(balanceDeltaByWallet, p.wallet, amt);
+      }
     }
-    for (const { wallet: excludedWallet, amount: excludedAmount } of excluded.values()) {
-      pendingByWallet.set(excludedWallet, (pendingByWallet.get(excludedWallet) || 0) - Number(excludedAmount));
+    for (const { wallet: excludedWallet, amount: excludedAmount, type: excludedType } of excluded.values()) {
+      const amt = Number(excludedAmount);
+      if (excludedType === "income") {
+        addDelta(balanceDeltaByWallet, excludedWallet, amt);
+      } else {
+        addDelta(spendDeltaByWallet, excludedWallet, -amt);
+        addDelta(balanceDeltaByWallet, excludedWallet, -amt);
+      }
     }
     const mergedWallets = wallets.map((w) => ({
       ...w,
-      total: Number(w.total) + (pendingByWallet.get(w.wallet) || 0),
+      total: Number(w.total) + (spendDeltaByWallet.get(w.wallet) || 0),
     }));
-    for (const [walletName, amount] of pendingByWallet) {
+    for (const [walletName, amount] of spendDeltaByWallet) {
       if (!mergedWallets.some((w) => w.wallet === walletName)) {
         mergedWallets.push({ wallet: walletName, total: amount });
       }
@@ -550,12 +590,16 @@ export default function App() {
     // the same way server rows already are.
     const { start: periodStart, end: periodEnd } = periodRange(currentPeriod);
     const pendingInPeriod = pendingForList.filter((p) => {
+      // "Расходы"/Insights are expense-only (see fetchExpensesRange) —
+      // baseInsightsRows already excludes income server-side, this keeps a
+      // not-yet-synced income row from sneaking in through the local queue.
+      if (p.type === "income") return false;
       if (insightsBaseIds.has(p.id)) return false;
       const createdAt = new Date(p.created_at);
       return createdAt >= periodStart && createdAt < periodEnd;
     });
     setInsights(computeInsights({ period: currentPeriod, rows: [...pendingInPeriod, ...baseInsightsRows] }));
-    setPendingWalletDeltas(pendingByWallet);
+    setPendingWalletDeltas(balanceDeltaByWallet);
   }
 
   function commitDelete(entry) {
@@ -563,6 +607,7 @@ export default function App() {
     committingRef.current.set(entry.expense.id, {
       wallet: entry.expense.wallet,
       amount: entry.expense.amount,
+      type: entry.expense.type,
     });
     deleteExpense(entry.expense.id)
       .catch(() => {

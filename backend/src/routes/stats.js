@@ -23,7 +23,7 @@ statsRouter.get("/by-wallet", async (req, res) => {
   const { rows } = await pool.query(
     `SELECT wallet, COALESCE(SUM(amount), 0) AS total
      FROM expenses
-     WHERE ${visibility} AND created_at >= date_trunc('month', now())
+     WHERE ${visibility} AND type = 'expense' AND created_at >= date_trunc('month', now())
      GROUP BY wallet`,
     values
   );
@@ -42,7 +42,7 @@ statsRouter.get("/daily", async (req, res) => {
   const { rows } = await pool.query(
     `SELECT date_trunc('day', created_at) AS day, COALESCE(SUM(amount), 0) AS total
      FROM expenses
-     WHERE ${visibility} AND created_at >= now() - ($${values.length} || ' days')::interval
+     WHERE ${visibility} AND type = 'expense' AND created_at >= now() - ($${values.length} || ' days')::interval
      GROUP BY day
      ORDER BY day ASC`,
     values

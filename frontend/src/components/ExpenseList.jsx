@@ -1,4 +1,4 @@
-import { getCategoryIcon } from "../categoryIcons";
+import { getCategoryIcon, getIncomeCategoryIcon } from "../categoryIcons";
 import { almaty, startOfAlmatyDay } from "../insights";
 import ExpenseRow from "./ExpenseRow";
 
@@ -67,7 +67,10 @@ export default function ExpenseList({
           <p className="expense-date-header">{group.header}</p>
           <div className="expense-list">
             {group.items.map((expense) => {
-              const icon = getCategoryIcon(expense.wallet, expense.category);
+              const icon =
+                expense.type === "income"
+                  ? getIncomeCategoryIcon(expense.wallet, expense.category)
+                  : getCategoryIcon(expense.wallet, expense.category);
               // Shared-wallet rows from the other account are visible but
               // read-only — only whoever logged an expense can edit/delete it.
               const readonly = expense.user_id != null && expense.user_id !== currentUserId;

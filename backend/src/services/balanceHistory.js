@@ -13,7 +13,7 @@
 export async function getCurrentBalance(client, wallet, userId) {
   const { rows } = await client.query(
     `SELECT wb.base_amount - COALESCE((
-         SELECT SUM(e.amount) FROM expenses e
+         SELECT SUM(CASE WHEN e.type = 'income' THEN -e.amount ELSE e.amount END) FROM expenses e
          WHERE e.wallet = wb.wallet AND e.created_at > wb.base_at AND e.user_id = $2
        ), 0) AS current_balance
      FROM wallet_balances wb

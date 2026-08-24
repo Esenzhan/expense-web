@@ -11,7 +11,7 @@ export const expensesRouter = Router();
 // List expenses: visible if it's mine, OR the wallet is shared (Семья/
 // Бизнес/Ремонт by default) — shared wallets pool both accounts' rows.
 expensesRouter.get("/", async (req, res) => {
-  const { wallet, from, to, q, limit = 100 } = req.query;
+  const { wallet, from, to, q, type, limit = 100 } = req.query;
   const shared = await sharedWalletNames();
   const conditions = [];
   const values = [req.user.id];
@@ -26,6 +26,13 @@ expensesRouter.get("/", async (req, res) => {
   if (wallet) {
     values.push(wallet);
     conditions.push(`wallet = $${values.length}`);
+  }
+  // Optional — omitted entirely by the main transaction list (shows both
+  // expense and income together), passed explicitly as 'expense' by
+  // fetchExpensesRange (Insights/"Расходы" must never include income).
+  if (type === "expense" || type === "income") {
+    values.push(type);
+    conditions.push(`type = $${values.length}`);
   }
   if (from) {
     values.push(from);
@@ -65,6 +72,7 @@ expensesRouter.get("/", async (req, res) => {
 // retried create return the original row instead of inserting a second one.
 expensesRouter.post("/", async (req, res) => {
   const { wallet, amount, category, description, raw_text, created_at, idempotencyKey } = req.body;
+  const type = req.body.type === "income" ? "income" : "expense";
 
   if (!(await isValidWallet(wallet))) {
     return res.status(400).json({ error: "Некорректный кошелёк" });
@@ -83,25 +91,28 @@ expensesRouter.post("/", async (req, res) => {
   // that didn't reset on wallet change) would otherwise save silently —
   // same "Прочее"-of-this-wallet fallback the voice/receipt parsers use on
   // a mismatch, not a hard error, since a bad category shouldn't block
-  // saving someone's money.
-  let finalCategory = category || "Прочее";
-  if (!(await isValidCategory(wallet, finalCategory))) {
-    finalCategory = "Прочее";
+  // saving someone's money. The fallback name itself is type-aware: an
+  // income row falling back mid-save should land in income's own catch-all,
+  // not the expense side's "Прочее" (which isn't even in income's list).
+  const fallbackCategory = type === "income" ? "Другое" : "Прочее";
+  let finalCategory = category || fallbackCategory;
+  if (!(await isValidCategory(wallet, finalCategory, type))) {
+    finalCategory = fallbackCategory;
   }
 
   const { rows } = await pool.query(
     createdAt
-      ? `INSERT INTO expenses (wallet, amount, category, description, raw_text, user_id, created_at, idempotency_key)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+      ? `INSERT INTO expenses (wallet, amount, category, description, raw_text, user_id, created_at, idempotency_key, type)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
          ON CONFLICT (user_id, idempotency_key) WHERE idempotency_key IS NOT NULL DO NOTHING
          RETURNING *`
-      : `INSERT INTO expenses (wallet, amount, category, description, raw_text, user_id, idempotency_key)
-         VALUES ($1, $2, $3, $4, $5, $6, $7)
+      : `INSERT INTO expenses (wallet, amount, category, description, raw_text, user_id, idempotency_key, type)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
          ON CONFLICT (user_id, idempotency_key) WHERE idempotency_key IS NOT NULL DO NOTHING
          RETURNING *`,
     createdAt
-      ? [wallet, amount, finalCategory, description || null, raw_text || null, req.user.id, createdAt, idempotencyKey || null]
-      : [wallet, amount, finalCategory, description || null, raw_text || null, req.user.id, idempotencyKey || null]
+      ? [wallet, amount, finalCategory, description || null, raw_text || null, req.user.id, createdAt, idempotencyKey || null, type]
+      : [wallet, amount, finalCategory, description || null, raw_text || null, req.user.id, idempotencyKey || null, type]
   );
 
   let row = rows[0];
@@ -171,16 +182,21 @@ expensesRouter.put("/:id", async (req, res) => {
     return res.status(404).json({ error: "Трата не найдена" });
   }
   const existing = existingRows[0];
+  // Falls back to whatever the row already was — the edit sheet always
+  // sends its current type, but this keeps an older cached bundle mid-deploy
+  // from silently flipping a row's type back to 'expense'.
+  const type = req.body.type === "income" || req.body.type === "expense" ? req.body.type : existing.type;
 
-  let finalCategory = category || "Прочее";
-  if (!(await isValidCategory(wallet, finalCategory))) {
-    finalCategory = "Прочее";
+  const fallbackCategory = type === "income" ? "Другое" : "Прочее";
+  let finalCategory = category || fallbackCategory;
+  if (!(await isValidCategory(wallet, finalCategory, type))) {
+    finalCategory = fallbackCategory;
   }
 
   const { rows } = await pool.query(
-    `UPDATE expenses SET wallet = $1, amount = $2, category = $3, description = $4
+    `UPDATE expenses SET wallet = $1, amount = $2, category = $3, description = $4, type = $6
      WHERE id = $5 RETURNING *`,
-    [wallet, amount, finalCategory, description || null, req.params.id]
+    [wallet, amount, finalCategory, description || null, req.params.id, type]
   );
 
   updateExpenseRow(req.user, rows[0], existing.wallet);

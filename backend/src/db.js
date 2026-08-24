@@ -22,6 +22,20 @@ const SEED_CATEGORIES = [
   { name: "Прочее", emoji: "💳", bg: "#e9e9ec", fg: "#5b5b63", sort: 999 },
 ];
 
+// Income-side categories, same fan-out-per-wallet treatment as
+// SEED_CATEGORIES above but tagged type='income' — kept as its own list
+// (not merged into SEED_CATEGORIES) since it's seeded by a separate,
+// independently-idempotent check below (an existing prod DB already has the
+// expense seed, so "categories table has any row at all" can't be reused to
+// decide whether the income seed still needs to run).
+const SEED_INCOME_CATEGORIES = [
+  { name: "Зарплата", emoji: "💵", bg: "#e1f3e3", fg: "#2f8f4e", sort: 1 },
+  { name: "Бизнес", emoji: "💼", bg: "#fde2e1", fg: "#c23b3b", sort: 2 },
+  { name: "Подарки", emoji: "🎁", bg: "#fde1ef", fg: "#c23b8f", sort: 3 },
+  { name: "Инвестиции", emoji: "📈", bg: "#d8f5f1", fg: "#1f9e8c", sort: 4 },
+  { name: "Другое", emoji: "💳", bg: "#e9e9ec", fg: "#5b5b63", sort: 999 },
+];
+
 // Default wallets — the four the Telegram bot used. "Личные" doubles as the
 // voice-parse fallback and is the only private one — its expenses stay
 // scoped to whoever logged them. The other three are shared: visible to
@@ -135,6 +149,20 @@ export async function initSchema() {
     ON expenses (user_id, idempotency_key) WHERE idempotency_key IS NOT NULL;
   `);
 
+  // Income support — every pre-existing row (and every caller that doesn't
+  // send the field, e.g. the bot, which only ever posts spends) defaults to
+  // 'expense', so this is fully backward-compatible. Postgres has no
+  // "ADD CONSTRAINT IF NOT EXISTS", hence the pg_constraint existence check.
+  await pool.query(`ALTER TABLE expenses ADD COLUMN IF NOT EXISTS type TEXT NOT NULL DEFAULT 'expense'`);
+  await pool.query(`
+    DO $$
+    BEGIN
+      IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'expenses_type_check') THEN
+        ALTER TABLE expenses ADD CONSTRAINT expenses_type_check CHECK (type IN ('expense', 'income'));
+      END IF;
+    END $$;
+  `);
+
   // categories: used to be one global list (UNIQUE on name alone). Fresh
   // installs get the per-wallet shape directly; existing tables are
   // migrated below.
@@ -225,6 +253,36 @@ export async function initSchema() {
         await pool.query(
           `INSERT INTO categories (name, emoji, bg, fg, sort_order, wallet)
            VALUES ($1, $2, $3, $4, $5, $6) ON CONFLICT (wallet, name) DO NOTHING`,
+          [cat.name, cat.emoji, cat.bg, cat.fg, cat.sort, wallet.name]
+        );
+      }
+    }
+  }
+
+  // Income support — same per-wallet fan-out, `type` distinguishes it from
+  // the expense seed above. Kept for names that share a (wallet, name)
+  // constraint with an expense category is fine here since none of the
+  // income seed's names collide with SEED_CATEGORIES' (checked deliberately
+  // when picking them — "Другое" vs the expense side's "Прочее").
+  await pool.query(`ALTER TABLE categories ADD COLUMN IF NOT EXISTS type TEXT NOT NULL DEFAULT 'expense'`);
+  await pool.query(`
+    DO $$
+    BEGIN
+      IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'categories_type_check') THEN
+        ALTER TABLE categories ADD CONSTRAINT categories_type_check CHECK (type IN ('expense', 'income'));
+      END IF;
+    END $$;
+  `);
+  // Guarded independently from the "table completely empty" check above —
+  // an existing prod DB already has rows (the expense seed), so that check
+  // alone would never let this loop run there.
+  const { rows: anyIncomeCategory } = await pool.query(`SELECT 1 FROM categories WHERE type = 'income' LIMIT 1`);
+  if (!anyIncomeCategory.length) {
+    for (const wallet of SEED_WALLETS) {
+      for (const cat of SEED_INCOME_CATEGORIES) {
+        await pool.query(
+          `INSERT INTO categories (name, emoji, bg, fg, sort_order, wallet, type)
+           VALUES ($1, $2, $3, $4, $5, $6, 'income') ON CONFLICT (wallet, name) DO NOTHING`,
           [cat.name, cat.emoji, cat.bg, cat.fg, cat.sort, wallet.name]
         );
       }

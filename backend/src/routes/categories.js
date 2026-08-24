@@ -8,12 +8,19 @@ export const categoriesRouter = Router();
 
 // Readable by anyone (the bot needs the list to build its parse prompt);
 // creating/deleting is site-only, so those two require a logged-in user.
+//
+// ?type= defaults to 'expense' — every caller that predates income support
+// (the bot, an old cached frontend bundle mid-deploy) never sends it, and
+// 'expense' is the only type that existed before, so this keeps their
+// result identical. The income picker is the only caller that passes
+// ?type=income explicitly.
 categoriesRouter.get("/", async (req, res) => {
-  const { wallet } = req.query;
+  const { wallet, type } = req.query;
+  const resolvedType = type === "income" ? "income" : "expense";
   if (wallet) {
     const { rows } = await pool.query(
-      `SELECT name, emoji, bg, fg FROM categories WHERE wallet = $1 ORDER BY sort_order, id`,
-      [wallet]
+      `SELECT name, emoji, bg, fg FROM categories WHERE wallet = $1 AND type = $2 ORDER BY sort_order, id`,
+      [wallet, resolvedType]
     );
     return res.json(rows);
   }
@@ -21,7 +28,8 @@ categoriesRouter.get("/", async (req, res) => {
   // wallet — used for the one-shot frontend hydrate and as a fallback for
   // callers that haven't been updated to pass ?wallet= yet.
   const { rows } = await pool.query(
-    `SELECT wallet, name, emoji, bg, fg FROM categories ORDER BY wallet, sort_order, id`
+    `SELECT wallet, name, emoji, bg, fg FROM categories WHERE type = $1 ORDER BY wallet, sort_order, id`,
+    [resolvedType]
   );
   res.json(rows);
 });

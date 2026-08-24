@@ -35,9 +35,12 @@ export async function fetchExpenses(params = {}) {
 
 // All expenses in a date range, for computing Insights client-side (see
 // insights.js) — a generous limit since this covers a whole period at once,
-// not just the most recent handful shown in the list.
+// not just the most recent handful shown in the list. type=expense always:
+// "Расходы"/Insights are a spend figure, income must never inflate or
+// dilute it (see App.jsx's mergeAndSet for where income gets its own,
+// separate accounting instead).
 export async function fetchExpensesRange(from, to, wallet) {
-  const params = { from: from.toISOString(), to: to.toISOString(), limit: 2000 };
+  const params = { from: from.toISOString(), to: to.toISOString(), limit: 2000, type: "expense" };
   if (wallet) params.wallet = wallet;
   return fetchExpenses(params);
 }
@@ -288,8 +291,12 @@ export async function deleteWallet(name) {
   }
 }
 
-export async function fetchCategories() {
-  const res = await apiFetch(`/api/categories`);
+// No args: every wallet's expense categories (the default, matches every
+// existing caller). Pass { type: "income" } for the income picker's list —
+// { wallet } to scope to one wallet either way.
+export async function fetchCategories(params = {}) {
+  const qs = new URLSearchParams(params).toString();
+  const res = await apiFetch(`/api/categories${qs ? `?${qs}` : ""}`);
   return res.json();
 }
 

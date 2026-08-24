@@ -30,6 +30,7 @@ function toExpenseShape(entry) {
     category: entry.payload.category,
     wallet: entry.payload.wallet,
     description: entry.payload.description,
+    type: entry.payload.type || "expense",
     created_at: entry.createdAt,
     pending: true,
   };

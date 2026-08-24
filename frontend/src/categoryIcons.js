@@ -13,11 +13,21 @@ const DEFAULT_LIST = [
   { name: "Жильё", emoji: "🏠", bg: "#ece3d8", fg: "#8a6a3f" },
   { name: "Прочее", emoji: "💳", bg: "#e9e9ec", fg: "#5b5b63" },
 ];
+// Mirrors the backend's SEED_INCOME_CATEGORIES — same pre-hydration
+// fallback role as DEFAULT_LIST above.
+const DEFAULT_INCOME_LIST = [
+  { name: "Зарплата", emoji: "💵", bg: "#e1f3e3", fg: "#2f8f4e" },
+  { name: "Бизнес", emoji: "💼", bg: "#fde2e1", fg: "#c23b3b" },
+  { name: "Подарки", emoji: "🎁", bg: "#fde1ef", fg: "#c23b8f" },
+  { name: "Инвестиции", emoji: "📈", bg: "#d8f5f1", fg: "#1f9e8c" },
+  { name: "Другое", emoji: "💳", bg: "#e9e9ec", fg: "#5b5b63" },
+];
 const DEFAULT_WALLETS = ["Личные", "Семья", "Бизнес", "Ремонт"];
 
 const FALLBACK = { emoji: "💳", bg: "#e9e9ec", fg: "#5b5b63" };
 
 let categories = Object.fromEntries(DEFAULT_WALLETS.map((w) => [w, DEFAULT_LIST]));
+let incomeCategories = Object.fromEntries(DEFAULT_WALLETS.map((w) => [w, DEFAULT_INCOME_LIST]));
 
 // Accepts the flat, wallet-tagged list the API returns (GET /api/categories
 // with no ?wallet= filter — every row has a `wallet` field) and groups it.
@@ -32,10 +42,33 @@ export function hydrateCategories(list) {
   categories = grouped;
 }
 
+// Same shape, fetched separately with ?type=income (see api.js) — kept as
+// its own registry rather than folded into `categories` above so every
+// existing call site (which only ever meant "expense categories") stays
+// untouched.
+export function hydrateIncomeCategories(list) {
+  if (!Array.isArray(list) || !list.length || !list.every((c) => c.name && c.emoji && c.wallet)) {
+    return;
+  }
+  const grouped = {};
+  for (const cat of list) {
+    (grouped[cat.wallet] ??= []).push(cat);
+  }
+  incomeCategories = grouped;
+}
+
 export function listCategories(wallet) {
   return categories[wallet] || [];
 }
 
 export function getCategoryIcon(wallet, name) {
   return listCategories(wallet).find((c) => c.name === name) || FALLBACK;
+}
+
+export function listIncomeCategories(wallet) {
+  return incomeCategories[wallet] || [];
+}
+
+export function getIncomeCategoryIcon(wallet, name) {
+  return listIncomeCategories(wallet).find((c) => c.name === name) || FALLBACK;
 }
