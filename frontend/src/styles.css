@@ -2385,9 +2385,10 @@ body {
   color: var(--surface);
 }
 
-.dt-day.disabled {
-  color: var(--ink-soft);
-  opacity: 0.35;
+/* Future days are pickable (planned expense/income), so "today" is marked
+   with a ring instead of being the last enabled cell in the grid. */
+.dt-day.today:not(.selected) {
+  box-shadow: inset 0 0 0 1.5px var(--ink-soft);
 }
 
 .dt-time-row {

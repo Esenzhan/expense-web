@@ -8,7 +8,9 @@ function todayDateOnly() {
 
 // Custom "От — До" range for the main screen's period toggle. Dates are
 // plain YYYY-MM-DD (no time) — periodRange() in insights.js treats them as
-// inclusive Almaty calendar days.
+// inclusive Almaty calendar days. Neither end is capped at today: expenses
+// and income can be recorded on future dates (DateTimePickerSheet), so a
+// range must be able to reach them.
 export default function PeriodPickerSheet({ initialFrom, initialTo, onClose, onApply }) {
   const sheetRef = useRef(null);
   useSwipeDismiss(sheetRef, onClose);
@@ -42,7 +44,7 @@ export default function PeriodPickerSheet({ initialFrom, initialTo, onClose, onA
             <input
               type="date"
               value={from}
-              max={to || fallback}
+              max={to || undefined}
               onChange={(event) => setFrom(event.target.value)}
             />
           </label>
@@ -52,7 +54,6 @@ export default function PeriodPickerSheet({ initialFrom, initialTo, onClose, onA
               type="date"
               value={to}
               min={from || undefined}
-              max={fallback}
               onChange={(event) => setTo(event.target.value)}
             />
           </label>

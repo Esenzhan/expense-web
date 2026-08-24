@@ -36,10 +36,12 @@ function buildMonthCells(viewMonth) {
   return cells;
 }
 
-// Backdates a manually added expense — opened from the calendar button on
-// EditExpenseSheet's add-expense header. Picking a day/time here and hitting
-// "Подтвердить" is what turns into the request's `created_at`; left
-// untouched, the expense keeps recording at the exact save moment.
+// Sets the date/time of a manually added expense — opened from the calendar
+// button on EditExpenseSheet's add-expense header. Picking a day/time here
+// and hitting "Подтвердить" is what turns into the request's `created_at`;
+// left untouched, the expense keeps recording at the exact save moment.
+// Both past and future days are pickable: backfilling a forgotten purchase
+// and planning an upcoming payment/income go through the same sheet.
 export default function DateTimePickerSheet({ initial, onClose, onApply }) {
   const sheetRef = useRef(null);
   useSwipeDismiss(sheetRef, onClose);
@@ -53,26 +55,23 @@ export default function DateTimePickerSheet({ initial, onClose, onApply }) {
   // matching direction, whether the change came from a swipe or an arrow tap.
   const [slideDir, setSlideDir] = useState("next");
 
-  const atCurrentMonth = sameMonth(viewMonth, today);
   const cells = buildMonthCells(viewMonth);
 
   function pickDay(day) {
     const picked = new Date(viewMonth.getFullYear(), viewMonth.getMonth(), day);
-    if (picked > today) return;
     hapticTick();
     setSelectedDay(picked);
   }
 
   function shiftMonth(delta) {
-    if (delta > 0 && atCurrentMonth) return;
     haptic();
     setSlideDir(delta > 0 ? "next" : "prev");
     setViewMonth((m) => new Date(m.getFullYear(), m.getMonth() + delta, 1));
   }
 
   // Kept fresh every render so the swipe listener below (bound once, on
-  // mount) always calls the current shiftMonth — its own `atCurrentMonth`
-  // guard would otherwise read a stale value frozen at mount time.
+  // mount) always calls the current shiftMonth rather than a copy frozen at
+  // mount time.
   const shiftMonthRef = useRef(shiftMonth);
   shiftMonthRef.current = shiftMonth;
 
@@ -135,12 +134,7 @@ export default function DateTimePickerSheet({ initial, onClose, onApply }) {
             <button className="dt-cal-nav-btn" onClick={() => shiftMonth(-1)} aria-label="Предыдущий месяц">
               ‹
             </button>
-            <button
-              className="dt-cal-nav-btn"
-              onClick={() => shiftMonth(1)}
-              disabled={atCurrentMonth}
-              aria-label="Следующий месяц"
-            >
+            <button className="dt-cal-nav-btn" onClick={() => shiftMonth(1)} aria-label="Следующий месяц">
               ›
             </button>
           </div>
@@ -157,13 +151,15 @@ export default function DateTimePickerSheet({ initial, onClose, onApply }) {
             {cells.map((day, index) => {
               if (day == null) return <span className="dt-day-empty" key={`b${index}`} />;
               const cellDate = new Date(viewMonth.getFullYear(), viewMonth.getMonth(), day);
-              const future = cellDate > today;
+              // "today" keeps a marker of its own so a month full of pickable
+              // future days still shows where the present is.
               return (
                 <button
                   key={day}
-                  className={`dt-day ${sameDay(cellDate, selectedDay) ? "selected" : ""} ${future ? "disabled" : ""}`}
+                  className={`dt-day ${sameDay(cellDate, selectedDay) ? "selected" : ""} ${
+                    sameDay(cellDate, today) ? "today" : ""
+                  }`}
                   onClick={() => pickDay(day)}
-                  disabled={future}
                 >
                   {day}
                 </button>
