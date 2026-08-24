@@ -225,7 +225,11 @@ export default function EditExpenseSheet({
   // Runs on mount AND whenever the wallet or type changes — each
   // wallet+type pair has its own category list, so switching either must
   // drop a category that no longer applies and re-center the carousel on
-  // whatever replaces it.
+  // whatever replaces it. Mount jumps straight there (nothing to animate
+  // into on first paint); every change after that glides — most visibly
+  // switching Расход/Доход, where it used to snap instantly to the new
+  // list's first tile with no motion at all.
+  const skippedFirstCenterRef = useRef(false);
   useEffect(() => {
     const row = categoryRowRef.current;
     if (!row) return;
@@ -235,8 +239,17 @@ export default function EditExpenseSheet({
     if (validCategory !== categoryRef.current) {
       setCategory(validCategory);
     }
-    row.scrollLeft = centerOf(row, Math.max(0, categoryNames.indexOf(validCategory)));
-    applyCarouselScales(row);
+    const targetLeft = centerOf(row, Math.max(0, categoryNames.indexOf(validCategory)));
+    if (!skippedFirstCenterRef.current) {
+      row.scrollLeft = targetLeft;
+      applyCarouselScales(row);
+      skippedFirstCenterRef.current = true;
+    } else {
+      // No direct applyCarouselScales call here — onScroll (already wired
+      // below) keeps the tile scales in step as the smooth scroll plays
+      // out, same as scrollCategoryTo's own tap-to-select scroll.
+      row.scrollTo({ left: targetLeft, behavior: "smooth" });
+    }
   }, [wallet, type]);
 
   // Like the reference: each tile's scale follows the scroll position
