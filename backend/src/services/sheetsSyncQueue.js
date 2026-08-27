@@ -110,18 +110,6 @@ async function runJob(job) {
   }
 }
 
-// TEMPORARY — unauthenticated debug snapshot wired into /api/health so the
-// backfill (sheetsBackfill.js) can be watched from outside without a login
-// token. Remove alongside that file once the backfill is confirmed done.
-export async function debugQueueSnapshot() {
-  const { rows } = await pool.query(
-    `SELECT id, expense_id, kind, attempts, last_error,
-            extract(epoch from (now() - created_at))::int AS age_seconds
-     FROM sheets_sync_jobs ORDER BY id LIMIT 50`
-  );
-  return rows;
-}
-
 // Powers the "Синхронизация с Google Sheets" row in Settings — pending is
 // everything not yet mirrored, stuck is the subset that's been failing
 // repeatedly (not just "still waiting for its first, on-time try").

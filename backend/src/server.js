@@ -20,8 +20,7 @@ import { authRouter } from "./routes/auth.js";
 import { authMiddleware, verifyToken } from "./middleware/auth.js";
 import { openDeepgramStream } from "./services/deepgramStream.js";
 import { parseExpenseFromText } from "./services/parseExpense.js";
-import { processSheetsSyncQueue, debugQueueSnapshot } from "./services/sheetsSyncQueue.js"; // debugQueueSnapshot is TEMPORARY
-import { backfillMissingSheetsRows } from "./services/sheetsBackfill.js"; // TEMPORARY — see that file
+import { processSheetsSyncQueue } from "./services/sheetsSyncQueue.js";
 
 const app = express();
 app.use(cors({ origin: process.env.FRONTEND_URL || "*" }));
@@ -49,12 +48,7 @@ app.use("/api/capital", authMiddleware, capitalRouter);
 // themselves per-route (see routes/reminders.js).
 app.use("/api/reminders", remindersRouter);
 
-app.get("/api/health", async (req, res) => {
-  // sheetsQueue is TEMPORARY — see debugQueueSnapshot's own comment. Never
-  // let this diagnostic's own failure take down the health check itself.
-  const sheetsQueue = await debugQueueSnapshot().catch((err) => ({ error: err.message }));
-  res.json({ ok: true, sheetsQueue });
-});
+app.get("/api/health", (req, res) => res.json({ ok: true }));
 
 const server = http.createServer(app);
 
@@ -157,8 +151,6 @@ initSchema()
     setInterval(() => {
       processSheetsSyncQueue().catch((err) => console.error("Sheets sync queue tick failed:", err.message));
     }, 20_000);
-    // TEMPORARY — one-time backfill, see sheetsBackfill.js.
-    backfillMissingSheetsRows().catch((err) => console.error("Sheets backfill failed:", err.message));
   })
   .catch((err) => {
     console.error("Failed to init DB schema:", err);
