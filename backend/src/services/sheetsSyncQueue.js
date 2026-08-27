@@ -59,6 +59,28 @@ export async function processSheetsSyncQueue() {
   }
 }
 
+// googleapis' underlying HTTP client doesn't reliably time out on its own —
+// without this, one truly hung request (dead socket, a stuck token refresh)
+// would keep `running` (above) true forever and silently freeze every future
+// tick, not just this one job.
+const JOB_TIMEOUT_MS = 45_000;
+
+function withTimeout(promise, ms) {
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(() => reject(new Error(`timed out after ${ms}ms`)), ms);
+    promise.then(
+      (v) => {
+        clearTimeout(timer);
+        resolve(v);
+      },
+      (err) => {
+        clearTimeout(timer);
+        reject(err);
+      }
+    );
+  });
+}
+
 async function runJob(job) {
   const { rows: userRows } = await pool.query(`SELECT * FROM users WHERE id = $1`, [job.user_id]);
   const user = userRows[0];
@@ -69,9 +91,9 @@ async function runJob(job) {
   }
   const expense = job.expense_snapshot;
   try {
-    if (job.kind === "append") await appendExpenseRow(user, expense);
-    else if (job.kind === "update") await updateExpenseRow(user, expense, job.previous_wallet);
-    else if (job.kind === "delete") await deleteExpenseRow(user, expense);
+    if (job.kind === "append") await withTimeout(appendExpenseRow(user, expense), JOB_TIMEOUT_MS);
+    else if (job.kind === "update") await withTimeout(updateExpenseRow(user, expense, job.previous_wallet), JOB_TIMEOUT_MS);
+    else if (job.kind === "delete") await withTimeout(deleteExpenseRow(user, expense), JOB_TIMEOUT_MS);
     await pool.query(`DELETE FROM sheets_sync_jobs WHERE id = $1`, [job.id]);
   } catch (err) {
     const attempts = job.attempts + 1;
@@ -86,6 +108,18 @@ async function runJob(job) {
       [job.id, attempts, String(err.message || err).slice(0, 500), backoffMs(attempts)]
     );
   }
+}
+
+// TEMPORARY — unauthenticated debug snapshot wired into /api/health so the
+// backfill (sheetsBackfill.js) can be watched from outside without a login
+// token. Remove alongside that file once the backfill is confirmed done.
+export async function debugQueueSnapshot() {
+  const { rows } = await pool.query(
+    `SELECT id, expense_id, kind, attempts, last_error,
+            extract(epoch from (now() - created_at))::int AS age_seconds
+     FROM sheets_sync_jobs ORDER BY id LIMIT 50`
+  );
+  return rows;
 }
 
 // Powers the "Синхронизация с Google Sheets" row in Settings — pending is
