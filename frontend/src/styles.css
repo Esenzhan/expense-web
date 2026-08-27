@@ -76,13 +76,22 @@ body,
   height: 100%;
 }
 
+html,
+body {
+  overflow-x: hidden;
+}
+
 body {
   margin: 0;
   background: var(--bg);
   color: var(--ink);
   font-family: var(--font-ui);
   -webkit-tap-highlight-color: transparent;
-  overscroll-behavior-y: none;
+  /* Both axes, not just -y: without -x, dragging a horizontal carousel
+     (.category-row etc. below) past its own edge chains into a rubber-band
+     bounce of the whole page — the gray/white page background flashing in
+     at the side is the single biggest "this is a website" tell on iOS. */
+  overscroll-behavior: none;
 }
 
 .app {
@@ -1382,6 +1391,7 @@ body {
   display: flex;
   gap: 10px;
   overflow-x: auto;
+  overscroll-behavior-x: contain;
   scroll-snap-type: x mandatory;
   padding: 12px calc(50% - 22px);
   scrollbar-width: none;
@@ -2679,6 +2689,7 @@ body {
   min-height: 44px;
   gap: 8px;
   overflow-x: auto;
+  overscroll-behavior-x: contain;
   scrollbar-width: none;
   padding-bottom: 2px;
 }
@@ -2699,6 +2710,7 @@ body {
   min-height: 60px;
   gap: 8px;
   overflow-x: auto;
+  overscroll-behavior-x: contain;
   scrollbar-width: none;
   background: var(--surface-soft);
   border-radius: 14px;
