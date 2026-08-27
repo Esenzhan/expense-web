@@ -4,7 +4,7 @@ import base64
 import logging
 import tempfile
 import time
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 from dotenv import load_dotenv
 
 import anthropic
@@ -156,11 +156,21 @@ def parse_amount(raw) -> float:
         return 0.0
 
 
+# Алматы — UTC+5 круглый год (без перехода на летнее время). Хост бота живёт
+# в UTC, поэтому datetime.now() первые 5 часов суток отдавал вчерашнюю дату —
+# первого числа месяца /budget считал бы траты за прошлый месяц.
+ALMATY_TZ = timezone(timedelta(hours=5))
+
+
+def almaty_now() -> datetime:
+    return datetime.now(ALMATY_TZ)
+
+
 def get_monthly_spent(telegram_user_id: int, wallet: str) -> dict:
     ws = get_wallet_sheet(telegram_user_id, wallet)
     if not ws:
         return {}
-    current_month = datetime.now().strftime("%m.%Y")
+    current_month = almaty_now().strftime("%m.%Y")
     rows = ws.get_all_records()
     spent_by_cat = {}
     for row in rows:
@@ -202,7 +212,7 @@ def get_month_name() -> str:
         5: "мая", 6: "июня", 7: "июля", 8: "августа",
         9: "сентября", 10: "октября", 11: "ноября", 12: "декабря"
     }
-    now = datetime.now()
+    now = almaty_now()
     return f"{months[now.month]} {now.year}"
 
 

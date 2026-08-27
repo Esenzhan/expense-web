@@ -65,12 +65,18 @@ async function resolveTargets(loggingUser, wallet) {
   return rows.length ? rows : [loggingUser];
 }
 
+// Almaty is UTC+5 year-round (no DST) — a plain offset shift is enough, same
+// approach as reminders.js's almatyNow(). Must NOT use the local getters
+// (getHours/getDate): the server runs in UTC, so a 02:00 Almaty expense used
+// to land in the Sheet as 21:00 of the previous day.
+const ALMATY_OFFSET_MS = 5 * 60 * 60 * 1000;
+
 function formatDateTime(date) {
-  const d = new Date(date);
+  const d = new Date(new Date(date).getTime() + ALMATY_OFFSET_MS);
   const pad = (n) => String(n).padStart(2, "0");
   return {
-    date: `${pad(d.getDate())}.${pad(d.getMonth() + 1)}.${d.getFullYear()}`,
-    time: `${pad(d.getHours())}:${pad(d.getMinutes())}`,
+    date: `${pad(d.getUTCDate())}.${pad(d.getUTCMonth() + 1)}.${d.getUTCFullYear()}`,
+    time: `${pad(d.getUTCHours())}:${pad(d.getUTCMinutes())}`,
   };
 }
 
