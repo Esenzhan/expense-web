@@ -8,6 +8,10 @@ import { enqueueSheetsSync } from "./sheetsSyncQueue.js";
 // Google Sheets tabs by hand (2026-08-28); it is not derived at runtime.
 // TEMPORARY: delete this file and its one call in server.js once the
 // sheets-sync-status row in Settings confirms all of these have synced.
+// Re-deployed 2026-08-28 to force an immediate retry (reset next_attempt_at)
+// right after the account's Google token was refreshed — the prior 5
+// attempts were all invalid_grant, so they were otherwise sitting in the
+// ~16min backoff window that failure count earns.
 const MISSING_EXPENSE_IDS = [
   317, 340, 360, 359, 358, 356, 353, 352, 348, 346, 345, 343, 341, 338, 337,
   335, 334, 326, 325, 322, 321, 318, 315, 313, 311, 308, 305, 304, 303, 299,
