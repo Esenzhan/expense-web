@@ -123,7 +123,11 @@ export default function ExpenseRow({ expense, icon, readonly, onSelect, onDelete
         ref={rowRef}
         onClick={handleClick}
       >
-        <span className="category-icon" style={catIconVars(icon.bg, icon.fg)}>
+        <span
+          className={`category-icon ${expense.pending ? "pending" : ""}`}
+          style={catIconVars(icon.bg, icon.fg)}
+          title={expense.pending ? "Сохранено на телефоне, отправится при подключении к сети" : undefined}
+        >
           <CategoryGlyph emoji={icon.emoji} size={20} />
         </span>
         <div className="meta">
@@ -133,11 +137,6 @@ export default function ExpenseRow({ expense, icon, readonly, onSelect, onDelete
         <span className={`amount ${expense.type === "income" ? "income" : ""}`}>
           {expense.type === "income" ? "+" : "−"}
           {Number(expense.amount).toLocaleString("ru-RU")} ₸
-          {expense.pending && (
-            <span className="pending-badge" title="Сохранено на телефоне, отправится при подключении к сети">
-              ⏳
-            </span>
-          )}
         </span>
       </div>
     </div>
