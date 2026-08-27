@@ -4,10 +4,12 @@ import { haptic, hapticHeavy, hapticTick } from "../haptics";
 const BASE_HEIGHT = 38; // matches .insights-button padding/font at rest
 const MAX_HEIGHT = 150; // fully stretched blob, like the reference video
 const PULL_DISTANCE = 170; // finger travel (px) for a full stretch
-const GRAB_SLOP = 12; // forgiving edge around the 38px pill, still local to it
+// Sub-pixel scroll offsets (momentum can settle at 0.3px) still count as
+// "the very top" — the gesture would otherwise feel randomly dead.
+const TOP_EPSILON = 1;
 
 // The «✦ Инсайты» button. Opens on tap, and also on a long downward drag
-// started on the button itself while the page is scrolled to the top: the pill
+// started anywhere on the page while it's scrolled to the very top: the pill
 // stretches into a tall blob while the label fades out and the sparkle
 // grows/rotates, with haptic ticks as the pull deepens — release past the
 // threshold opens the sheet, otherwise it springs back.
@@ -38,16 +40,17 @@ export default function InsightsButton({ onOpen }) {
       iconRef.current.style.transform = `scale(${1 + progress * 3}) rotate(${progress * 30}deg)`;
     }
 
-    // Measured at touchstart, before any stretch, so it's the pill's rest
-    // frame — plus a little slop, since a 38px-tall target is thin to grab.
-    function withinGrabZone(touch) {
-      const r = btn.getBoundingClientRect();
-      return (
-        touch.clientX >= r.left - GRAB_SLOP &&
-        touch.clientX <= r.right + GRAB_SLOP &&
-        touch.clientY >= r.top - GRAB_SLOP &&
-        touch.clientY <= r.bottom + GRAB_SLOP
-      );
+    // BODY is the scroll container here, not the window: styles.css gives
+    // html/body height:100% plus overflow-x:hidden, and a non-visible overflow
+    // on one axis computes the other to `auto`. So window.scrollY and
+    // documentElement.scrollTop sit at 0 no matter how far the list is
+    // scrolled — reading only those is why the "top of the page" guard below
+    // never actually fired and the pull armed mid-list. Math.max also folds
+    // iOS's negative rubber-band offsets back to 0, which is right: at the
+    // bounce past the top there's nowhere left to scroll, so the pull should
+    // take over.
+    function pageScrollTop() {
+      return Math.max(window.scrollY, document.documentElement.scrollTop, document.body.scrollTop);
     }
 
     // armed: a candidate touch began at the top of the page;
@@ -55,7 +58,7 @@ export default function InsightsButton({ onOpen }) {
     function onTouchStart(event) {
       state.armed = false;
       state.pulling = false;
-      if (window.scrollY > 0) return;
+      if (pageScrollTop() > TOP_EPSILON) return;
       // Only the main screen owns this gesture — touches inside overlays
       // (sheets, mic dock, settings page) must scroll/act normally. Expense
       // rows run their own axis-locked horizontal-swipe gesture (see
@@ -69,11 +72,6 @@ export default function InsightsButton({ onOpen }) {
       ) {
         return;
       }
-      // The pull has to START on the pill. It used to arm on any touch at the
-      // top of the page, so a finger landing in the list — in a gap between
-      // day groups, where no .expense-row-wrap catches it — stretched the blob
-      // instead of scrolling.
-      if (!withinGrabZone(event.touches[0])) return;
       state.armed = true;
       state.startY = event.touches[0].clientY;
       state.progress = 0;
@@ -85,7 +83,7 @@ export default function InsightsButton({ onOpen }) {
       const dy = event.touches[0].clientY - state.startY;
 
       if (!state.pulling) {
-        if (dy < -6 || window.scrollY > 0) {
+        if (dy < -6 || pageScrollTop() > TOP_EPSILON) {
           // The gesture became a normal scroll — stand down for this touch
           state.armed = false;
           return;
