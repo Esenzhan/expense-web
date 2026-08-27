@@ -4,9 +4,10 @@ import { haptic, hapticHeavy, hapticTick } from "../haptics";
 const BASE_HEIGHT = 38; // matches .insights-button padding/font at rest
 const MAX_HEIGHT = 150; // fully stretched blob, like the reference video
 const PULL_DISTANCE = 170; // finger travel (px) for a full stretch
+const GRAB_SLOP = 12; // forgiving edge around the 38px pill, still local to it
 
 // The «✦ Инсайты» button. Opens on tap, and also on a long downward drag
-// started anywhere on the page while it's scrolled to the top: the pill
+// started on the button itself while the page is scrolled to the top: the pill
 // stretches into a tall blob while the label fades out and the sparkle
 // grows/rotates, with haptic ticks as the pull deepens — release past the
 // threshold opens the sheet, otherwise it springs back.
@@ -37,6 +38,18 @@ export default function InsightsButton({ onOpen }) {
       iconRef.current.style.transform = `scale(${1 + progress * 3}) rotate(${progress * 30}deg)`;
     }
 
+    // Measured at touchstart, before any stretch, so it's the pill's rest
+    // frame — plus a little slop, since a 38px-tall target is thin to grab.
+    function withinGrabZone(touch) {
+      const r = btn.getBoundingClientRect();
+      return (
+        touch.clientX >= r.left - GRAB_SLOP &&
+        touch.clientX <= r.right + GRAB_SLOP &&
+        touch.clientY >= r.top - GRAB_SLOP &&
+        touch.clientY <= r.bottom + GRAB_SLOP
+      );
+    }
+
     // armed: a candidate touch began at the top of the page;
     // pulling: the drag showed clear downward intent and now drives the button
     function onTouchStart(event) {
@@ -56,6 +69,11 @@ export default function InsightsButton({ onOpen }) {
       ) {
         return;
       }
+      // The pull has to START on the pill. It used to arm on any touch at the
+      // top of the page, so a finger landing in the list — in a gap between
+      // day groups, where no .expense-row-wrap catches it — stretched the blob
+      // instead of scrolling.
+      if (!withinGrabZone(event.touches[0])) return;
       state.armed = true;
       state.startY = event.touches[0].clientY;
       state.progress = 0;
