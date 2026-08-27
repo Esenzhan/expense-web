@@ -21,7 +21,6 @@ import { authMiddleware, verifyToken } from "./middleware/auth.js";
 import { openDeepgramStream } from "./services/deepgramStream.js";
 import { parseExpenseFromText } from "./services/parseExpense.js";
 import { processSheetsSyncQueue } from "./services/sheetsSyncQueue.js";
-import { backfillMissingSheetsRows } from "./services/sheetsBackfill.js"; // TEMPORARY — see that file
 
 const app = express();
 app.use(cors({ origin: process.env.FRONTEND_URL || "*" }));
@@ -152,8 +151,6 @@ initSchema()
     setInterval(() => {
       processSheetsSyncQueue().catch((err) => console.error("Sheets sync queue tick failed:", err.message));
     }, 20_000);
-    // TEMPORARY — one-time backfill, see sheetsBackfill.js.
-    backfillMissingSheetsRows().catch((err) => console.error("Sheets backfill failed:", err.message));
   })
   .catch((err) => {
     console.error("Failed to init DB schema:", err);
