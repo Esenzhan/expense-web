@@ -1214,8 +1214,16 @@ export default function App() {
             setNewCategoryWallet(null);
             setEditingCategory(null);
           }}
-          onCreated={async () => {
+          onCreated={async (saved) => {
+            const renamed = !!editingCategory && saved?.name && saved.name !== editingCategory.name;
             await reloadCategories();
+            if (renamed) {
+              // The rename rewrote every expense's category text server-side,
+              // and the list filter is keyed by `${type}:${name}` — the loaded
+              // rows and the active filter both still hold the old name.
+              setCategoryFilter(null);
+              refreshAll(period, selectedWallet);
+            }
             setNewCategoryWallet(null);
             setEditingCategory(null);
           }}

@@ -316,6 +316,29 @@ export async function initSchema() {
       ON category_limits (wallet, category, user_id) WHERE user_id IS NOT NULL;
   `);
 
+  // Renaming a category can't reach every client at once: an offline queue
+  // flushed afterwards, the other account's phone with a cached list, a tab
+  // open since before the rename — all keep POSTing the old name, and
+  // expenses.js would silently drop those into "Прочее" (its fallback for a
+  // genuinely wrong category). So a rename leaves a forwarding address here
+  // and writes resolve through it. Kept forever rather than expired: it's a
+  // handful of rows, and the offline queue has no deadline by which it must
+  // have drained.
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS category_renames (
+      id SERIAL PRIMARY KEY,
+      wallet TEXT NOT NULL,
+      type TEXT NOT NULL DEFAULT 'expense',
+      old_name TEXT NOT NULL,
+      new_name TEXT NOT NULL,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+    );
+  `);
+  await pool.query(`
+    CREATE UNIQUE INDEX IF NOT EXISTS category_renames_uidx
+      ON category_renames (wallet, type, old_name);
+  `);
+
   // "Money actually on this account" — a user-entered anchor (base_amount at
   // base_at), not a running total mutated on every expense CRUD (that would
   // need matching code in create/edit/delete/undo/offline-sync/bot-insert,

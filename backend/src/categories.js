@@ -49,6 +49,33 @@ export async function fallbackCategoryFor(wallet, type = "expense") {
   return names.includes(conventional) ? conventional : names[names.length - 1];
 }
 
+// A renamed category keeps answering to its old name (see the
+// category_renames table in db.js): writes from a client that hasn't heard
+// about the rename yet — an offline queue flushed afterwards, the other
+// account's phone, a tab open since before it — carry the old string, and
+// without this they'd land in "Прочее" via the fallback below.
+export async function resolveRenamedCategory(wallet, name, type = "expense") {
+  if (!name) return null;
+  const { rows } = await pool.query(
+    `SELECT new_name FROM category_renames WHERE wallet = $1 AND type = $2 AND old_name = $3`,
+    [wallet, type, name]
+  );
+  return rows[0]?.new_name ?? null;
+}
+
+// The single place that decides which category a write actually lands on:
+// what was asked for if it's real, else its forwarding address if it was
+// renamed, else that wallet's catch-all. Both expense routes (create and
+// edit) go through here so the two can't drift apart.
+export async function resolveCategoryName(wallet, requested, type = "expense") {
+  const fallback = await fallbackCategoryFor(wallet, type);
+  const wanted = requested || fallback;
+  if (await isValidCategory(wallet, wanted, type)) return wanted;
+  const renamed = await resolveRenamedCategory(wallet, wanted, type);
+  if (renamed && (await isValidCategory(wallet, renamed, type))) return renamed;
+  return fallback;
+}
+
 // { [walletName]: [categoryName, ...] } — used to build the voice-parse
 // prompt, which needs every wallet's list at once (wallet and category are
 // picked in the same model call). Expense-only: the bot only ever creates

@@ -1,7 +1,7 @@
 import { Router } from "express";
 import { pool } from "../db.js";
 import { isValidWallet, sharedWalletNames } from "../wallets.js";
-import { isValidCategory, fallbackCategoryFor } from "../categories.js";
+import { resolveCategoryName } from "../categories.js";
 import { enqueueSheetsSync, getSyncStatus } from "../services/sheetsSyncQueue.js";
 import { parseReceiptFromImage, parseReceiptItemsFromImage } from "../services/parseReceipt.js";
 import { tryLogScan, DAILY_SCAN_LIMIT } from "../services/receiptScans.js";
@@ -94,16 +94,11 @@ expensesRouter.post("/", async (req, res) => {
   }
   // A category from a different wallet's list (stale client cache, a form
   // that didn't reset on wallet change) would otherwise save silently —
-  // same this-wallet fallback the voice/receipt parsers use on a mismatch,
-  // not a hard error, since a bad category shouldn't block saving someone's
-  // money. fallbackCategoryFor is type-aware (an income row falls back to
-  // income's own catch-all) and resolves dynamically, so it still works if
-  // "Прочее"/"Другое" itself has been deleted from that wallet.
-  const fallbackCategory = await fallbackCategoryFor(wallet, type);
-  let finalCategory = category || fallbackCategory;
-  if (!(await isValidCategory(wallet, finalCategory, type))) {
-    finalCategory = fallbackCategory;
-  }
+  // resolveCategoryName forwards a renamed category to its new name and
+  // falls back to this wallet's catch-all otherwise, the same fallback the
+  // voice/receipt parsers use on a mismatch. Not a hard error, since a bad
+  // category shouldn't block saving someone's money.
+  const finalCategory = await resolveCategoryName(wallet, category, type);
   if (!finalCategory) {
     return res.status(400).json({ error: "В этом кошельке нет категорий — сначала добавь хотя бы одну" });
   }
@@ -202,11 +197,7 @@ expensesRouter.put("/:id", async (req, res) => {
   // from silently flipping a row's type back to 'expense'.
   const type = req.body.type === "income" || req.body.type === "expense" ? req.body.type : existing.type;
 
-  const fallbackCategory = await fallbackCategoryFor(wallet, type);
-  let finalCategory = category || fallbackCategory;
-  if (!(await isValidCategory(wallet, finalCategory, type))) {
-    finalCategory = fallbackCategory;
-  }
+  const finalCategory = await resolveCategoryName(wallet, category, type);
   if (!finalCategory) {
     return res.status(400).json({ error: "В этом кошельке нет категорий — сначала добавь хотя бы одну" });
   }

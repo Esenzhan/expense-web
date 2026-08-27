@@ -62,6 +62,13 @@ categoriesRouter.post("/", authMiddleware, async (req, res) => {
        RETURNING name, emoji, bg, fg, wallet`,
       [name.trim(), emoji, bg, fg, wallet]
     );
+    // If this name used to belong to a category that was renamed away, its
+    // forwarding address (see PUT below) now points somewhere wrong — the
+    // name is a real category again, so the alias has to go.
+    await pool.query(
+      `DELETE FROM category_renames WHERE wallet = $1 AND type = 'expense' AND old_name = $2`,
+      [wallet, name.trim()]
+    );
     invalidateCategoryCache(); // voice parser picks the new category up immediately
     res.status(201).json(rows[0]);
   } catch (err) {
@@ -72,11 +79,22 @@ categoriesRouter.post("/", authMiddleware, async (req, res) => {
   }
 });
 
-// Color/icon only — renaming isn't offered here. Expenses reference a
-// category by name only (expenses.category is plain text, no bg/fg/emoji
-// duplicated per row), so every past and future expense picks up the new
-// look automatically via the same (wallet, name) lookup the frontend
-// already does — nothing to migrate.
+// Look (emoji/color) and, optionally, the name.
+//
+// Changing the look needs no migration at all: expenses reference a category
+// by name only — no bg/fg/emoji duplicated per row — so every past and future
+// expense picks the new look up via the same (wallet, name) lookup the
+// frontend already does.
+//
+// Renaming does need one, because expenses.category is plain text with no FK.
+// All of it is one transaction: the category row (whose ON UPDATE CASCADE
+// carries category_limits along), every expense that used the old name, and
+// the JSON snapshots of any Sheets-sync jobs still queued — those would
+// otherwise mirror the old name into the Sheet after the rename. Google
+// Sheets rows already written are deliberately NOT rewritten: nothing in the
+// app reads the category text back (rows are found by the ID column), so
+// that's a manual edit in the Sheet when it's wanted, not ~6 API calls per
+// expense against a 60-writes-per-minute quota.
 categoriesRouter.put("/:wallet/:name", authMiddleware, async (req, res) => {
   const { wallet, name } = req.params;
   const { emoji, bg, fg } = req.body;
@@ -88,16 +106,87 @@ categoriesRouter.put("/:wallet/:name", authMiddleware, async (req, res) => {
   if (!isColor(bg) || !isColor(fg)) {
     return res.status(400).json({ error: "Некорректный цвет" });
   }
+  // Optional: an older cached bundle mid-deploy sends no `name` at all, and
+  // the edit sheet sends the unchanged one when only the look changed.
+  let newName = name;
+  if (req.body.name != null) {
+    const trimmed = typeof req.body.name === "string" ? req.body.name.trim() : "";
+    if (!trimmed || trimmed.length > 40) {
+      return res.status(400).json({ error: "Некорректное название категории" });
+    }
+    newName = trimmed;
+  }
+  const renaming = newName !== name;
 
-  const { rows } = await pool.query(
-    `UPDATE categories SET emoji = $1, bg = $2, fg = $3
-     WHERE wallet = $4 AND name = $5
-     RETURNING name, emoji, bg, fg, wallet`,
-    [emoji, bg, fg, wallet, name]
-  );
-  if (!rows.length) return res.status(404).json({ error: "Категория не найдена" });
-  invalidateCategoryCache();
-  res.json(rows[0]);
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+    const { rows } = await client.query(
+      `UPDATE categories SET emoji = $1, bg = $2, fg = $3, name = $4
+       WHERE wallet = $5 AND name = $6
+       RETURNING name, emoji, bg, fg, wallet, type`,
+      [emoji, bg, fg, newName, wallet, name]
+    );
+    if (!rows.length) {
+      await client.query("ROLLBACK");
+      return res.status(404).json({ error: "Категория не найдена" });
+    }
+
+    if (renaming) {
+      const { type } = rows[0];
+      // Not scoped by type on purpose: (wallet, name) is unique across both
+      // types, so every expense in this wallet under that name is this
+      // category's — and it also catches a row whose type predates the column.
+      await client.query(
+        `UPDATE expenses SET category = $1 WHERE wallet = $2 AND category = $3`,
+        [newName, wallet, name]
+      );
+      await client.query(
+        `UPDATE sheets_sync_jobs
+         SET expense_snapshot = jsonb_set(expense_snapshot, '{category}', to_jsonb($1::text))
+         WHERE expense_snapshot->>'wallet' = $2 AND expense_snapshot->>'category' = $3`,
+        [newName, wallet, name]
+      );
+
+      // Forwarding addresses for clients that haven't heard about the rename
+      // (see category_renames in db.js). Renaming A→B→C has to re-point A at
+      // C too, not leave it aimed at a name that no longer exists.
+      await client.query(
+        `UPDATE category_renames SET new_name = $1
+         WHERE wallet = $2 AND type = $3 AND new_name = $4`,
+        [newName, wallet, type, name]
+      );
+      await client.query(
+        `INSERT INTO category_renames (wallet, type, old_name, new_name)
+         VALUES ($1, $2, $3, $4)
+         ON CONFLICT (wallet, type, old_name)
+         DO UPDATE SET new_name = EXCLUDED.new_name, created_at = now()`,
+        [wallet, type, name, newName]
+      );
+      // Renamed back to a name it already had: that alias now points at
+      // itself, which is just noise.
+      await client.query(
+        `DELETE FROM category_renames WHERE wallet = $1 AND type = $2 AND old_name = new_name`,
+        [wallet, type]
+      );
+    }
+
+    await client.query("COMMIT");
+    invalidateCategoryCache();
+    res.json(rows[0]);
+  } catch (err) {
+    await client.query("ROLLBACK");
+    // (wallet, name) is unique per wallet across BOTH types, so this also
+    // fires when an expense category is renamed onto an income one's name.
+    // Merging two categories' expenses is never what a rename meant, and it
+    // can't be undone — so it's refused rather than guessed at.
+    if (err.code === "23505") {
+      return res.status(409).json({ error: "Такая категория уже есть" });
+    }
+    throw err;
+  } finally {
+    client.release();
+  }
 });
 
 categoriesRouter.delete("/:wallet/:name", authMiddleware, async (req, res) => {

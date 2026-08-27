@@ -39,10 +39,12 @@ function suggestionsFor(name) {
 }
 
 // `initial` (existing category {name, emoji, bg, fg}) switches this into
-// edit mode: color/icon only, name is locked — renaming isn't offered here.
-// Expenses reference a category by name and look up its look-up-by-name
-// bg/fg/emoji at render time (see categoryIcons.js), so saving here updates
-// every expense that uses this category everywhere in the app, automatically.
+// edit mode. Icon and color need no migration — expenses look those up by
+// (wallet, name) at render time (see categoryIcons.js), so every expense
+// using this category updates everywhere at once. Renaming does migrate, on
+// the server and in one transaction (see routes/categories.js PUT); rows
+// already written to Google Sheets keep the old name until edited there by
+// hand, which is deliberate.
 export default function NewCategorySheet({ wallet, initial, onClose, onCreated }) {
   const sheetRef = useRef(null);
   useSwipeDismiss(sheetRef, onClose);
@@ -58,7 +60,7 @@ export default function NewCategorySheet({ wallet, initial, onClose, onCreated }
   const [error, setError] = useState("");
 
   const color = PALETTE[colorIndex];
-  const suggestions = initial ? [] : suggestionsFor(name);
+  const suggestions = suggestionsFor(name);
 
   function pickEmoji(icon) {
     haptic();
@@ -66,7 +68,7 @@ export default function NewCategorySheet({ wallet, initial, onClose, onCreated }
   }
 
   async function handleSave() {
-    if (!initial && !name.trim()) {
+    if (!name.trim()) {
       setError("Введи название категории");
       return;
     }
@@ -77,13 +79,13 @@ export default function NewCategorySheet({ wallet, initial, onClose, onCreated }
     setSaving(true);
     setError("");
     try {
-      if (initial) {
-        await updateCategory(wallet, initial.name, { emoji, bg: color.bg, fg: color.fg });
-      } else {
-        await createCategory({ name: name.trim(), emoji, bg: color.bg, fg: color.fg, wallet });
-      }
+      // Hands the saved row back so the caller can tell a rename (which
+      // rewrote every expense's category text) from a look-only edit.
+      const saved = initial
+        ? await updateCategory(wallet, initial.name, { name: name.trim(), emoji, bg: color.bg, fg: color.fg })
+        : await createCategory({ name: name.trim(), emoji, bg: color.bg, fg: color.fg, wallet });
       hapticHeavy();
-      onCreated();
+      onCreated(saved);
     } catch (err) {
       setError(err.message);
       setSaving(false);
@@ -120,7 +122,6 @@ export default function NewCategorySheet({ wallet, initial, onClose, onCreated }
             placeholder="Название категории"
             value={name}
             maxLength={40}
-            disabled={!!initial}
             onChange={(event) => setName(event.target.value)}
           />
         </div>
