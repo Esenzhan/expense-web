@@ -33,6 +33,22 @@ export async function isValidCategory(wallet, name, type = "expense") {
   return (await categoryNamesFor(wallet, type)).includes(name);
 }
 
+const CONVENTIONAL_FALLBACK_NAME = { expense: "Прочее", income: "Другое" };
+
+// The category assigned when nothing else validates (voice/receipt parsing
+// misses, a stale/cross-wallet category sent from the client, etc). Prefers
+// "Прочее"/"Другое" if that wallet still has one, otherwise falls back to
+// whichever category sorts last there — so "Прочее" no longer has to be
+// undeletable just to keep this from pointing at a name that doesn't exist
+// (see routes/categories.js DELETE). Returns null only if the wallet has no
+// categories of that type at all.
+export async function fallbackCategoryFor(wallet, type = "expense") {
+  const names = await categoryNamesFor(wallet, type);
+  if (!names.length) return null;
+  const conventional = CONVENTIONAL_FALLBACK_NAME[type];
+  return names.includes(conventional) ? conventional : names[names.length - 1];
+}
+
 // { [walletName]: [categoryName, ...] } — used to build the voice-parse
 // prompt, which needs every wallet's list at once (wallet and category are
 // picked in the same model call). Expense-only: the bot only ever creates

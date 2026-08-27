@@ -101,10 +101,10 @@ categoriesRouter.put("/:wallet/:name", authMiddleware, async (req, res) => {
 });
 
 categoriesRouter.delete("/:wallet/:name", authMiddleware, async (req, res) => {
-  // "Прочее" is the fallback for voice parsing and old expenses — keep it
-  if (req.params.name === "Прочее") {
-    return res.status(400).json({ error: "Эту категорию нельзя удалить" });
-  }
+  // No name is protected — fallbackCategoryFor() (categories.js) resolves
+  // the voice/receipt-parsing and create/edit fallback dynamically, so
+  // deleting "Прочее"/"Другое" just makes the next category in that wallet
+  // the new fallback instead of leaving something pointing at a dead name.
   await pool.query(`DELETE FROM categories WHERE wallet = $1 AND name = $2`, [
     req.params.wallet,
     req.params.name,

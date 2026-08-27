@@ -89,15 +89,13 @@ export default function CategoriesSheet({ initialWallet, onClose, onAdd, onEdit,
                   <path d="M15.5 5.5 18.5 8.5 8 19l-4 1 1-4L15.5 5.5Z" />
                 </svg>
               </button>
-              {cat.name !== "Прочее" && (
-                <button
-                  className="cat-delete"
-                  aria-label="Удалить категорию"
-                  onClick={() => handleDelete(cat.name)}
-                >
-                  {confirmingName === cat.name ? "Точно?" : "✕"}
-                </button>
-              )}
+              <button
+                className="cat-delete"
+                aria-label="Удалить категорию"
+                onClick={() => handleDelete(cat.name)}
+              >
+                {confirmingName === cat.name ? "Точно?" : "✕"}
+              </button>
             </div>
           ))}
         </div>

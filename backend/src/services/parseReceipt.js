@@ -1,6 +1,6 @@
 import { anthropic } from "../anthropicClient.js";
 import { walletNames, fallbackWallet } from "../wallets.js";
-import { categoryNamesByWallet, isValidCategory } from "../categories.js";
+import { categoryNamesByWallet, isValidCategory, fallbackCategoryFor } from "../categories.js";
 
 // Same idea as parseExpense.js (voice), but the source is a photo instead of
 // a transcript — ported from the Telegram bot's extract_expense_from_image,
@@ -68,7 +68,7 @@ ${walletCategoryList}
     parsed.wallet = await fallbackWallet();
   }
   if (!(await isValidCategory(parsed.wallet, parsed.category))) {
-    parsed.category = "Прочее";
+    parsed.category = await fallbackCategoryFor(parsed.wallet);
   }
 
   return parsed;
@@ -155,7 +155,7 @@ ${walletCategoryList}
       item.wallet = await fallbackWallet();
     }
     if (!(await isValidCategory(item.wallet, item.category))) {
-      item.category = "Прочее";
+      item.category = await fallbackCategoryFor(item.wallet);
     }
   }
 

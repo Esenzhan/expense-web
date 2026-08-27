@@ -1,6 +1,6 @@
 import { anthropic } from "../anthropicClient.js";
 import { walletNames, fallbackWallet } from "../wallets.js";
-import { categoryNamesByWallet, isValidCategory } from "../categories.js";
+import { categoryNamesByWallet, isValidCategory, fallbackCategoryFor } from "../categories.js";
 
 export async function parseExpenseFromText(text) {
   const categoriesByWallet = await categoryNamesByWallet();
@@ -56,7 +56,7 @@ ${walletCategoryList}
     parsed.wallet = await fallbackWallet();
   }
   if (!(await isValidCategory(parsed.wallet, parsed.category))) {
-    parsed.category = "Прочее";
+    parsed.category = await fallbackCategoryFor(parsed.wallet);
   }
 
   return parsed;
