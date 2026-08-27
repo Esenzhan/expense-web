@@ -570,4 +570,10 @@ export async function initSchema() {
   await pool.query(`
     CREATE INDEX IF NOT EXISTS sheets_sync_jobs_next_attempt_idx ON sheets_sync_jobs (next_attempt_at);
   `);
+  // Bumped by every enqueue (see sheetsSyncQueue.js). A job's row is reused
+  // when a newer change to the same expense supersedes it — including while
+  // the older one is mid-flight to Google — so finishing a job may only
+  // clear the exact revision that was picked up, never whatever is in the
+  // row now.
+  await pool.query(`ALTER TABLE sheets_sync_jobs ADD COLUMN IF NOT EXISTS revision BIGINT NOT NULL DEFAULT 0`);
 }

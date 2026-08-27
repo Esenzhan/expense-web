@@ -21,7 +21,8 @@ function backoffMs(attempts) {
 // process dies a moment later. ON CONFLICT coalesces: if this expense
 // already has a pending job (e.g. edited twice before either synced), only
 // the latest snapshot/kind survives — the earlier one is redundant, not a
-// separate change that also needs mirroring.
+// separate change that also needs mirroring. The bumped revision is what
+// lets runJob notice it has been superseded (see there).
 export async function enqueueSheetsSync(kind, userId, expense, previousWallet = null) {
   await pool.query(
     `INSERT INTO sheets_sync_jobs (expense_id, kind, user_id, expense_snapshot, previous_wallet)
@@ -34,7 +35,8 @@ export async function enqueueSheetsSync(kind, userId, expense, previousWallet = 
        attempts = 0,
        last_error = NULL,
        next_attempt_at = now(),
-       created_at = now()`,
+       created_at = now(),
+       revision = sheets_sync_jobs.revision + 1`,
     [expense.id, kind, userId, JSON.stringify(expense), previousWallet]
   );
 }
@@ -94,18 +96,35 @@ async function runJob(job) {
     if (job.kind === "append") await withTimeout(appendExpenseRow(user, expense), JOB_TIMEOUT_MS);
     else if (job.kind === "update") await withTimeout(updateExpenseRow(user, expense, job.previous_wallet), JOB_TIMEOUT_MS);
     else if (job.kind === "delete") await withTimeout(deleteExpenseRow(user, expense), JOB_TIMEOUT_MS);
-    await pool.query(`DELETE FROM sheets_sync_jobs WHERE id = $1`, [job.id]);
+    // Only clears the revision this run actually mirrored. Coalescing reuses
+    // the row (it's unique per expense), so an enqueue that lands WHILE this
+    // job is in flight — add an expense, delete it a moment later, while the
+    // append is still talking to Google — turns this row into a delete job.
+    // An unconditional DELETE here wiped that: the row stayed in the Sheet
+    // forever with nothing queued, and the site still reported "synced".
+    const { rows: cleared } = await pool.query(
+      `DELETE FROM sheets_sync_jobs WHERE id = $1 AND revision = $2 RETURNING id`,
+      [job.id, job.revision]
+    );
+    if (!cleared.length) {
+      console.log(
+        `Sheets sync job ${job.id} (${job.kind} #${job.expense_id}) was superseded mid-flight — leaving the newer job queued`
+      );
+    }
   } catch (err) {
     const attempts = job.attempts + 1;
     console.error(
       `Sheets sync job ${job.id} (${job.kind} #${job.expense_id}) failed on attempt ${attempts}:`,
       err.message
     );
+    // Same revision guard as the success path: a job that superseded this one
+    // mid-flight is a fresh change, and must not inherit this one's attempt
+    // count or be pushed into its backoff (or be flagged "stuck" for it).
     await pool.query(
       `UPDATE sheets_sync_jobs
        SET attempts = $2, last_error = $3, next_attempt_at = now() + ($4 || ' milliseconds')::interval
-       WHERE id = $1`,
-      [job.id, attempts, String(err.message || err).slice(0, 500), backoffMs(attempts)]
+       WHERE id = $1 AND revision = $5`,
+      [job.id, attempts, String(err.message || err).slice(0, 500), backoffMs(attempts), job.revision]
     );
   }
 }
