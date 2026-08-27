@@ -20,6 +20,7 @@ import { authRouter } from "./routes/auth.js";
 import { authMiddleware, verifyToken } from "./middleware/auth.js";
 import { openDeepgramStream } from "./services/deepgramStream.js";
 import { parseExpenseFromText } from "./services/parseExpense.js";
+import { processSheetsSyncQueue } from "./services/sheetsSyncQueue.js";
 
 const app = express();
 app.use(cors({ origin: process.env.FRONTEND_URL || "*" }));
@@ -142,6 +143,14 @@ initSchema()
     server.listen(PORT, () => {
       console.log(`Server + voice WebSocket listening on port ${PORT}`);
     });
+    // Durable retry for the Google Sheets mirror (see sheetsSyncQueue.js) —
+    // picks up anything appendExpenseRow/updateExpenseRow/deleteExpenseRow
+    // couldn't finish on the first try, including a job whose earlier
+    // attempt got cut off by this very process restarting.
+    processSheetsSyncQueue().catch((err) => console.error("Sheets sync queue tick failed:", err.message));
+    setInterval(() => {
+      processSheetsSyncQueue().catch((err) => console.error("Sheets sync queue tick failed:", err.message));
+    }, 20_000);
   })
   .catch((err) => {
     console.error("Failed to init DB schema:", err);

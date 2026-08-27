@@ -79,34 +79,6 @@ function rowValues(expense, who) {
   return [date, time, expense.amount, expense.category, expense.description || "", "сайт", who, String(expense.id)];
 }
 
-async function appendToOne(target, expense, who) {
-  try {
-    if (!target.google_refresh_token) return;
-    const spreadsheetId = await ensureUserSheet(target);
-    const sheets = sheetsApiFor(decrypt(target.google_refresh_token));
-    await getOrCreateWalletTab(sheets, spreadsheetId, expense.wallet);
-    await sheets.spreadsheets.values.append({
-      spreadsheetId,
-      range: `${expense.wallet}!A1`,
-      valueInputOption: "RAW",
-      insertDataOption: "INSERT_ROWS",
-      requestBody: { values: [rowValues(expense, who)] },
-    });
-  } catch (err) {
-    console.error("Sheets mirror (append) failed:", err.message);
-  }
-}
-
-// Best-effort — callers should not let a Sheets failure block the Postgres
-// write, which stays authoritative for the site itself.
-export async function appendExpenseRow(loggingUser, expense) {
-  const targets = await resolveTargets(loggingUser, expense.wallet).catch(() => [loggingUser]);
-  const who = targets.length > 1 ? loggingUser.name : "";
-  for (const target of targets) {
-    await appendToOne(target, expense, who);
-  }
-}
-
 async function findRow(sheets, spreadsheetId, wallet, expenseId) {
   const { data } = await sheets.spreadsheets.values.get({
     spreadsheetId,
@@ -117,26 +89,64 @@ async function findRow(sheets, spreadsheetId, wallet, expenseId) {
   return idx === -1 ? null : idx + 2; // header is row 1
 }
 
-async function updateOne(target, expense, who) {
-  try {
-    if (!target.google_refresh_token) return;
-    const spreadsheetId = await ensureUserSheet(target);
-    const sheets = sheetsApiFor(decrypt(target.google_refresh_token));
-    await getOrCreateWalletTab(sheets, spreadsheetId, expense.wallet);
-    const row = await findRow(sheets, spreadsheetId, expense.wallet, expense.id);
-    if (!row) {
+// No try/catch here on purpose — sheetsSyncQueue.js is what turns a thrown
+// error into a scheduled retry. Swallowing it here (the old behavior) is
+// exactly what used to lose a row for good the moment a single Google API
+// call hiccuped (rate limit, expired token, a server restart mid-request).
+async function appendToOne(target, expense, who) {
+  if (!target.google_refresh_token) return;
+  const spreadsheetId = await ensureUserSheet(target);
+  const sheets = sheetsApiFor(decrypt(target.google_refresh_token));
+  await getOrCreateWalletTab(sheets, spreadsheetId, expense.wallet);
+  // A retry of this same job (another target already succeeded, or a
+  // previous attempt got this far and then failed after the API call
+  // actually landed) must not re-append and create a duplicate row — check
+  // first, same as update/delete already effectively do via findRow.
+  const existingRow = await findRow(sheets, spreadsheetId, expense.wallet, expense.id);
+  if (existingRow) return;
+  await sheets.spreadsheets.values.append({
+    spreadsheetId,
+    range: `${expense.wallet}!A1`,
+    valueInputOption: "RAW",
+    insertDataOption: "INSERT_ROWS",
+    requestBody: { values: [rowValues(expense, who)] },
+  });
+}
+
+// Best-effort across targets — one target's failure (e.g. the other
+// account's token expired) shouldn't stop this one from mirroring — but
+// the caller (sheetsSyncQueue.js) needs to know if ANYTHING failed so it
+// can retry, so the first error is rethrown after every target's been tried.
+export async function appendExpenseRow(loggingUser, expense) {
+  const targets = await resolveTargets(loggingUser, expense.wallet).catch(() => [loggingUser]);
+  const who = targets.length > 1 ? loggingUser.name : "";
+  const errors = [];
+  for (const target of targets) {
+    try {
       await appendToOne(target, expense, who);
-      return;
+    } catch (err) {
+      errors.push(err);
     }
-    await sheets.spreadsheets.values.update({
-      spreadsheetId,
-      range: `${expense.wallet}!A${row}:H${row}`,
-      valueInputOption: "RAW",
-      requestBody: { values: [rowValues(expense, who)] },
-    });
-  } catch (err) {
-    console.error("Sheets mirror (update) failed:", err.message);
   }
+  if (errors.length) throw errors[0];
+}
+
+async function updateOne(target, expense, who) {
+  if (!target.google_refresh_token) return;
+  const spreadsheetId = await ensureUserSheet(target);
+  const sheets = sheetsApiFor(decrypt(target.google_refresh_token));
+  await getOrCreateWalletTab(sheets, spreadsheetId, expense.wallet);
+  const row = await findRow(sheets, spreadsheetId, expense.wallet, expense.id);
+  if (!row) {
+    await appendToOne(target, expense, who);
+    return;
+  }
+  await sheets.spreadsheets.values.update({
+    spreadsheetId,
+    range: `${expense.wallet}!A${row}:H${row}`,
+    valueInputOption: "RAW",
+    requestBody: { values: [rowValues(expense, who)] },
+  });
 }
 
 export async function updateExpenseRow(loggingUser, expense, previousWallet) {
@@ -151,48 +161,56 @@ export async function updateExpenseRow(loggingUser, expense, previousWallet) {
 
   const targets = await resolveTargets(loggingUser, expense.wallet).catch(() => [loggingUser]);
   const who = targets.length > 1 ? loggingUser.name : "";
+  const errors = [];
   for (const target of targets) {
-    await updateOne(target, expense, who);
+    try {
+      await updateOne(target, expense, who);
+    } catch (err) {
+      errors.push(err);
+    }
   }
+  if (errors.length) throw errors[0];
 }
 
 async function deleteOne(target, expense) {
-  try {
-    if (!target.google_refresh_token) return;
-    const spreadsheetId = await ensureUserSheet(target);
-    const sheets = sheetsApiFor(decrypt(target.google_refresh_token));
+  if (!target.google_refresh_token) return;
+  const spreadsheetId = await ensureUserSheet(target);
+  const sheets = sheetsApiFor(decrypt(target.google_refresh_token));
 
-    const { data } = await sheets.spreadsheets.get({ spreadsheetId });
-    const tab = data.sheets.find((s) => s.properties.title === expense.wallet);
-    if (!tab) return;
-    const row = await findRow(sheets, spreadsheetId, expense.wallet, expense.id);
-    if (!row) return;
+  const { data } = await sheets.spreadsheets.get({ spreadsheetId });
+  const tab = data.sheets.find((s) => s.properties.title === expense.wallet);
+  if (!tab) return;
+  const row = await findRow(sheets, spreadsheetId, expense.wallet, expense.id);
+  if (!row) return;
 
-    await sheets.spreadsheets.batchUpdate({
-      spreadsheetId,
-      requestBody: {
-        requests: [
-          {
-            deleteDimension: {
-              range: {
-                sheetId: tab.properties.sheetId,
-                dimension: "ROWS",
-                startIndex: row - 1,
-                endIndex: row,
-              },
+  await sheets.spreadsheets.batchUpdate({
+    spreadsheetId,
+    requestBody: {
+      requests: [
+        {
+          deleteDimension: {
+            range: {
+              sheetId: tab.properties.sheetId,
+              dimension: "ROWS",
+              startIndex: row - 1,
+              endIndex: row,
             },
           },
-        ],
-      },
-    });
-  } catch (err) {
-    console.error("Sheets mirror (delete) failed:", err.message);
-  }
+        },
+      ],
+    },
+  });
 }
 
 export async function deleteExpenseRow(loggingUser, expense) {
   const targets = await resolveTargets(loggingUser, expense.wallet).catch(() => [loggingUser]);
+  const errors = [];
   for (const target of targets) {
-    await deleteOne(target, expense);
+    try {
+      await deleteOne(target, expense);
+    } catch (err) {
+      errors.push(err);
+    }
   }
+  if (errors.length) throw errors[0];
 }

@@ -1,5 +1,5 @@
-import { useRef, useState } from "react";
-import { fetchExpenses } from "../api";
+import { useEffect, useRef, useState } from "react";
+import { fetchExpenses, fetchSheetsSyncStatus } from "../api";
 import { logout } from "../auth";
 import { haptic } from "../haptics";
 import { useSwipeDismissRight } from "../sheetGestures";
@@ -75,6 +75,7 @@ const Icons = {
   personX: <I><circle cx="10" cy="8" r="3.5" /><path d="M4.5 20a6 6 0 0 1 11 0" /><path d="m16.5 9.5 4 4m0-4-4 4" /></I>,
   chevron: <I><path d="m10 7 5 5-5 5" /></I>,
   logout: <I><path d="M9 4H6a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h3" /><path d="M15 16l4-4-4-4" /><path d="M19 12H9" /></I>,
+  sync: <I><path d="M4 12a8 8 0 0 1 14-5.2M20 12a8 8 0 0 1-14 5.2" /><path d="M18 3v4h-4M6 21v-4h4" /></I>,
 };
 
 function Row({ icon, label, value, badge, danger, onPress }) {
@@ -104,8 +105,22 @@ export default function SettingsSheet({ user, theme, onClose, onOpenCategories, 
   const [toggles, setToggles] = useState(loadToggles);
   const [closing, setClosing] = useState(false);
   const pageRef = useRef(null);
+  // Backfilled from sheetsSyncQueue.js (backend) — null while loading, then
+  // { pending, stuck }. "Stuck" (repeatedly failing, not just newly queued)
+  // is the only case worth flagging red — a couple of rows still waiting
+  // out their normal retry backoff is expected, not a problem.
+  const [syncStatus, setSyncStatus] = useState(null);
 
   useSwipeDismissRight(pageRef, onClose);
+
+  useEffect(() => {
+    fetchSheetsSyncStatus()
+      .then(setSyncStatus)
+      .catch(() => {
+        // offline or a transient error — leave the row showing nothing
+        // rather than a wrong/stale status
+      });
+  }, []);
 
   function handleClose() {
     if (closing) return;
@@ -161,6 +176,20 @@ export default function SettingsSheet({ user, theme, onClose, onOpenCategories, 
           <p className="settings-section">Аккаунт</p>
           <div className="settings-group">
             <Row icon={Icons.mail} label={user.name} value={user.email} />
+            <Row
+              icon={Icons.sync}
+              label="Синхронизация с Google Sheets"
+              value={
+                !syncStatus
+                  ? undefined
+                  : syncStatus.stuck > 0
+                  ? `Проблема: ${syncStatus.stuck}`
+                  : syncStatus.pending > 0
+                  ? `Ожидает: ${syncStatus.pending}`
+                  : "Синхронизировано"
+              }
+              danger={!!syncStatus?.stuck}
+            />
             <Row icon={Icons.logout} label="Выйти" onPress={logout} />
           </div>
         </>

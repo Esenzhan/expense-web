@@ -519,4 +519,32 @@ export async function initSchema() {
   await pool.query(`
     CREATE INDEX IF NOT EXISTS capital_items_snapshot_idx ON capital_items (snapshot_id);
   `);
+
+  // Durable retry queue for the Google Sheets mirror (services/sheetsSyncQueue.js).
+  // Replaces the old fire-and-forget appendExpenseRow/updateExpenseRow/
+  // deleteExpenseRow calls, which silently and permanently lost a row the
+  // moment a single Google API call failed (rate limit, expired token, the
+  // server restarting mid-request). One row per expense (the unique index
+  // below), so a second edit before the first sync ran just replaces the
+  // pending job with the latest snapshot instead of queuing redundant work.
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS sheets_sync_jobs (
+      id SERIAL PRIMARY KEY,
+      expense_id INTEGER NOT NULL,
+      kind TEXT NOT NULL CHECK (kind IN ('append', 'update', 'delete')),
+      user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      expense_snapshot JSONB NOT NULL,
+      previous_wallet TEXT,
+      attempts INTEGER NOT NULL DEFAULT 0,
+      last_error TEXT,
+      next_attempt_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+      created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+    );
+  `);
+  await pool.query(`
+    CREATE UNIQUE INDEX IF NOT EXISTS sheets_sync_jobs_expense_uidx ON sheets_sync_jobs (expense_id);
+  `);
+  await pool.query(`
+    CREATE INDEX IF NOT EXISTS sheets_sync_jobs_next_attempt_idx ON sheets_sync_jobs (next_attempt_at);
+  `);
 }

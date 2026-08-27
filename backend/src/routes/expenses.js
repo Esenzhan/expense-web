@@ -2,11 +2,16 @@ import { Router } from "express";
 import { pool } from "../db.js";
 import { isValidWallet, sharedWalletNames } from "../wallets.js";
 import { isValidCategory, fallbackCategoryFor } from "../categories.js";
-import { appendExpenseRow, updateExpenseRow, deleteExpenseRow } from "../services/sheets.js";
+import { enqueueSheetsSync, getSyncStatus } from "../services/sheetsSyncQueue.js";
 import { parseReceiptFromImage, parseReceiptItemsFromImage } from "../services/parseReceipt.js";
 import { tryLogScan, DAILY_SCAN_LIMIT } from "../services/receiptScans.js";
 
 export const expensesRouter = Router();
+
+// Powers the "Синхронизация с Google Sheets" row in Settings.
+expensesRouter.get("/sheets-sync-status", async (req, res) => {
+  res.json(await getSyncStatus(req.user.id));
+});
 
 // List expenses: visible if it's mine, OR the wallet is shared (Семья/
 // Бизнес/Ремонт by default) — shared wallets pool both accounts' rows.
@@ -130,7 +135,7 @@ expensesRouter.post("/", async (req, res) => {
     row = existing.rows[0];
     isNew = false;
   }
-  if (isNew) appendExpenseRow(req.user, row);
+  if (isNew) await enqueueSheetsSync("append", req.user.id, row);
   res.status(201).json(row);
 });
 
@@ -217,7 +222,7 @@ expensesRouter.put("/:id", async (req, res) => {
       : [wallet, amount, finalCategory, description || null, req.params.id, type]
   );
 
-  updateExpenseRow(req.user, rows[0], existing.wallet);
+  await enqueueSheetsSync("update", req.user.id, rows[0], existing.wallet);
   res.json(rows[0]);
 });
 
@@ -227,7 +232,7 @@ expensesRouter.delete("/:id", async (req, res) => {
     [req.params.id, req.user.id]
   );
   if (rows.length) {
-    deleteExpenseRow(req.user, rows[0]);
+    await enqueueSheetsSync("delete", req.user.id, rows[0]);
   }
   res.status(204).end();
 });

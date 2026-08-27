@@ -122,6 +122,11 @@ export async function deleteExpense(id) {
   await apiFetch(`/api/expenses/${id}`, { method: "DELETE" });
 }
 
+export async function fetchSheetsSyncStatus() {
+  const res = await apiFetch(`/api/expenses/sheets-sync-status`);
+  return res.json();
+}
+
 export async function fetchWalletTotals() {
   const res = await apiFetch(`/api/stats/by-wallet`);
   return res.json();
