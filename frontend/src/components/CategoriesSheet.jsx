@@ -1,35 +1,26 @@
 import { useRef, useState } from "react";
 import { listCategories } from "../categoryIcons";
 import { listWallets } from "../wallets";
-import { haptic, hapticHeavy, withHaptic } from "../haptics";
+import { haptic, withHaptic } from "../haptics";
 import { useSwipeDismiss } from "../sheetGestures";
 import CategoryGlyph from "./CategoryGlyph";
 import { catIconVars } from "../catIconVars";
 
-export default function CategoriesSheet({ initialWallet, onClose, onAdd, onEdit, onDelete }) {
+// Строка категории — целиком кнопка: тап открывает правку, и удаление
+// живёт уже там, в меню шапки. Раньше на строке висели карандаш и ✕ с
+// подтверждением прямо в списке — тот же путь, что у трат (тап по строке →
+// правка → меню → удалить), только у категорий он был свой.
+export default function CategoriesSheet({ initialWallet, onClose, onAdd, onEdit }) {
   const sheetRef = useRef(null);
   useSwipeDismiss(sheetRef, onClose);
 
   const wallets = listWallets();
   const [activeWallet, setActiveWallet] = useState(initialWallet || wallets[0]?.name);
-  const [confirmingName, setConfirmingName] = useState(null);
   const categories = listCategories(activeWallet);
 
   function pickWallet(name) {
     haptic();
     setActiveWallet(name);
-    setConfirmingName(null);
-  }
-
-  async function handleDelete(name) {
-    if (confirmingName !== name) {
-      haptic();
-      setConfirmingName(name);
-      return;
-    }
-    hapticHeavy();
-    setConfirmingName(null);
-    await onDelete(activeWallet, name);
   }
 
   return (
@@ -72,31 +63,24 @@ export default function CategoriesSheet({ initialWallet, onClose, onAdd, onEdit,
 
         <div className="cats-list">
           {categories.map((cat) => (
-            <div className="cat-row" key={cat.name}>
+            <button
+              className="cat-row"
+              key={cat.name}
+              onClick={() => {
+                haptic();
+                onEdit(activeWallet, cat);
+              }}
+            >
               <span className="category-icon" style={catIconVars(cat.bg, cat.fg)}>
                 <CategoryGlyph emoji={cat.emoji} size={20} />
               </span>
               <span className="cat-name">{cat.name}</span>
-              <button
-                className="wallet-edit"
-                aria-label="Редактировать категорию"
-                onClick={() => {
-                  haptic();
-                  onEdit(activeWallet, cat);
-                }}
-              >
+              <span className="cat-row-chevron" aria-hidden="true">
                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M15.5 5.5 18.5 8.5 8 19l-4 1 1-4L15.5 5.5Z" />
+                  <path d="m10 7 5 5-5 5" />
                 </svg>
-              </button>
-              <button
-                className="cat-delete"
-                aria-label="Удалить категорию"
-                onClick={() => handleDelete(cat.name)}
-              >
-                {confirmingName === cat.name ? "Точно?" : "✕"}
-              </button>
-            </div>
+              </span>
+            </button>
           ))}
         </div>
       </div>

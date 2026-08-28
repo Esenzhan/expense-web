@@ -3,6 +3,7 @@ import { createCategory, updateCategory } from "../api";
 import { haptic, hapticHeavy, withHaptic } from "../haptics";
 import { useSwipeDismiss } from "../sheetGestures";
 import CategoryGlyph from "./CategoryGlyph";
+import TrashIcon from "./TrashIcon";
 import { catIconVars } from "../catIconVars";
 import { PALETTE, ICON_GROUPS } from "../pickerOptions";
 
@@ -45,7 +46,7 @@ function suggestionsFor(name) {
 // the server and in one transaction (see routes/categories.js PUT); rows
 // already written to Google Sheets keep the old name until edited there by
 // hand, which is deliberate.
-export default function NewCategorySheet({ wallet, initial, onClose, onCreated }) {
+export default function NewCategorySheet({ wallet, initial, onClose, onCreated, onDelete }) {
   const sheetRef = useRef(null);
   useSwipeDismiss(sheetRef, onClose);
 
@@ -58,6 +59,10 @@ export default function NewCategorySheet({ wallet, initial, onClose, onCreated }
   });
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
+  // Delete lives here now, behind the same ⋮ → "Точно удалить?" the expense
+  // sheet uses, instead of a ✕ on every row of the list behind this one.
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [confirmDelete, setConfirmDelete] = useState(false);
 
   const color = PALETTE[colorIndex];
   const suggestions = suggestionsFor(name);
@@ -92,6 +97,21 @@ export default function NewCategorySheet({ wallet, initial, onClose, onCreated }
     }
   }
 
+  async function handleDelete() {
+    if (saving) return;
+    setSaving(true);
+    setError("");
+    try {
+      await onDelete(wallet, initial.name);
+      hapticHeavy();
+      setMenuOpen(false);
+      onCreated();
+    } catch (err) {
+      setError(err.message || "Не удалось удалить");
+      setSaving(false);
+    }
+  }
+
   return (
     <div className="sheet-backdrop" onClick={withHaptic(onClose)}>
       <div className="categories-sheet" ref={sheetRef} onClick={(event) => event.stopPropagation()}>
@@ -100,7 +120,37 @@ export default function NewCategorySheet({ wallet, initial, onClose, onCreated }
             ✕
           </button>
           <span className="cats-title">{initial ? "Редактировать категорию" : "Новая категория"}</span>
-          <span className="icon-button-spacer" />
+          {initial && onDelete ? (
+            <div className="edit-menu-wrap">
+              <button
+                className="icon-button"
+                onClick={() => {
+                  haptic();
+                  setMenuOpen((open) => !open);
+                  setConfirmDelete(false);
+                }}
+                aria-label="Меню"
+              >
+                ⋮
+              </button>
+              {menuOpen && (
+                <div className="edit-menu">
+                  <button
+                    className="menu-item danger"
+                    onClick={confirmDelete ? handleDelete : withHaptic(() => setConfirmDelete(true))}
+                    disabled={saving}
+                  >
+                    <span className="menu-item-text" key={confirmDelete ? "confirm" : "ask"}>
+                      {confirmDelete ? "Точно удалить?" : "Удалить"}
+                      <TrashIcon size={16} />
+                    </span>
+                  </button>
+                </div>
+              )}
+            </div>
+          ) : (
+            <span className="icon-button-spacer" />
+          )}
         </div>
 
         <p className="newcat-suggestions-label" style={{ textAlign: "center" }}>

@@ -1208,10 +1208,6 @@ export default function App() {
           onClose={() => setCategoriesOpen(false)}
           onAdd={(wallet) => setNewCategoryWallet(wallet)}
           onEdit={(wallet, cat) => setEditingCategory({ wallet, ...cat })}
-          onDelete={async (wallet, name) => {
-            await deleteCategory(wallet, name);
-            await reloadCategories();
-          }}
         />
       )}
 
@@ -1219,6 +1215,11 @@ export default function App() {
         <NewCategorySheet
           wallet={editingCategory?.wallet || newCategoryWallet}
           initial={editingCategory}
+          // Только для правки: удаление переехало со строки списка сюда, в
+          // меню шапки — тот же путь, что у траты.
+          onDelete={async (wallet, name) => {
+            await deleteCategory(wallet, name);
+          }}
           onClose={() => {
             setNewCategoryWallet(null);
             setEditingCategory(null);

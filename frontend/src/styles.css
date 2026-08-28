@@ -2721,13 +2721,25 @@ body {
   gap: 8px;
 }
 
+/* The whole row is the tap target now (opens the editor, where delete
+   lives) — it's a <button>, so it needs the element defaults reset. */
 .cat-row {
   display: flex;
   align-items: center;
   gap: 12px;
+  width: 100%;
+  border: none;
   background: var(--surface-soft);
   border-radius: 14px;
   padding: 10px 12px;
+  font-family: var(--font-ui);
+  color: var(--ink);
+  text-align: left;
+}
+
+.cat-row-chevron {
+  display: inline-flex;
+  color: var(--ink-soft);
 }
 
 .cat-name {
@@ -2740,17 +2752,6 @@ body {
   color: var(--ink-soft);
   font-size: 15px;
   letter-spacing: 2px;
-}
-
-.cat-delete {
-  border: none;
-  background: none;
-  color: var(--ink-soft);
-  font-size: 13px;
-  font-weight: 600;
-  padding: 6px 8px;
-  font-family: var(--font-ui);
-  white-space: nowrap;
 }
 
 .parent-category-pill {
