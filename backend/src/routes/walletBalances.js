@@ -14,12 +14,17 @@ export const walletBalancesRouter = Router();
 // got there (manual, voice, bot, offline sync, edit, delete) — and always
 // scoped to this account's own expenses, even on a shared wallet (the
 // other account's spending must not move a balance you set).
+//
+// The cutoff is logged_at (when the row was RECORDED), not created_at (the
+// date the money was spent, which the edit sheet can set to anything): an
+// expense entered now but dated yesterday has to come off a balance set
+// this morning. See the logged_at migration in db.js.
 walletBalancesRouter.get("/", async (req, res) => {
   const { rows } = await pool.query(
     `SELECT wb.wallet, wb.base_amount, wb.base_at,
        wb.base_amount - COALESCE((
          SELECT SUM(CASE WHEN e.type = 'income' THEN -e.amount ELSE e.amount END) FROM expenses e
-         WHERE e.wallet = wb.wallet AND e.created_at > wb.base_at AND e.user_id = $1
+         WHERE e.wallet = wb.wallet AND e.logged_at > wb.base_at AND e.user_id = $1
        ), 0) AS current_balance
      FROM wallet_balances wb
      WHERE wb.user_id = $1`,

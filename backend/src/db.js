@@ -154,6 +154,25 @@ export async function initSchema() {
   // 'expense', so this is fully backward-compatible. Postgres has no
   // "ADD CONSTRAINT IF NOT EXISTS", hence the pg_constraint existence check.
   await pool.query(`ALTER TABLE expenses ADD COLUMN IF NOT EXISTS type TEXT NOT NULL DEFAULT 'expense'`);
+
+  // WHEN THE ROW WAS RECORDED, as opposed to created_at, which is the date
+  // the money was actually spent and is freely overridable from the edit
+  // sheet ("вчера в 21:00"). The wallet balance is an anchor — "I had this
+  // much at base_at" — and subtracts everything logged after it, which has
+  // to mean "entered after", not "dated after": an expense added today but
+  // backdated to yesterday sits BEFORE a balance set this morning, so it
+  // used to leave the balance untouched, on every wallet. Editing an old
+  // expense's date to before the anchor had the mirror-image effect of
+  // silently giving money back.
+  //
+  // Backfilled from created_at rather than defaulted to now(): a plain
+  // DEFAULT would date every pre-existing expense to migration time, i.e.
+  // after every existing anchor, and every balance in the app would
+  // instantly drop by the user's entire history.
+  await pool.query(`ALTER TABLE expenses ADD COLUMN IF NOT EXISTS logged_at TIMESTAMPTZ`);
+  await pool.query(`UPDATE expenses SET logged_at = created_at WHERE logged_at IS NULL`);
+  await pool.query(`ALTER TABLE expenses ALTER COLUMN logged_at SET DEFAULT now()`);
+  await pool.query(`ALTER TABLE expenses ALTER COLUMN logged_at SET NOT NULL`);
   await pool.query(`
     DO $$
     BEGIN

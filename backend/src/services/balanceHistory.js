@@ -1,7 +1,8 @@
 // Same computation as GET /api/wallet-balances, scoped to one wallet — used
 // wherever a route needs "what is this wallet's balance right now" before
 // changing it (a manual edit's old_amount, either leg of a transfer, or a
-// debt's wallet adjustment). Null means this wallet has never had a
+// debt's wallet adjustment). These two are the only copies of that sum,
+// logged_at cutoff included — keep them identical. Null means this wallet has never had a
 // starting balance set for this account — distinct from an actual 0
 // balance, so a first-ever edit's history row correctly logs old_amount as
 // null instead of a misleading 0.
@@ -14,7 +15,7 @@ export async function getCurrentBalance(client, wallet, userId) {
   const { rows } = await client.query(
     `SELECT wb.base_amount - COALESCE((
          SELECT SUM(CASE WHEN e.type = 'income' THEN -e.amount ELSE e.amount END) FROM expenses e
-         WHERE e.wallet = wb.wallet AND e.created_at > wb.base_at AND e.user_id = $2
+         WHERE e.wallet = wb.wallet AND e.logged_at > wb.base_at AND e.user_id = $2
        ), 0) AS current_balance
      FROM wallet_balances wb
      WHERE wb.wallet = $1 AND wb.user_id = $2`,
