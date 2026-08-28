@@ -371,6 +371,43 @@ body {
   padding: 0;
 }
 
+/* Explicit save for the balance — see AccountBalanceRow.jsx for why this
+   is never committed on blur. Sits under the row while it's being edited. */
+.balance-actions {
+  display: flex;
+  gap: 8px;
+  margin: -4px 0 12px;
+}
+
+.balance-action {
+  flex: 1;
+  border: none;
+  border-radius: 12px;
+  padding: 10px;
+  background: var(--surface-soft);
+  color: var(--ink);
+  font-family: var(--font-ui);
+  font-weight: 700;
+  font-size: 13px;
+}
+
+.balance-action.primary {
+  background: var(--accent);
+  color: var(--on-accent);
+}
+
+/* Armed state — the second tap is the one that writes, so it reads as a
+   commitment rather than another neutral button. Text is --bg, not white:
+   --danger is a light red in dark mode, where white on it barely reads. */
+.balance-action.primary.confirming {
+  background: var(--danger);
+  color: var(--bg);
+}
+
+.balance-action:disabled {
+  opacity: 0.45;
+}
+
 .insights-button {
   border: none;
   background: var(--surface-soft);
