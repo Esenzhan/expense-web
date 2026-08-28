@@ -715,9 +715,17 @@ export default function App() {
       mergeAndSet(wallet, currentPeriod);
     }
 
-    const expenseParams = { limit: 50 };
-    if (wallet) expenseParams.wallet = wallet;
     const { start, end } = periodRange(currentPeriod);
+    // Bounded by the selected period, not by a row count. It used to ask for
+    // the last 50 rows regardless of date, so how far back the list reached
+    // depended on how dense the selection was: on "Все счета" those 50 rows
+    // are spread across every wallet AND both accounts, so the list stopped
+    // days earlier than the same period inside a single wallet — silently,
+    // with no hint it had been cut. Same bounds the summary above it and
+    // Insights already use, so the list now shows exactly the period it
+    // claims to. The limit is just a sanity cap, matching fetchExpensesRange.
+    const expenseParams = { from: start.toISOString(), to: end.toISOString(), limit: 2000 };
+    if (wallet) expenseParams.wallet = wallet;
     // Recorded before the request goes out: a sync that completed before
     // this timestamp is guaranteed to be reflected in whatever this fetch
     // comes back with, so clearConfirmedSynced below only ever drops a
