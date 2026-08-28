@@ -371,12 +371,30 @@ body {
   padding: 0;
 }
 
-/* Explicit save for the balance — see AccountBalanceRow.jsx for why this
-   is never committed on blur. Sits under the row while it's being edited. */
+/* Explicit save for the balance — see AccountBalanceRow.jsx for why this is
+   never committed on blur. The pair slides out from under the input: the
+   container clips (height 0 → 36px) while the buttons start shifted a full
+   height up, i.e. behind the row above, and drop into place. Same curve the
+   rest of the app already uses. Kept in the DOM while closed so leaving
+   animates too — hence pointer-events, not conditional rendering. */
 .balance-actions {
   display: flex;
+  align-items: flex-start;
   gap: 8px;
-  margin: -4px 0 12px;
+  overflow: hidden;
+  height: 0;
+  margin-bottom: 0;
+  pointer-events: none;
+  transition: height 0.2s cubic-bezier(0.2, 0.9, 0.3, 1),
+    margin-bottom 0.2s cubic-bezier(0.2, 0.9, 0.3, 1);
+}
+
+.balance-actions.open {
+  /* 10px padding + 16px line-height + 10px padding — both pinned below, so
+     this stays exact instead of drifting with font metrics */
+  height: 36px;
+  margin-bottom: 12px;
+  pointer-events: auto;
 }
 
 .balance-action {
@@ -384,16 +402,38 @@ body {
   border: none;
   border-radius: 12px;
   padding: 10px;
+  /* Fixed height, and the container doesn't stretch them (align-items above):
+     translateY(-100%) is relative to the element's OWN height, so a button
+     that squashed along with the closing container would start its slide
+     from 20px up instead of a full 36 and barely travel. */
+  height: 36px;
+  line-height: 16px;
   background: var(--surface-soft);
   color: var(--ink);
   font-family: var(--font-ui);
   font-weight: 700;
   font-size: 13px;
+  transform: translateY(-100%);
+  transition: transform 0.2s cubic-bezier(0.2, 0.9, 0.3, 1),
+    background-color 0.15s ease, color 0.15s ease;
+  /* Closed = leaving: the primary goes first and «Отмена» follows it up,
+     mirroring the order they arrive in. */
+  transition-delay: 40ms, 0s, 0s;
 }
 
 .balance-action.primary {
   background: var(--accent);
   color: var(--on-accent);
+  transition-delay: 0s, 0s, 0s;
+}
+
+.balance-actions.open .balance-action {
+  transform: translateY(0);
+  transition-delay: 0s, 0s, 0s;
+}
+
+.balance-actions.open .balance-action.primary {
+  transition-delay: 40ms, 0s, 0s;
 }
 
 /* Armed state — the second tap is the one that writes, so it reads as a
@@ -406,6 +446,31 @@ body {
 
 .balance-action:disabled {
   opacity: 0.45;
+}
+
+/* A save both closes the row and disables its own button — without this the
+   button would dim on its way out instead of just sliding away. */
+.balance-actions:not(.open) .balance-action:disabled {
+  opacity: 1;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  /* Keep the reveal legible, drop the travel: the row fades instead of
+     sliding, and the height change lands instantly. */
+  .balance-actions {
+    opacity: 0;
+    transition: opacity 0.15s ease;
+  }
+
+  .balance-actions.open {
+    opacity: 1;
+  }
+
+  .balance-action,
+  .balance-actions.open .balance-action {
+    transform: none;
+    transition: background-color 0.15s ease, color 0.15s ease;
+  }
 }
 
 .insights-button {

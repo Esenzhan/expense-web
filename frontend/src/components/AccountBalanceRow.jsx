@@ -37,8 +37,9 @@ export default function AccountBalanceRow({ balance, editable, onSave }) {
   function cancel() {
     haptic();
     setEditing(false);
-    setConfirming(false);
     setError("");
+    // `confirming` is deliberately left alone — resetting it here would
+    // recolour the button mid-slide-out. startEdit() clears it on reopen.
   }
 
   async function handleSave() {
@@ -54,8 +55,7 @@ export default function AccountBalanceRow({ balance, editable, onSave }) {
     try {
       await onSave(parsed);
       hapticHeavy();
-      setEditing(false);
-      setConfirming(false);
+      setEditing(false); // `confirming` stays put until reopen — see cancel()
     } catch (err) {
       // Keep editing open with the typed value and surface the failure —
       // it used to close silently and revert to the old number, so a save
@@ -67,9 +67,9 @@ export default function AccountBalanceRow({ balance, editable, onSave }) {
     }
   }
 
-  if (editing) {
-    return (
-      <div className="balance-row-wrap">
+  return (
+    <div className="balance-row-wrap">
+      {editing ? (
         <div className="balance-row">
           <span className="balance-label">Баланс</span>
           <input
@@ -91,33 +91,35 @@ export default function AccountBalanceRow({ balance, editable, onSave }) {
             onKeyDown={(event) => event.key === "Enter" && event.currentTarget.blur()}
           />
         </div>
-        {error && <p className="balance-error">{error}</p>}
-        <div className="balance-actions">
-          <button className="balance-action" onClick={cancel} disabled={saving}>
-            Отмена
-          </button>
-          <button
-            className={`balance-action primary ${confirming ? "confirming" : ""}`}
-            onClick={handleSave}
-            disabled={!changed || saving}
-          >
-            {saving ? "Сохраняю…" : confirming ? "Точно сохранить?" : "Сохранить"}
-          </button>
-        </div>
+      ) : (
+        <button className={`balance-row ${editable ? "" : "readonly"}`} onClick={startEdit}>
+          <span className="balance-label">Баланс</span>
+          <span className="balance-value">
+            {balance != null
+              ? `${balance.toLocaleString("ru-RU", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ₸`
+              : editable
+              ? "Указать сумму"
+              : "—"}
+          </span>
+        </button>
+      )}
+      {error && <p className="balance-error">{error}</p>}
+      {/* Mounted even when closed: it slides back under the field on the way
+          out, which can't happen to an unmounted element. Nothing in here is
+          reachable while closed — pointer-events are off in CSS. */}
+      <div className={`balance-actions ${editing ? "open" : ""}`} aria-hidden={!editing}>
+        <button className="balance-action" onClick={cancel} disabled={saving} tabIndex={editing ? 0 : -1}>
+          Отмена
+        </button>
+        <button
+          className={`balance-action primary ${confirming ? "confirming" : ""}`}
+          onClick={handleSave}
+          disabled={!changed || saving}
+          tabIndex={editing ? 0 : -1}
+        >
+          {saving ? "Сохраняю…" : confirming ? "Точно сохранить?" : "Сохранить"}
+        </button>
       </div>
-    );
-  }
-
-  return (
-    <button className={`balance-row ${editable ? "" : "readonly"}`} onClick={startEdit}>
-      <span className="balance-label">Баланс</span>
-      <span className="balance-value">
-        {balance != null
-          ? `${balance.toLocaleString("ru-RU", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ₸`
-          : editable
-          ? "Указать сумму"
-          : "—"}
-      </span>
-    </button>
+    </div>
   );
 }
