@@ -2721,15 +2721,36 @@ body {
   gap: 8px;
 }
 
-/* The whole row is the tap target now (opens the editor, where delete
-   lives) — it's a <button>, so it needs the element defaults reset. */
+/* Row + its drag handle. The wrap is what moves during a reorder (the
+   handle has to travel with the row), the button inside is the tap target
+   that opens the editor. */
+.cat-row-wrap {
+  position: relative;
+  display: flex;
+  align-items: center;
+  background: var(--surface-soft);
+  border-radius: 14px;
+  /* Rows step aside during a drag; the one under the finger must not lag
+     behind it, so it opts out via .dragging below. */
+  transition: transform 0.18s cubic-bezier(0.2, 0.9, 0.3, 1);
+}
+
+/* Lifted off the list while it follows the finger. */
+.cat-row-wrap.dragging {
+  transition: none;
+  z-index: 2;
+  box-shadow: 0 10px 24px rgba(20, 20, 26, 0.18);
+  transform-origin: center;
+}
+
 .cat-row {
   display: flex;
   align-items: center;
   gap: 12px;
-  width: 100%;
+  flex: 1;
+  min-width: 0;
   border: none;
-  background: var(--surface-soft);
+  background: none;
   border-radius: 14px;
   padding: 10px 12px;
   font-family: var(--font-ui);
@@ -2737,9 +2758,21 @@ body {
   text-align: left;
 }
 
-.cat-row-chevron {
+.cat-drag-handle {
   display: inline-flex;
+  align-items: center;
   color: var(--ink-soft);
+  padding: 10px 12px 10px 4px;
+  /* The handle owns vertical dragging; without this the browser starts
+     scrolling the sheet before the hold timer ever fires. */
+  touch-action: none;
+  cursor: grab;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .cat-row-wrap {
+    transition: none;
+  }
 }
 
 .cat-name {

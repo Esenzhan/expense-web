@@ -79,6 +79,48 @@ categoriesRouter.post("/", authMiddleware, async (req, res) => {
   }
 });
 
+// Explicit order for one wallet's list, as set by dragging a row by its
+// handle in the categories sheet. Takes the full list of names in their new
+// order and renumbers sort_order to match — the whole list rather than a
+// moved-from/moved-to pair, so a client that was looking at a stale list
+// can't interleave its idea of the order with someone else's.
+//
+// Declared before "/:wallet/:name" for readability only — Express matches on
+// segment count, and this path has one segment against that route's two.
+categoriesRouter.put("/order", authMiddleware, async (req, res) => {
+  const { wallet, names } = req.body;
+  const type = req.body.type === "income" ? "income" : "expense";
+
+  if (!(await isValidWallet(wallet))) {
+    return res.status(400).json({ error: "Некорректный счёт" });
+  }
+  if (!Array.isArray(names) || !names.length || !names.every((n) => typeof n === "string")) {
+    return res.status(400).json({ error: "Некорректный порядок" });
+  }
+
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+    // Renumbering by position in the array. Rows the client didn't send
+    // (created by the other account between its fetch and this save) keep
+    // whatever sort_order they had — they sort after these by id.
+    for (let i = 0; i < names.length; i++) {
+      await client.query(
+        `UPDATE categories SET sort_order = $1 WHERE wallet = $2 AND name = $3 AND type = $4`,
+        [i, wallet, names[i], type]
+      );
+    }
+    await client.query("COMMIT");
+  } catch (err) {
+    await client.query("ROLLBACK");
+    throw err;
+  } finally {
+    client.release();
+  }
+  invalidateCategoryCache();
+  res.status(204).end();
+});
+
 // Look (emoji/color) and, optionally, the name.
 //
 // Changing the look needs no migration at all: expenses reference a category

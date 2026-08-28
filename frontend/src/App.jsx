@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { fetchExpenses, fetchExpensesRange, fetchWalletTotals, fetchWalletBalances, setWalletBalance, fetchCategories, fetchWallets, fetchMe, warmBackend, createExpense, deleteExpense, deleteCategory, saveThemeSetting } from "./api";
+import { reorderCategories, fetchExpenses, fetchExpensesRange, fetchWalletTotals, fetchWalletBalances, setWalletBalance, fetchCategories, fetchWallets, fetchMe, warmBackend, createExpense, deleteExpense, deleteCategory, saveThemeSetting } from "./api";
 import { loadLocalTheme, setLocalTheme } from "./theme";
 import { getToken, setToken } from "./auth";
 import { listPendingExpenses, syncPendingExpenses, hasPendingExpenses, removePendingExpense, clearConfirmedSynced } from "./offlineQueue";
@@ -1208,6 +1208,10 @@ export default function App() {
           onClose={() => setCategoriesOpen(false)}
           onAdd={(wallet) => setNewCategoryWallet(wallet)}
           onEdit={(wallet, cat) => setEditingCategory({ wallet, ...cat })}
+          onReorder={async (wallet, names) => {
+            await reorderCategories(wallet, names);
+            await reloadCategories();
+          }}
         />
       )}
 

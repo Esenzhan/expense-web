@@ -334,6 +334,20 @@ export async function updateCategory(wallet, name, payload) {
   return res.json();
 }
 
+// New order for one wallet's category list — the full list of names as the
+// user arranged them by dragging (see CategoriesSheet's drag handle).
+export async function reorderCategories(wallet, names) {
+  const res = await apiFetch(`/api/categories/order`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ wallet, names }),
+  });
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    throw new Error(body.error || "Не удалось сохранить порядок");
+  }
+}
+
 export async function deleteCategory(wallet, name) {
   const res = await apiFetch(
     `/api/categories/${encodeURIComponent(wallet)}/${encodeURIComponent(name)}`,
