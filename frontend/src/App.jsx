@@ -989,7 +989,10 @@ export default function App() {
               <button
                 key={p.value}
                 className={`period-pill ${period === p.value ? "active" : ""}`}
-                onClick={() => setPeriod(p.value)}
+                onClick={() => {
+                  haptic();
+                  setPeriod(p.value);
+                }}
               >
                 {p.label}
               </button>
@@ -1021,10 +1024,8 @@ export default function App() {
         currentUserId={user.id}
         showMineToggle={hasOtherAuthor}
         onlyMine={onlyMine}
-        onToggleOnlyMine={() => {
-          haptic();
-          setOnlyMine((v) => !v);
-        }}
+        // Вибрация живёт на самой кнопке (ExpenseList), чтобы не задваивалась
+        onToggleOnlyMine={() => setOnlyMine((v) => !v)}
         categoryFilterOptions={categoryFilterOptions}
         categoryFilter={categoryFilter}
         categoryFilterActive={!!categoryFilter}

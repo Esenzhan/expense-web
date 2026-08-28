@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { haptic, hapticHeavy } from "../haptics";
+import { haptic, hapticHeavy, withHaptic } from "../haptics";
 import { resizeImageFile, captureVideoFrame, renderPdfFirstPageToDataUrl } from "../receiptCapture";
 
 function ListIcon() {
@@ -151,7 +151,7 @@ export default function ReceiptCameraSheet({ onClose, onCapture, onError }) {
     <div className="camera-sheet">
       <video ref={videoRef} autoPlay playsInline muted className="camera-video" />
 
-      <button className="camera-close" onClick={close} aria-label="Закрыть">
+      <button className="camera-close" onClick={withHaptic(close)} aria-label="Закрыть">
         ✕
       </button>
 
@@ -175,7 +175,7 @@ export default function ReceiptCameraSheet({ onClose, onCapture, onError }) {
           <button
             type="button"
             className="camera-side-button"
-            onClick={toggleTorch}
+            onClick={withHaptic(toggleTorch)}
             aria-label="Фонарик"
             style={{ visibility: torchSupported ? "visible" : "hidden" }}
           >
@@ -188,7 +188,7 @@ export default function ReceiptCameraSheet({ onClose, onCapture, onError }) {
             <button
               type="button"
               className="camera-side-button"
-              onClick={() => pdfInputRef.current?.click()}
+              onClick={withHaptic(() => pdfInputRef.current?.click())}
               aria-label="Загрузить PDF"
             >
               <PdfIcon />
@@ -196,7 +196,7 @@ export default function ReceiptCameraSheet({ onClose, onCapture, onError }) {
             <button
               type="button"
               className="camera-side-button"
-              onClick={() => galleryInputRef.current?.click()}
+              onClick={withHaptic(() => galleryInputRef.current?.click())}
               aria-label="Выбрать из галереи"
             >
               <GalleryIcon />

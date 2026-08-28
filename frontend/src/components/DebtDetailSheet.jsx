@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { fetchDebtPayments, payDebt, deleteDebt } from "../api";
-import { haptic, hapticHeavy } from "../haptics";
+import { haptic, hapticHeavy, withHaptic } from "../haptics";
 import { useSwipeDismiss } from "../sheetGestures";
 import { almaty } from "../insights";
 import { loadCached, saveCached } from "../offlineCache";
@@ -109,10 +109,10 @@ export default function DebtDetailSheet({ debt: initialDebt, user, currentUserId
   const isCreator = debt.created_by === currentUserId;
 
   return (
-    <div className="sheet-backdrop" onClick={onClose}>
+    <div className="sheet-backdrop" onClick={withHaptic(onClose)}>
       <div className="categories-sheet" ref={sheetRef} onClick={(event) => event.stopPropagation()}>
         <div className="cats-header">
-          <button className="icon-button" onClick={onClose} aria-label="Закрыть">
+          <button className="icon-button" onClick={withHaptic(onClose)} aria-label="Закрыть">
             ✕
           </button>
           <span className="cats-title">{debt.counterparty}</span>

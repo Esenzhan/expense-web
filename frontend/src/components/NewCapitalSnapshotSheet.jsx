@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { createCapitalSnapshot, fetchCapitalSnapshot } from "../api";
-import { hapticHeavy } from "../haptics";
+import { hapticHeavy, withHaptic } from "../haptics";
 import { useSwipeDismiss } from "../sheetGestures";
 import { loadCached, saveCached } from "../offlineCache";
 import CapitalItemsEditor, { emptyRow, rowsFromItems, rowsToItems } from "./CapitalItemsEditor";
@@ -73,10 +73,10 @@ export default function NewCapitalSnapshotSheet({ user, previousSnapshotId, onCl
   }
 
   return (
-    <div className="sheet-backdrop" onClick={onClose}>
+    <div className="sheet-backdrop" onClick={withHaptic(onClose)}>
       <div className="categories-sheet" ref={sheetRef} onClick={(event) => event.stopPropagation()}>
         <div className="cats-header">
-          <button className="icon-button" onClick={onClose} aria-label="Закрыть">
+          <button className="icon-button" onClick={withHaptic(onClose)} aria-label="Закрыть">
             ✕
           </button>
           <span className="cats-title">Новый снимок</span>

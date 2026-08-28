@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { useSwipeDismiss } from "../sheetGestures";
-import { haptic, hapticTick } from "../haptics";
+import { haptic, hapticTick, withHaptic } from "../haptics";
 
 const WEEKDAYS = ["ПН", "ВТ", "СР", "ЧТ", "ПТ", "СБ", "ВС"];
 
@@ -126,7 +126,7 @@ export default function DateTimePickerSheet({ initial, onClose, onApply }) {
   }
 
   return (
-    <div className="sheet-backdrop" onClick={onClose}>
+    <div className="sheet-backdrop" onClick={withHaptic(onClose)}>
       <div className="period-picker-sheet dt-picker-sheet" ref={sheetRef} onClick={(event) => event.stopPropagation()}>
         <div className="dt-cal-header">
           <span className="dt-cal-month">{monthLabel(viewMonth)}</span>
@@ -179,7 +179,7 @@ export default function DateTimePickerSheet({ initial, onClose, onApply }) {
         </label>
 
         <div className="confirm-actions">
-          <button className="btn-secondary" onClick={onClose}>
+          <button className="btn-secondary" onClick={withHaptic(onClose)}>
             Отмена
           </button>
           <button className="btn-primary" onClick={apply}>

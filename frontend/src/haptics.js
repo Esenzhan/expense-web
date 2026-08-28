@@ -72,3 +72,15 @@ export function hapticHeavy() {
     // no haptics — fine
   }
 }
+
+// Wraps a handler so the tap buzzes before it runs. Most sheets forward an
+// `onClose` prop straight into their ✕ and backdrop, and writing
+// `haptic(); onClose();` by hand in each one is exactly how half of them
+// ended up silent while the other half (the ones with a local handleClose)
+// buzzed. Pass hapticHeavy as `buzz` for a commit rather than a dismiss.
+export function withHaptic(handler, buzz = haptic) {
+  return (...args) => {
+    buzz();
+    return handler?.(...args);
+  };
+}

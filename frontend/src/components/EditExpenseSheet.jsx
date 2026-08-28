@@ -6,7 +6,7 @@ import CategoryGlyph from "./CategoryGlyph";
 import TrashIcon from "./TrashIcon";
 import DateTimePickerSheet from "./DateTimePickerSheet";
 import { listWallets } from "../wallets";
-import { haptic, hapticTick } from "../haptics";
+import { haptic, hapticTick, withHaptic } from "../haptics";
 import { useSwipeDismiss } from "../sheetGestures";
 import { catIconVars } from "../catIconVars";
 
@@ -378,14 +378,20 @@ export default function EditExpenseSheet({
 
   return (
     <>
-      <div className={`sheet-backdrop ${closing ? "closing" : ""}`} onClick={() => dismiss(onClose)}>
+      <div className={`sheet-backdrop ${closing ? "closing" : ""}`} onClick={() => {
+          haptic();
+          dismiss(onClose);
+        }}>
       <div
         className={`edit-sheet ${closing ? "closing" : ""}`}
         ref={sheetRef}
         onClick={(event) => event.stopPropagation()}
       >
         <div className="edit-header">
-          <button className="icon-button" onClick={() => dismiss(onClose)} aria-label="Закрыть">
+          <button className="icon-button" onClick={() => {
+          haptic();
+          dismiss(onClose);
+        }} aria-label="Закрыть">
             ✕
           </button>
           <div className="type-toggle">
@@ -431,6 +437,7 @@ export default function EditExpenseSheet({
                 <button
                   className="icon-button"
                   onClick={() => {
+                    haptic();
                     setMenuOpen((open) => !open);
                     setConfirmDelete(false);
                   }}
@@ -442,7 +449,7 @@ export default function EditExpenseSheet({
                   <div className="edit-menu">
                     <button
                       className="menu-item danger"
-                      onClick={confirmDelete ? handleDelete : () => setConfirmDelete(true)}
+                      onClick={confirmDelete ? handleDelete : withHaptic(() => setConfirmDelete(true))}
                       disabled={saving}
                     >
                       <span className="menu-item-text" key={confirmDelete ? "confirm" : "ask"}>
@@ -509,7 +516,10 @@ export default function EditExpenseSheet({
                 key={cat}
                 className="category-pick"
                 style={catIconVars(catIcon.bg, catIcon.fg)}
-                onClick={() => scrollCategoryTo(index)}
+                onClick={() => {
+              haptic();
+              scrollCategoryTo(index);
+            }}
                 aria-label={cat}
               >
                 <CategoryGlyph emoji={catIcon.emoji} />
@@ -562,7 +572,7 @@ export default function EditExpenseSheet({
           </button>
         </div>
 
-        <button className="sheet-close" onClick={handleSave} disabled={saving}>
+        <button className="sheet-close" onClick={withHaptic(handleSave)} disabled={saving}>
           {saving ? "Сохраняю…" : "Сохранить"}
         </button>
       </div>

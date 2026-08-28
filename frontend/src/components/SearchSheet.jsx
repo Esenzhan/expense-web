@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { withHaptic } from "../haptics";
 import { searchExpenses } from "../api";
 import { getCategoryIcon, getIncomeCategoryIcon } from "../categoryIcons";
 import { almaty } from "../insights";
@@ -54,10 +55,10 @@ export default function SearchSheet({ wallet, currentUserId, onSelect, onClose }
   }, [query, wallet]);
 
   return (
-    <div className="sheet-backdrop" onClick={onClose}>
+    <div className="sheet-backdrop" onClick={withHaptic(onClose)}>
       <div className="categories-sheet" ref={sheetRef} onClick={(event) => event.stopPropagation()}>
         <div className="cats-header">
-          <button className="icon-button" onClick={onClose} aria-label="Закрыть">
+          <button className="icon-button" onClick={withHaptic(onClose)} aria-label="Закрыть">
             ✕
           </button>
           <span className="cats-title">Поиск</span>
@@ -97,7 +98,7 @@ export default function SearchSheet({ wallet, currentUserId, onSelect, onClose }
                   <button
                     className={`search-result-row ${readonly ? "readonly" : ""}`}
                     key={expense.id}
-                    onClick={() => !readonly && onSelect(expense)}
+                    onClick={() => !readonly && withHaptic(onSelect)(expense)}
                   >
                     <span className="category-icon" style={catIconVars(icon.bg, icon.fg)}>
                       <CategoryGlyph emoji={icon.emoji} size={18} />

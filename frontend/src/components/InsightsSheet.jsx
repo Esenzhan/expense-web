@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { withHaptic, haptic } from "../haptics";
 import { createPortal } from "react-dom";
 import { getCategoryIcon, listCategories } from "../categoryIcons";
 import { getWalletIcon } from "../wallets";
@@ -128,7 +129,7 @@ export default function InsightsSheet({ user, period, insights: data, wallet, wa
   // получает transform (scale) — transform делает предка containing block
   // для position:fixed, и затемнение сжималось вместе с экраном
   return createPortal(
-    <div className="sheet-backdrop" onClick={onClose}>
+    <div className="sheet-backdrop" onClick={withHaptic(onClose)}>
       <div className="insights-sheet" ref={sheetRef} onClick={(event) => event.stopPropagation()}>
         <div className="insights-header">
           <div className="wallet-chip">
@@ -143,7 +144,7 @@ export default function InsightsSheet({ user, period, insights: data, wallet, wa
               <div className="wallet-chip-balance">−{walletBalance.toLocaleString("ru-RU")} ₸</div>
             </div>
           </div>
-          <button className="icon-button" onClick={onClose} aria-label="Закрыть">
+          <button className="icon-button" onClick={withHaptic(onClose)} aria-label="Закрыть">
             ✕
           </button>
         </div>
@@ -179,7 +180,7 @@ export default function InsightsSheet({ user, period, insights: data, wallet, wa
                   onChange={(event) => setLimitDraft(event.target.value)}
                   onKeyDown={(event) => event.key === "Enter" && saveLimit()}
                 />
-                <button className="limit-save" onClick={saveLimit}>
+                <button className="limit-save" onClick={withHaptic(saveLimit)}>
                   ОК
                 </button>
               </div>
@@ -187,6 +188,7 @@ export default function InsightsSheet({ user, period, insights: data, wallet, wa
               <button
                 className="limit-pill"
                 onClick={() => {
+                  haptic();
                   setLimitDraft(monthlyLimit ? String(monthlyLimit) : "");
                   setEditingLimit(true);
                 }}
@@ -334,13 +336,13 @@ export default function InsightsSheet({ user, period, insights: data, wallet, wa
                               onChange={(event) => setCategoryLimitDraft(event.target.value)}
                               onKeyDown={(event) => event.key === "Enter" && saveCategoryLimit(cat.name)}
                             />
-                            <button className="limit-save" onClick={() => saveCategoryLimit(cat.name)}>
+                            <button className="limit-save" onClick={() => withHaptic(saveCategoryLimit)(cat.name)}>
                               ОК
                             </button>
                             <button
                               className="icon-button"
                               aria-label="Отмена"
-                              onClick={() => setEditingCategory(null)}
+                              onClick={withHaptic(() => setEditingCategory(null))}
                             >
                               ✕
                             </button>
@@ -349,6 +351,7 @@ export default function InsightsSheet({ user, period, insights: data, wallet, wa
                           <button
                             className="category-limit-body"
                             onClick={() => {
+                              haptic();
                               setEditingCategory(cat.name);
                               setCategoryLimitDraft(limit ? String(limit) : "");
                             }}

@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { fetchCapitalSnapshot, updateCapitalSnapshot, deleteCapitalSnapshot } from "../api";
-import { haptic, hapticHeavy } from "../haptics";
+import { haptic, hapticHeavy, withHaptic } from "../haptics";
 import { useSwipeDismiss } from "../sheetGestures";
 import { almaty } from "../insights";
 import { loadCached, saveCached } from "../offlineCache";
@@ -108,10 +108,10 @@ export default function CapitalDetailSheet({ user, snapshot, previousTotal, onCl
   const growth = previousTotal != null ? total - Number(previousTotal) : null;
 
   return (
-    <div className="sheet-backdrop" onClick={onClose}>
+    <div className="sheet-backdrop" onClick={withHaptic(onClose)}>
       <div className="categories-sheet" ref={sheetRef} onClick={(event) => event.stopPropagation()}>
         <div className="cats-header">
-          <button className="icon-button" onClick={onClose} aria-label="Закрыть">
+          <button className="icon-button" onClick={withHaptic(onClose)} aria-label="Закрыть">
             ✕
           </button>
           <span className="cats-title">{formatDate(snapshot.created_at)}</span>
@@ -119,6 +119,7 @@ export default function CapitalDetailSheet({ user, snapshot, previousTotal, onCl
             <button
               className="icon-button"
               onClick={() => {
+                haptic();
                 setMenuOpen((open) => !open);
                 setConfirmingDelete(false);
               }}
@@ -130,7 +131,7 @@ export default function CapitalDetailSheet({ user, snapshot, previousTotal, onCl
               <div className="edit-menu">
                 <button
                   className="menu-item danger"
-                  onClick={confirmingDelete ? handleDelete : () => setConfirmingDelete(true)}
+                  onClick={confirmingDelete ? handleDelete : withHaptic(() => setConfirmingDelete(true))}
                   disabled={saving}
                 >
                   <span className="menu-item-text" key={confirmingDelete ? "confirm" : "ask"}>

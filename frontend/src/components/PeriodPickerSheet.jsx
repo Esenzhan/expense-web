@@ -1,6 +1,6 @@
 import { useRef, useState } from "react";
 import { useSwipeDismiss } from "../sheetGestures";
-import { haptic } from "../haptics";
+import { haptic, withHaptic } from "../haptics";
 
 function todayDateOnly() {
   return new Date().toISOString().slice(0, 10);
@@ -28,10 +28,10 @@ export default function PeriodPickerSheet({ initialFrom, initialTo, onClose, onA
   }
 
   return (
-    <div className="sheet-backdrop" onClick={onClose}>
+    <div className="sheet-backdrop" onClick={withHaptic(onClose)}>
       <div className="period-picker-sheet" ref={sheetRef} onClick={(event) => event.stopPropagation()}>
         <div className="cats-header">
-          <button className="icon-button" onClick={onClose} aria-label="Закрыть">
+          <button className="icon-button" onClick={withHaptic(onClose)} aria-label="Закрыть">
             ✕
           </button>
           <span className="cats-title">Выбрать период</span>

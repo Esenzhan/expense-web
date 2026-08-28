@@ -4,7 +4,7 @@ import { enqueueExpense, syncPendingExpenses } from "../offlineQueue";
 import { getCategoryIcon } from "../categoryIcons";
 import CategoryGlyph from "./CategoryGlyph";
 import { catIconVars } from "../catIconVars";
-import { haptic, hapticHeavy } from "../haptics";
+import { haptic, hapticHeavy, withHaptic } from "../haptics";
 import { useSwipeDismiss } from "../sheetGestures";
 import { formatDateHeader } from "./ExpenseList";
 
@@ -113,10 +113,10 @@ export default function ScanReviewSheet({ items: initialItems, onClose, onCommit
   }
 
   return (
-    <div className="sheet-backdrop" onClick={onClose}>
+    <div className="sheet-backdrop" onClick={withHaptic(onClose)}>
       <div className="categories-sheet" ref={sheetRef} onClick={(event) => event.stopPropagation()}>
         <div className="cats-header">
-          <button className="icon-button" onClick={onClose} aria-label="Закрыть" disabled={saving}>
+          <button className="icon-button" onClick={withHaptic(onClose)} aria-label="Закрыть" disabled={saving}>
             ✕
           </button>
           <span className="cats-title scan-review-title">
@@ -165,7 +165,7 @@ export default function ScanReviewSheet({ items: initialItems, onClose, onCommit
         )}
 
         <div className="confirm-actions">
-          <button className="btn-secondary" onClick={onClose} disabled={saving}>
+          <button className="btn-secondary" onClick={withHaptic(onClose)} disabled={saving}>
             Отмена
           </button>
           <button className="btn-primary" onClick={handleSave} disabled={saving}>

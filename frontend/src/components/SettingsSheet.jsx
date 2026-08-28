@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { fetchExpenses, fetchSheetsSyncStatus } from "../api";
 import { logout } from "../auth";
-import { haptic } from "../haptics";
+import { haptic, withHaptic } from "../haptics";
 import { useSwipeDismissRight } from "../sheetGestures";
 import { REMINDERS_ENABLED_KEY } from "./RemindersSheet";
 import { THEME_LABELS } from "./ThemeSheet";
@@ -80,7 +80,7 @@ const Icons = {
 
 function Row({ icon, label, value, badge, danger, onPress }) {
   return (
-    <button className={`settings-row ${danger ? "danger" : ""}`} onClick={onPress}>
+    <button className={`settings-row ${danger ? "danger" : ""}`} onClick={withHaptic(onPress)}>
       <span className="settings-row-icon">{icon}</span>
       <span className="settings-row-label">{label}</span>
       {badge && <span className="settings-badge">{badge}</span>}
@@ -91,7 +91,7 @@ function Row({ icon, label, value, badge, danger, onPress }) {
 
 function ToggleRow({ icon, label, on, onFlip }) {
   return (
-    <button className="settings-row" onClick={onFlip}>
+    <button className="settings-row" onClick={withHaptic(onFlip)}>
       <span className="settings-row-icon">{icon}</span>
       <span className="settings-row-label">{label}</span>
       <span className={`switch ${on ? "on" : ""}`}>

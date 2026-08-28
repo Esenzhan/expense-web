@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { getCategoryIcon, getIncomeCategoryIcon } from "../categoryIcons";
 import { almaty, startOfAlmatyDay } from "../insights";
-import { haptic } from "../haptics";
+import { haptic, withHaptic } from "../haptics";
 import ExpenseRow from "./ExpenseRow";
 import CategoryGlyph from "./CategoryGlyph";
 import CategoryFilterDropdown from "./CategoryFilterDropdown";
@@ -101,7 +101,7 @@ export default function ExpenseList({
             </div>
           )}
           {showMineToggle && (
-            <button className="mine-toggle" onClick={onToggleOnlyMine}>
+            <button className="mine-toggle" onClick={withHaptic(onToggleOnlyMine)}>
               <span>Только мои</span>
               <span className={`switch switch-sm ${onlyMine ? "on" : ""}`}>
                 <span className="switch-knob" />

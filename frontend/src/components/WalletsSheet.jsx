@@ -1,6 +1,6 @@
 import { useRef } from "react";
 import { listWallets } from "../wallets";
-import { haptic } from "../haptics";
+import { haptic, withHaptic } from "../haptics";
 import { useSwipeDismiss } from "../sheetGestures";
 import CategoryGlyph from "./CategoryGlyph";
 import { catIconVars } from "../catIconVars";
@@ -43,10 +43,10 @@ export default function WalletsSheet({ balances, pendingWalletDeltas, selected, 
   }
 
   return (
-    <div className="sheet-backdrop" onClick={onClose}>
+    <div className="sheet-backdrop" onClick={withHaptic(onClose)}>
       <div className="categories-sheet" ref={sheetRef} onClick={(event) => event.stopPropagation()}>
         <div className="cats-header">
-          <button className="icon-button" onClick={onClose} aria-label="Закрыть">
+          <button className="icon-button" onClick={withHaptic(onClose)} aria-label="Закрыть">
             ✕
           </button>
           <span className="cats-title">Счета</span>

@@ -1,7 +1,7 @@
 import { useEffect, useRef } from "react";
 import CategoryGlyph from "./CategoryGlyph";
 import TrashIcon from "./TrashIcon";
-import { hapticHeavy } from "../haptics";
+import { hapticHeavy, haptic } from "../haptics";
 import { catIconVars } from "../catIconVars";
 
 // Drag left reveals a fixed-width delete button behind the row; releasing
@@ -103,7 +103,9 @@ export default function ExpenseRow({ expense, icon, readonly, onSelect, onDelete
       setOpen(false, true); // tapping the row while open just closes it
       return;
     }
-    if (!readonly) onSelect?.(expense);
+    if (readonly) return;
+    haptic(); // тап по строке открывает редактирование — та же отдача, что у кнопок
+    onSelect?.(expense);
   }
 
   function handleDeleteClick() {

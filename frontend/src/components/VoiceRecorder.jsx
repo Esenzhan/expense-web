@@ -4,7 +4,7 @@ import { enqueueExpense, syncPendingExpenses } from "../offlineQueue";
 import { getToken } from "../auth";
 import { getCategoryIcon } from "../categoryIcons";
 import CategoryGlyph from "./CategoryGlyph";
-import { haptic, hapticHeavy } from "../haptics";
+import { haptic, hapticHeavy, withHaptic } from "../haptics";
 import { catIconVars } from "../catIconVars";
 import ReceiptCameraSheet from "./ReceiptCameraSheet";
 
@@ -370,7 +370,7 @@ export default function VoiceRecorder({ onSaved, onManualAdd, onScanned }) {
               </div>
             </div>
             <div className="confirm-actions">
-              <button className="btn-secondary" onClick={dismissProposal}>
+              <button className="btn-secondary" onClick={withHaptic(dismissProposal)}>
                 Отмена
               </button>
               <button className="btn-primary" onClick={confirmProposal}>
@@ -421,7 +421,7 @@ export default function VoiceRecorder({ onSaved, onManualAdd, onScanned }) {
             >
               <StopIcon />
             </button>
-            <button className="cancel-button" onClick={cancelRecording} aria-label="Отменить запись">
+            <button className="cancel-button" onClick={withHaptic(cancelRecording)} aria-label="Отменить запись">
               ✕
             </button>
           </div>
