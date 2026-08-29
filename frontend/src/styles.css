@@ -92,6 +92,27 @@ body {
      bounce of the whole page — the gray/white page background flashing in
      at the side is the single biggest "this is a website" tell on iOS. */
   overscroll-behavior: none;
+  /* Nothing on the screen is selectable text — a long press on a category
+     name or a sum should do nothing, the way it does in a native app,
+     instead of raising the selection handles and the Copy/Look Up callout.
+     Input fields opt back in below. -webkit-touch-callout kills the iOS
+     long-press menu separately from selection: without it, a long press on
+     an icon or the app's own text still pops the callout. */
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-touch-callout: none;
+}
+
+/* The exception: anywhere the user actually types. Selection and the
+   iOS paste callout have to keep working there, so both properties are
+   restored rather than merely unset. */
+input,
+textarea,
+select,
+[contenteditable="true"] {
+  -webkit-user-select: text;
+  user-select: text;
+  -webkit-touch-callout: default;
 }
 
 .app {
