@@ -15,6 +15,15 @@ function FilterIcon() {
   );
 }
 
+function PersonIcon() {
+  return (
+    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <circle cx="12" cy="8" r="3.6" />
+      <path d="M5 20a7 7 0 0 1 14 0" />
+    </svg>
+  );
+}
+
 // Both the header label and the day-bucket grouping below are anchored to
 // Asia/Almaty (like everywhere else in insights.js) rather than the
 // device's own timezone — otherwise a device set to a different timezone
@@ -75,14 +84,14 @@ export default function ExpenseList({
           {categoryFilterOptions?.length > 0 && (
             <div className="category-filter-wrap">
               <button
-                className={`category-filter-chip ${categoryFilter ? "active" : ""}`}
+                className={`filter-pill has-icon ${categoryFilter ? "active" : ""}`}
                 onClick={() => {
                   haptic();
                   setDropdownOpen((v) => !v);
                 }}
               >
                 <span
-                  className="category-icon category-filter-chip-icon"
+                  className="category-icon filter-pill-icon"
                   style={selectedFilterIcon ? catIconVars(selectedFilterIcon.bg, selectedFilterIcon.fg) : undefined}
                 >
                   {selectedFilterIcon ? <CategoryGlyph emoji={selectedFilterIcon.emoji} size={12} /> : <FilterIcon />}
@@ -100,12 +109,17 @@ export default function ExpenseList({
               )}
             </div>
           )}
+          {/* Same pill as the category filter — on/off reads from the fill, the
+              way the period pills above already work, instead of this being a
+              bare label with a miniature iOS switch glued to it. */}
           {showMineToggle && (
-            <button className="mine-toggle" onClick={withHaptic(onToggleOnlyMine)}>
+            <button
+              className={`filter-pill ${onlyMine ? "active" : ""}`}
+              onClick={withHaptic(onToggleOnlyMine)}
+              aria-pressed={onlyMine}
+            >
+              <PersonIcon />
               <span>Только мои</span>
-              <span className={`switch switch-sm ${onlyMine ? "on" : ""}`}>
-                <span className="switch-knob" />
-              </span>
             </button>
           )}
         </div>

@@ -539,6 +539,9 @@ select,
   align-items: center;
   justify-content: space-between;
   gap: 8px;
+  /* Was faked per-child (a margin-bottom on the chip, a padding-bottom on
+     the toggle) — which is exactly why the two sat on different baselines. */
+  margin-bottom: 10px;
 }
 
 .section-title-row .section-title {
@@ -551,53 +554,58 @@ select,
   gap: 10px;
 }
 
-.mine-toggle {
-  display: flex;
+/* The two list filters ("Категория" and "Только мои") are one control
+   shape: the same soft pill the period selector uses, filled with the
+   accent when it's on. They used to be two different things — an outlined
+   chip and a bare label with a miniature iOS switch — sitting on different
+   baselines. On/off now reads from the fill, like the period pills. */
+.filter-pill {
+  display: inline-flex;
   align-items: center;
   gap: 6px;
-  background: none;
   border: none;
-  padding: 0 0 10px;
-  font-size: 13px;
+  background: var(--surface-soft);
   color: var(--ink-soft);
-  cursor: pointer;
+  border-radius: 999px;
+  padding: 5px 10px;
+  font-family: var(--font-ui);
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+  transition: background 0.16s ease, color 0.16s ease;
+}
+
+.filter-pill.active {
+  background: var(--accent);
+  color: var(--on-accent);
+}
+
+/* The category one carries a round 20px icon, which needs the left inset
+   pulled in so the pill doesn't grow lopsided. */
+.filter-pill.has-icon {
+  padding-left: 4px;
 }
 
 .category-filter-wrap {
   position: relative;
 }
 
-.category-filter-chip {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  background: var(--surface-soft);
-  border: 1.5px solid transparent;
-  border-radius: 999px;
-  padding: 4px 10px 4px 4px;
-  margin-bottom: 10px;
-  font-size: 12px;
-  font-weight: 600;
-  font-family: var(--font-ui);
-  color: var(--ink-soft);
-  white-space: nowrap;
-}
-
-.category-filter-chip.active {
-  border-color: var(--ink);
-  color: var(--ink);
-}
-
-/* Combined with .category-icon (not standalone) so the chip's icon picks
+/* Combined with .category-icon (not standalone) so the pill's icon picks
    up that class's light/dark --cat-bg/--cat-fg swap for free — this rule
    only needs to shrink it down from the 38px row-icon size, and the
    doubled class keeps that override winning regardless of source order. */
-.category-icon.category-filter-chip-icon {
+.category-icon.filter-pill-icon {
   width: 20px;
   height: 20px;
   min-width: 20px;
   border-radius: 50%;
   font-size: 12px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .filter-pill {
+    transition: none;
+  }
 }
 
 /* Popover dropdown for the "Категория" chip — same visual language as
@@ -2346,22 +2354,6 @@ select,
      var(--accent), which is near-white in dark mode, so the knob needs to
      flip to --on-accent there or it disappears into the track. */
   background: var(--on-accent);
-}
-
-.switch-sm {
-  width: 34px;
-  height: 20px;
-  min-width: 34px;
-  padding: 2px;
-}
-
-.switch-sm .switch-knob {
-  width: 16px;
-  height: 16px;
-}
-
-.switch-sm.on .switch-knob {
-  transform: translateX(14px);
 }
 
 /* Reminders page */
