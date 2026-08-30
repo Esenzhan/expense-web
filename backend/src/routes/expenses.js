@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { pool } from "../db.js";
-import { isValidWallet, sharedWalletNames } from "../wallets.js";
+import { resolveWalletName, sharedWalletNames } from "../wallets.js";
 import { resolveCategoryName } from "../categories.js";
 import { enqueueSheetsSync, getSyncStatus } from "../services/sheetsSyncQueue.js";
 import { parseReceiptFromImage, parseReceiptItemsFromImage } from "../services/parseReceipt.js";
@@ -76,10 +76,15 @@ expensesRouter.get("/", async (req, res) => {
 // window), so it retries either way — ON CONFLICT DO NOTHING below makes a
 // retried create return the original row instead of inserting a second one.
 expensesRouter.post("/", async (req, res) => {
-  const { wallet, amount, category, description, raw_text, created_at, idempotencyKey } = req.body;
+  const { amount, category, description, raw_text, created_at, idempotencyKey } = req.body;
   const type = req.body.type === "income" ? "income" : "expense";
 
-  if (!(await isValidWallet(wallet))) {
+  // Forwards a renamed wallet to its new name (see resolveWalletName) —
+  // an offline queue flushed after a rename, or the other account's phone
+  // still on its cached list, would otherwise be rejected outright. Every
+  // use of `wallet` below is this resolved name.
+  const wallet = await resolveWalletName(req.body.wallet);
+  if (!wallet) {
     return res.status(400).json({ error: "Некорректный кошелёк" });
   }
   if (typeof amount !== "number" || !Number.isFinite(amount) || amount <= 0) {
@@ -168,9 +173,12 @@ expensesRouter.post("/scan", async (req, res) => {
 // actually logged an expense can edit or delete it — the other side sees
 // it greyed out and read-only in the UI.
 expensesRouter.put("/:id", async (req, res) => {
-  const { wallet, amount, category, description, created_at } = req.body;
+  const { amount, category, description, created_at } = req.body;
 
-  if (!(await isValidWallet(wallet))) {
+  // Same forwarding as the create path above — an edit sheet opened before
+  // a rename still posts the old wallet name.
+  const wallet = await resolveWalletName(req.body.wallet);
+  if (!wallet) {
     return res.status(400).json({ error: "Некорректный кошелёк" });
   }
   if (typeof amount !== "number" || !Number.isFinite(amount) || amount <= 0) {

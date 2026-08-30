@@ -83,8 +83,21 @@ export async function initSchema() {
       shared BOOLEAN NOT NULL DEFAULT true
     );
   `);
-  // Idempotent for wallets tables created before "shared" existed.
-  await pool.query(`ALTER TABLE wallets ADD COLUMN IF NOT EXISTS shared BOOLEAN NOT NULL DEFAULT true`);
+  // Idempotent for wallets tables created before "shared" existed. The
+  // column defaults to true, so the one wallet that predates it and must
+  // NOT be shared ("Личные") is corrected here — but only on the boot that
+  // actually adds the column. It used to be an unconditional UPDATE on
+  // every boot, which was harmless only while the choice wasn't user-
+  // editable; now that the create/edit sheet exposes it, that would silently
+  // undo "make Личные shared" on the next deploy.
+  const { rows: sharedCol } = await pool.query(`
+    SELECT 1 FROM information_schema.columns
+    WHERE table_name = 'wallets' AND column_name = 'shared'
+  `);
+  if (!sharedCol.length) {
+    await pool.query(`ALTER TABLE wallets ADD COLUMN shared BOOLEAN NOT NULL DEFAULT true`);
+    await pool.query(`UPDATE wallets SET shared = false WHERE name = 'Личные'`);
+  }
   // Only for a genuinely fresh install (same reasoning as the categories
   // seed below): this used to run unconditionally on every boot, which
   // meant deleting a built-in wallet (e.g. "Ремонт" once a renovation is
@@ -99,9 +112,6 @@ export async function initSchema() {
       );
     }
   }
-  // "Личные" may already exist from before wallets could be private —
-  // force it back to private every boot regardless of ON CONFLICT above.
-  await pool.query(`UPDATE wallets SET shared = false WHERE name = 'Личные'`);
 
   await pool.query(`
     CREATE TABLE IF NOT EXISTS expenses (
@@ -503,7 +513,7 @@ export async function initSchema() {
       description TEXT,
       amount NUMERIC NOT NULL CHECK (amount > 0),
       remaining NUMERIC NOT NULL,
-      wallet TEXT REFERENCES wallets(name) ON DELETE SET NULL,
+      wallet TEXT REFERENCES wallets(name) ON DELETE SET NULL ON UPDATE CASCADE,
       status TEXT NOT NULL DEFAULT 'open' CHECK (status IN ('open', 'closed')),
       created_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
       created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
@@ -521,13 +531,63 @@ export async function initSchema() {
       id SERIAL PRIMARY KEY,
       debt_id INTEGER NOT NULL REFERENCES debts(id) ON DELETE CASCADE,
       amount NUMERIC NOT NULL CHECK (amount > 0),
-      wallet TEXT REFERENCES wallets(name) ON DELETE SET NULL,
+      wallet TEXT REFERENCES wallets(name) ON DELETE SET NULL ON UPDATE CASCADE,
       changed_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
       created_at TIMESTAMPTZ NOT NULL DEFAULT now()
     );
   `);
   await pool.query(`
     CREATE INDEX IF NOT EXISTS debt_payments_debt_idx ON debt_payments (debt_id, created_at);
+  `);
+
+  // Every other wallets(name) reference (categories, wallet_balances,
+  // balance_history) was created ON UPDATE CASCADE so a wallet can be
+  // renamed; these two were not, and NO ACTION is the SQL default — so
+  // renaming a wallet that any debt (or any debt payment) pointed at died
+  // with a foreign-key violation, and routes/wallets.js rethrew that into
+  // an unhandled rejection instead of a response. Re-created with the
+  // cascade; the confupdtype check ('c' = CASCADE) keeps it a no-op on
+  // every boot after the first.
+  await pool.query(`
+    DO $$
+    BEGIN
+      IF EXISTS (
+        SELECT 1 FROM pg_constraint
+        WHERE conname = 'debts_wallet_fkey' AND confupdtype <> 'c'
+      ) THEN
+        ALTER TABLE debts DROP CONSTRAINT debts_wallet_fkey;
+        ALTER TABLE debts ADD CONSTRAINT debts_wallet_fkey
+          FOREIGN KEY (wallet) REFERENCES wallets(name)
+          ON DELETE SET NULL ON UPDATE CASCADE;
+      END IF;
+      IF EXISTS (
+        SELECT 1 FROM pg_constraint
+        WHERE conname = 'debt_payments_wallet_fkey' AND confupdtype <> 'c'
+      ) THEN
+        ALTER TABLE debt_payments DROP CONSTRAINT debt_payments_wallet_fkey;
+        ALTER TABLE debt_payments ADD CONSTRAINT debt_payments_wallet_fkey
+          FOREIGN KEY (wallet) REFERENCES wallets(name)
+          ON DELETE SET NULL ON UPDATE CASCADE;
+      END IF;
+    END $$;
+  `);
+
+  // Renaming a wallet can't reach every client at once — exactly the same
+  // problem category_renames solves for categories, and worse here: a write
+  // carrying the old wallet name is rejected outright (400 "Некорректный
+  // кошелёк"), and the offline queue stops at its first failure, so one
+  // stale entry jams every later one behind it forever. A rename leaves a
+  // forwarding address here and writes resolve through it.
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS wallet_renames (
+      id SERIAL PRIMARY KEY,
+      old_name TEXT NOT NULL,
+      new_name TEXT NOT NULL,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+    );
+  `);
+  await pool.query(`
+    CREATE UNIQUE INDEX IF NOT EXISTS wallet_renames_uidx ON wallet_renames (old_name);
   `);
 
   // Family net-worth tracking ("Капитал") — a snapshot per time the family

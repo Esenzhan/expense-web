@@ -42,6 +42,11 @@ export default function NewWalletSheet({ initial, onClose, onSaved, onDeleted })
     const found = PALETTE.findIndex((p) => p.bg === initial?.bg && p.fg === initial?.fg);
     return found >= 0 ? found : 5;
   });
+  // Общий = both accounts see it, it pools into shared stats/limits and
+  // mirrors into both Google Sheets; личный stays scoped to whoever logged
+  // it. New wallets default to общий, which is what every wallet created
+  // before this toggle existed already is.
+  const [shared, setShared] = useState(initial ? initial.shared !== false : true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const [confirmingDelete, setConfirmingDelete] = useState(false);
@@ -61,7 +66,7 @@ export default function NewWalletSheet({ initial, onClose, onSaved, onDeleted })
     setSaving(true);
     setError("");
     try {
-      const payload = { name: name.trim(), emoji, bg: color.bg, fg: color.fg };
+      const payload = { name: name.trim(), emoji, bg: color.bg, fg: color.fg, shared };
       if (initial) await updateWallet(initial.name, payload);
       else await createWallet(payload);
       hapticHeavy();
@@ -118,6 +123,32 @@ export default function NewWalletSheet({ initial, onClose, onSaved, onDeleted })
             onChange={(event) => setName(event.target.value)}
           />
         </div>
+
+        <div className="debt-direction-toggle">
+          <button
+            className={`period-pill ${shared ? "active" : ""}`}
+            onClick={() => {
+              haptic();
+              setShared(true);
+            }}
+          >
+            Общий
+          </button>
+          <button
+            className={`period-pill ${!shared ? "active" : ""}`}
+            onClick={() => {
+              haptic();
+              setShared(false);
+            }}
+          >
+            Личный
+          </button>
+        </div>
+        <p className="newcat-suggestions-label">
+          {shared
+            ? "Виден обоим аккаунтам, попадает в общие итоги"
+            : "Виден только тебе, траты не видит второй аккаунт"}
+        </p>
 
         {suggestions.length > 0 && (
           <>

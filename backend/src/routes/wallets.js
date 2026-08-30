@@ -3,12 +3,13 @@ import { pool } from "../db.js";
 import { invalidateWalletCache } from "../wallets.js";
 import { invalidateCategoryCache } from "../categories.js";
 import { authMiddleware } from "../middleware/auth.js";
+import { renameWalletTab } from "../services/sheets.js";
 
 export const walletsRouter = Router();
 
 const isColor = (v) => typeof v === "string" && /^#[0-9a-fA-F]{6}$/.test(v);
 
-function validate({ name, emoji, bg, fg }) {
+function validate({ name, emoji, bg, fg, shared }) {
   if (typeof name !== "string" || !name.trim() || name.trim().length > 40) {
     return "Некорректное название счёта";
   }
@@ -18,14 +19,22 @@ function validate({ name, emoji, bg, fg }) {
   if (!isColor(bg) || !isColor(fg)) {
     return "Некорректный цвет";
   }
+  if (shared !== undefined && typeof shared !== "boolean") {
+    return "Некорректный тип счёта";
+  }
   return null;
 }
+
+// Defaults to shared, matching both the column default and how every
+// wallet created before the toggle existed already behaves — an older
+// frontend bundle that doesn't send the field keeps its exact behavior.
+const sharedFlag = (body) => (body.shared === undefined ? true : body.shared);
 
 // Readable by anyone (the bot needs the list too); creating/editing/deleting
 // is site-only, so those require a logged-in user.
 walletsRouter.get("/", async (req, res) => {
   const { rows } = await pool.query(
-    `SELECT name, emoji, bg, fg FROM wallets ORDER BY sort_order, id`
+    `SELECT name, emoji, bg, fg, shared FROM wallets ORDER BY sort_order, id`
   );
   res.json(rows);
 });
@@ -34,21 +43,27 @@ walletsRouter.post("/", authMiddleware, async (req, res) => {
   const problem = validate(req.body);
   if (problem) return res.status(400).json({ error: problem });
   const { name, emoji, bg, fg } = req.body;
+  const shared = sharedFlag(req.body);
 
   try {
     const { rows } = await pool.query(
-      `INSERT INTO wallets (name, emoji, bg, fg, sort_order)
-       VALUES ($1, $2, $3, $4, (SELECT COALESCE(MAX(sort_order), 0) + 1 FROM wallets))
-       RETURNING name, emoji, bg, fg`,
-      [name.trim(), emoji, bg, fg]
+      `INSERT INTO wallets (name, emoji, bg, fg, shared, sort_order)
+       VALUES ($1, $2, $3, $4, $5, (SELECT COALESCE(MAX(sort_order), 0) + 1 FROM wallets))
+       RETURNING name, emoji, bg, fg, shared`,
+      [name.trim(), emoji, bg, fg, shared]
     );
+    // A new wallet can reuse a name some older wallet was renamed away
+    // from; that stale forwarding row would then point writes meant for
+    // this wallet somewhere else entirely.
+    await pool.query(`DELETE FROM wallet_renames WHERE old_name = $1`, [name.trim()]);
     invalidateWalletCache();
     res.status(201).json(rows[0]);
   } catch (err) {
     if (err.code === "23505") {
       return res.status(409).json({ error: "Такой счёт уже есть" });
     }
-    throw err;
+    console.error("Не удалось создать счёт:", err);
+    res.status(500).json({ error: "Не удалось создать счёт" });
   }
 });
 
@@ -71,30 +86,74 @@ walletsRouter.delete("/:name", authMiddleware, async (req, res) => {
   res.status(204).end();
 });
 
-// Edit a wallet; renaming also re-points the expenses that reference it
+// Edit a wallet. A rename is the interesting case: the wallet's name IS the
+// key every other table joins on, so it has to be carried everywhere at
+// once — the FK'd tables (categories, wallet_balances, balance_history,
+// debts, debt_payments) cascade in the DB, and everything below is a plain
+// TEXT column or an external system that can't.
 walletsRouter.put("/:name", authMiddleware, async (req, res) => {
   const problem = validate(req.body);
   if (problem) return res.status(400).json({ error: problem });
   const oldName = req.params.name;
   const { name, emoji, bg, fg } = req.body;
+  const shared = sharedFlag(req.body);
+  const newName = name.trim();
+  const renamed = newName !== oldName;
 
   const client = await pool.connect();
   try {
     await client.query("BEGIN");
     const { rows } = await client.query(
-      `UPDATE wallets SET name = $1, emoji = $2, bg = $3, fg = $4
-       WHERE name = $5 RETURNING name, emoji, bg, fg`,
-      [name.trim(), emoji, bg, fg, oldName]
+      `UPDATE wallets SET name = $1, emoji = $2, bg = $3, fg = $4, shared = $5
+       WHERE name = $6 RETURNING name, emoji, bg, fg, shared`,
+      [newName, emoji, bg, fg, shared, oldName]
     );
     if (!rows.length) {
       await client.query("ROLLBACK");
       return res.status(404).json({ error: "Счёт не найден" });
     }
-    if (name.trim() !== oldName) {
-      await client.query(`UPDATE expenses SET wallet = $1 WHERE wallet = $2`, [
-        name.trim(),
+    if (renamed) {
+      await client.query(`UPDATE expenses SET wallet = $1 WHERE wallet = $2`, [newName, oldName]);
+      // category_renames is keyed by wallet name and has no FK to cascade
+      // through — leaving it behind would silently drop every category
+      // forwarding address this wallet had accumulated.
+      await client.query(`UPDATE category_renames SET wallet = $1 WHERE wallet = $2`, [
+        newName,
         oldName,
       ]);
+      // The "other side" of a transfer, also a plain TEXT column: without
+      // this the balance history keeps naming a wallet that no longer exists.
+      await client.query(
+        `UPDATE balance_history SET counterpart_wallet = $1 WHERE counterpart_wallet = $2`,
+        [newName, oldName]
+      );
+      // Sheets jobs queued but not yet flushed carry their own snapshot of
+      // the wallet name — they'd write to (or look for) the old tab.
+      await client.query(
+        `UPDATE sheets_sync_jobs
+            SET expense_snapshot = jsonb_set(expense_snapshot, '{wallet}', to_jsonb($1::text))
+          WHERE expense_snapshot->>'wallet' = $2`,
+        [newName, oldName]
+      );
+      await client.query(
+        `UPDATE sheets_sync_jobs SET previous_wallet = $1 WHERE previous_wallet = $2`,
+        [newName, oldName]
+      );
+      // Forwarding address for writes that still carry the old name (see
+      // wallet_renames in db.js). Renaming A→B→C must leave A and B both
+      // pointing at C, not A→B→(gone), hence the second statement.
+      await client.query(`UPDATE wallet_renames SET new_name = $1 WHERE new_name = $2`, [
+        newName,
+        oldName,
+      ]);
+      await client.query(
+        `INSERT INTO wallet_renames (old_name, new_name) VALUES ($1, $2)
+         ON CONFLICT (old_name) DO UPDATE SET new_name = EXCLUDED.new_name`,
+        [oldName, newName]
+      );
+      // The new name may itself be an old name something was renamed away
+      // from; that row would now forward this wallet's own name elsewhere.
+      await client.query(`DELETE FROM wallet_renames WHERE old_name = $1`, [newName]);
     }
     await client.query("COMMIT");
     invalidateWalletCache();
@@ -102,13 +161,24 @@ walletsRouter.put("/:name", authMiddleware, async (req, res) => {
     // categories cache is keyed by wallet name, so without this it'd keep
     // serving the old name's (now stale) entry for up to 60s.
     invalidateCategoryCache();
+    if (renamed) {
+      // Best-effort, and deliberately after COMMIT: the wallet name is also
+      // a tab name in each account's Google Sheet, and Google is the one
+      // participant that can't join this transaction. Failing here leaves
+      // exactly the old behavior (history splits across two tabs) rather
+      // than blocking a rename on someone's expired token.
+      await renameWalletTab(oldName, newName).catch((err) =>
+        console.error(`Не удалось переименовать вкладку Sheets ${oldName} → ${newName}:`, err.message)
+      );
+    }
     res.json(rows[0]);
   } catch (err) {
     await client.query("ROLLBACK");
     if (err.code === "23505") {
       return res.status(409).json({ error: "Такой счёт уже есть" });
     }
-    throw err;
+    console.error("Не удалось обновить счёт:", err);
+    res.status(500).json({ error: "Не удалось обновить счёт" });
   } finally {
     client.release();
   }

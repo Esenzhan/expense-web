@@ -1,5 +1,5 @@
 import { useRef } from "react";
-import { listWallets } from "../wallets";
+import { listWallets, isSharedWallet } from "../wallets";
 import { haptic, withHaptic } from "../haptics";
 import { useSwipeDismiss } from "../sheetGestures";
 import CategoryGlyph from "./CategoryGlyph";
@@ -23,12 +23,13 @@ export default function WalletsSheet({ balances, pendingWalletDeltas, selected, 
   const allBalance = balances.length
     ? balances.reduce((sum, b) => sum + Number(b.current_balance) - (pendingWalletDeltas.get(b.wallet) || 0), 0)
     : null;
-  // "Личные" is the one personal wallet (the un-deletable default/fallback
-  // — see backend/src/routes/wallets.js); every other wallet is shared, so
-  // this is just allBalance minus that one instead of a hardcoded name list.
+  // Which wallets are общие is a per-wallet flag now (set in the create/edit
+  // sheet), not something derivable from the name — this used to assume
+  // "Личные" was the only personal one, so any personal wallet created
+  // afterwards silently counted itself into the shared total.
   const sharedBalance = balances.length
     ? balances
-        .filter((b) => b.wallet !== "Личные")
+        .filter((b) => isSharedWallet(b.wallet))
         .reduce((sum, b) => sum + Number(b.current_balance) - (pendingWalletDeltas.get(b.wallet) || 0), 0)
     : null;
   const formatBalance = (amount) =>

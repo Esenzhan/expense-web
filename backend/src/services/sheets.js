@@ -119,6 +119,48 @@ async function appendToOne(target, expense, who) {
   });
 }
 
+// Renaming a wallet renames its tab in every account's Sheet. Without it a
+// rename silently forks the history: old rows stay on a tab named after the
+// old wallet, new ones start a fresh tab under the new name, and editing an
+// old expense re-appends it to the new tab (findRow can't see the old one)
+// instead of updating it — one expense, two rows, two tabs. Best-effort per
+// account, since one dead refresh token mustn't stop the other's tab from
+// being renamed; the caller logs whatever comes back.
+export async function renameWalletTab(oldWallet, newWallet) {
+  const { rows: users } = await pool.query(
+    `SELECT * FROM users WHERE google_refresh_token IS NOT NULL AND sheet_id IS NOT NULL`
+  );
+  const errors = [];
+  for (const user of users) {
+    try {
+      const sheets = sheetsApiFor(decrypt(user.google_refresh_token));
+      const { data } = await sheets.spreadsheets.get({ spreadsheetId: user.sheet_id });
+      const tab = data.sheets.find((s) => s.properties.title === oldWallet);
+      // Nothing logged to this wallet from this account yet, or a tab
+      // already sits under the new name (Google rejects duplicate titles) —
+      // either way there's nothing safe to rename here.
+      if (!tab) continue;
+      if (data.sheets.some((s) => s.properties.title === newWallet)) continue;
+      await sheets.spreadsheets.batchUpdate({
+        spreadsheetId: user.sheet_id,
+        requestBody: {
+          requests: [
+            {
+              updateSheetProperties: {
+                properties: { sheetId: tab.properties.sheetId, title: newWallet },
+                fields: "title",
+              },
+            },
+          ],
+        },
+      });
+    } catch (err) {
+      errors.push(err);
+    }
+  }
+  if (errors.length) throw errors[0];
+}
+
 // Best-effort across targets — one target's failure (e.g. the other
 // account's token expired) shouldn't stop this one from mirroring — but
 // the caller (sheetsSyncQueue.js) needs to know if ANYTHING failed so it

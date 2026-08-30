@@ -21,6 +21,7 @@ import { authMiddleware, verifyToken } from "./middleware/auth.js";
 import { openDeepgramStream } from "./services/deepgramStream.js";
 import { parseExpenseFromText } from "./services/parseExpense.js";
 import { processSheetsSyncQueue } from "./services/sheetsSyncQueue.js";
+import { wrapRouterAsync, errorHandler } from "./middleware/asyncErrors.js";
 
 const app = express();
 app.use(cors({ origin: process.env.FRONTEND_URL || "*" }));
@@ -29,26 +30,31 @@ app.use(cors({ origin: process.env.FRONTEND_URL || "*" }));
 // globally rather than per-route since express.json() is mounted once.
 app.use(express.json({ limit: "5mb" }));
 
-app.use("/api/auth", authRouter);
-app.use("/api/expenses", authMiddleware, expensesRouter);
-app.use("/api/stats", authMiddleware, statsRouter);
+// wrapRouterAsync on every router: these handlers are all async, and
+// several of them rethrow a DB error on purpose — see middleware/asyncErrors.js
+// for why Express 4 would otherwise answer that with nothing at all.
+app.use("/api/auth", wrapRouterAsync(authRouter));
+app.use("/api/expenses", authMiddleware, wrapRouterAsync(expensesRouter));
+app.use("/api/stats", authMiddleware, wrapRouterAsync(statsRouter));
 // Categories/wallets: readable by anyone (the bot needs the list too), but
 // creating/deleting is site-only — routes/categories.js and routes/wallets.js
 // apply authMiddleware themselves on the mutating handlers.
-app.use("/api/categories", categoriesRouter);
-app.use("/api/wallets", walletsRouter);
-app.use("/api/category-limits", authMiddleware, categoryLimitsRouter);
-app.use("/api/wallet-balances", authMiddleware, walletBalancesRouter);
-app.use("/api/balance-history", authMiddleware, balanceHistoryRouter);
-app.use("/api/wallet-transfers", authMiddleware, walletTransfersRouter);
-app.use("/api/debts", authMiddleware, debtsRouter);
-app.use("/api/capital", authMiddleware, capitalRouter);
+app.use("/api/categories", wrapRouterAsync(categoriesRouter));
+app.use("/api/wallets", wrapRouterAsync(walletsRouter));
+app.use("/api/category-limits", authMiddleware, wrapRouterAsync(categoryLimitsRouter));
+app.use("/api/wallet-balances", authMiddleware, wrapRouterAsync(walletBalancesRouter));
+app.use("/api/balance-history", authMiddleware, wrapRouterAsync(balanceHistoryRouter));
+app.use("/api/wallet-transfers", authMiddleware, wrapRouterAsync(walletTransfersRouter));
+app.use("/api/debts", authMiddleware, wrapRouterAsync(debtsRouter));
+app.use("/api/capital", authMiddleware, wrapRouterAsync(capitalRouter));
 // Not wrapped in authMiddleware at this level — /tick is called by the
 // GitHub Actions cron (no user session), the rest apply authMiddleware
 // themselves per-route (see routes/reminders.js).
-app.use("/api/reminders", remindersRouter);
+app.use("/api/reminders", wrapRouterAsync(remindersRouter));
 
 app.get("/api/health", (req, res) => res.json({ ok: true }));
+
+app.use(errorHandler);
 
 const server = http.createServer(app);
 
