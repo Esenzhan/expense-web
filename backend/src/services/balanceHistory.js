@@ -1,22 +1,28 @@
-// Same computation as GET /api/wallet-balances, scoped to one wallet — used
-// wherever a route needs "what is this wallet's balance right now" before
-// changing it (a manual edit's old_amount, either leg of a transfer, or a
-// debt's wallet adjustment). These two are the only copies of that sum,
-// logged_at cutoff included — keep them identical. Null means this wallet has never had a
-// starting balance set for this account — distinct from an actual 0
-// balance, so a first-ever edit's history row correctly logs old_amount as
-// null instead of a misleading 0.
+// Единственная копия формулы «сколько на счету прямо сейчас»: опорная сумма
+// минус всё, что записано ПОСЛЕ опорной точки. Раньше тот же SQL жил ещё и в
+// GET /api/wallet-balances, и правку приходилось помнить в двух местах.
 //
-// Every wallet is per-account now, "Семья"/shared ones included — each
-// account has its own wallet_balances row and its own checkpoint, and the
-// expense subtraction only ever counts that same account's own spending.
-// The other account's expenses, debts, and transfers never touch this row.
+// Отрез по logged_at («когда внесли»), а не created_at («когда потрачено»,
+// её можно поменять в шторке правки): трата, внесённая сегодня задним
+// числом, обязана уменьшить баланс, выставленный утром. И наоборот —
+// logged_at никогда не бывает в будущем, иначе запись вычлась бы дважды
+// (см. setBalance ниже и разовый ремонт в db.js).
+//
+// e.user_id = wb.user_id, а не параметр: wb уже отфильтрован по аккаунту, и
+// без параметра выражение можно подставлять в любой запрос. Каждый счёт
+// теперь персчётный, «Семья» включительно — траты второго аккаунта, его
+// долги и переводы этот баланс не двигают.
+const CURRENT_BALANCE_EXPR = `wb.base_amount - COALESCE((
+       SELECT SUM(CASE WHEN e.type = 'income' THEN -e.amount ELSE e.amount END) FROM expenses e
+       WHERE e.wallet = wb.wallet AND e.logged_at > wb.base_at AND e.user_id = wb.user_id
+     ), 0)`;
+
+// Баланс одного счёта. Null — счёту ни разу не задавали стартовую сумму для
+// этого аккаунта; это не то же самое, что баланс 0, поэтому первая правка
+// пишет в историю old_amount = null, а не вводящий в заблуждение ноль.
 export async function getCurrentBalance(client, wallet, userId) {
   const { rows } = await client.query(
-    `SELECT wb.base_amount - COALESCE((
-         SELECT SUM(CASE WHEN e.type = 'income' THEN -e.amount ELSE e.amount END) FROM expenses e
-         WHERE e.wallet = wb.wallet AND e.logged_at > wb.base_at AND e.user_id = $2
-       ), 0) AS current_balance
+    `SELECT ${CURRENT_BALANCE_EXPR} AS current_balance
      FROM wallet_balances wb
      WHERE wb.wallet = $1 AND wb.user_id = $2`,
     [wallet, userId]
@@ -24,10 +30,18 @@ export async function getCurrentBalance(client, wallet, userId) {
   return rows.length ? Number(rows[0].current_balance) : null;
 }
 
-// Re-bases a wallet's balance to `newAmount` as of now, for THIS account
-// only — the same upsert PUT /api/wallet-balances/:wallet already did,
-// factored out so the transfer/debt routes can apply it inside their own
-// transaction.
+// Все счета аккаунта разом — для GET /api/wallet-balances и для истории
+// баланса, которой нужна точка отсчёта, чтобы отмотать остаток назад.
+export async function getCurrentBalances(client, userId) {
+  const { rows } = await client.query(
+    `SELECT wb.wallet, wb.base_amount, wb.base_at, ${CURRENT_BALANCE_EXPR} AS current_balance
+     FROM wallet_balances wb
+     WHERE wb.user_id = $1`,
+    [userId]
+  );
+  return rows;
+}
+
 export async function setBalance(client, wallet, userId, newAmount) {
   // Everything the caller just folded into `newAmount` (via getCurrentBalance)
   // has to end up at or before the new base_at, or the very next read
