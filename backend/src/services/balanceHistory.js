@@ -29,6 +29,21 @@ export async function getCurrentBalance(client, wallet, userId) {
 // factored out so the transfer/debt routes can apply it inside their own
 // transaction.
 export async function setBalance(client, wallet, userId, newAmount) {
+  // Everything the caller just folded into `newAmount` (via getCurrentBalance)
+  // has to end up at or before the new base_at, or the very next read
+  // subtracts it a SECOND time — and again on every re-base after that.
+  // Only a logged_at in the future can break that invariant, since base_at
+  // is now(): the row gets counted into the new base_amount and still
+  // satisfies `logged_at > base_at` afterwards. logged_at means "when this
+  // was recorded", so a future value is corrupt by definition (see the
+  // one-time repair in db.js for where the existing ones came from);
+  // clamping it to this checkpoint is the honest reading. Normally matches
+  // zero rows.
+  await client.query(
+    `UPDATE expenses SET logged_at = now()
+     WHERE wallet = $1 AND user_id = $2 AND logged_at > now()`,
+    [wallet, userId]
+  );
   const { rows } = await client.query(
     `INSERT INTO wallet_balances (wallet, user_id, base_amount, base_at)
      VALUES ($1, $2, $3, now())

@@ -183,6 +183,17 @@ export async function initSchema() {
   await pool.query(`UPDATE expenses SET logged_at = created_at WHERE logged_at IS NULL`);
   await pool.query(`ALTER TABLE expenses ALTER COLUMN logged_at SET DEFAULT now()`);
   await pool.query(`ALTER TABLE expenses ALTER COLUMN logged_at SET NOT NULL`);
+  // logged_at is "when the row was RECORDED" — it can never legitimately be
+  // in the future. The backfill just above could produce one anyway: an
+  // expense deliberately dated ahead (DateTimePickerSheet allows future days
+  // for a planned payment) had that future date copied straight into
+  // logged_at. That silently corrupts every balance checkpoint afterwards —
+  // getCurrentBalance folds the row into the new base_amount, but
+  // `logged_at > base_at` stays TRUE, so the same expense is subtracted
+  // again from that new base, and once more on every later re-base (manual
+  // correction, debt payment, transfer). Clamped here once; setBalance
+  // keeps the invariant from here on.
+  await pool.query(`UPDATE expenses SET logged_at = now() WHERE logged_at > now()`);
   await pool.query(`
     DO $$
     BEGIN
