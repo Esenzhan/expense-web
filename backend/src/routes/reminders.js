@@ -2,6 +2,7 @@ import { Router } from "express";
 import { pool } from "../db.js";
 import { authMiddleware } from "../middleware/auth.js";
 import { sendPush } from "../services/webPush.js";
+import { almatyNow } from "../services/almatyTime.js";
 
 export const remindersRouter = Router();
 
@@ -15,18 +16,6 @@ function validDays(days) {
   );
 }
 
-// Almaty is UTC+5 year-round (no DST) — a plain offset shift is enough,
-// no timezone database needed.
-function almatyNow() {
-  const shifted = new Date(Date.now() + 5 * 3600 * 1000);
-  const y = shifted.getUTCFullYear();
-  const m = String(shifted.getUTCMonth() + 1).padStart(2, "0");
-  const d = String(shifted.getUTCDate()).padStart(2, "0");
-  const hh = String(shifted.getUTCHours()).padStart(2, "0");
-  const mm = String(shifted.getUTCMinutes()).padStart(2, "0");
-  const weekday = shifted.getUTCDay() === 0 ? 7 : shifted.getUTCDay(); // 1=Пн..7=Вс
-  return { date: `${y}-${m}-${d}`, time: `${hh}:${mm}`, weekday };
-}
 
 remindersRouter.get("/", authMiddleware, async (req, res) => {
   const { rows } = await pool.query(
