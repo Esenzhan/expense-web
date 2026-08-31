@@ -9,15 +9,7 @@ import { listWallets } from "../wallets";
 import { haptic, hapticTick, withHaptic } from "../haptics";
 import { useSwipeDismiss } from "../sheetGestures";
 import { catIconVars } from "../catIconVars";
-
-function CalendarIcon() {
-  return (
-    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-      <rect x="4" y="5" width="16" height="16" rx="2" />
-      <path d="M4 10h16M8 3v4M16 3v4" />
-    </svg>
-  );
-}
+import CalendarIcon from "./CalendarIcon";
 
 function toNumber(raw) {
   return parseFloat(raw.replace(",", ".")) || 0;

@@ -1,10 +1,19 @@
 import { useEffect, useRef, useState } from "react";
 import { createCapitalSnapshot, fetchCapitalSnapshot } from "../api";
-import { hapticHeavy, withHaptic } from "../haptics";
+import { haptic, hapticHeavy, withHaptic } from "../haptics";
 import { useSwipeDismiss } from "../sheetGestures";
 import { loadCached, saveCached } from "../offlineCache";
 import CapitalItemsEditor, { emptyRow, rowsFromItems, rowsToItems } from "./CapitalItemsEditor";
 import { capitalDetailCacheKey } from "./CapitalDetailSheet";
+import DateTimePickerSheet from "./DateTimePickerSheet";
+import CalendarIcon from "./CalendarIcon";
+import { almaty } from "../insights";
+
+// Дата снимка в заголовке — тот же формат, что в списке «Капитала» и в
+// CapitalDetailSheet.
+function formatDate(date) {
+  return almaty(date).toLocaleDateString("ru-RU", { day: "2-digit", month: "long", timeZone: "UTC" });
+}
 
 // «Новый снимок» — свайп-down шторка, две свободные секции (как в их
 // таблице: Активы/Обязательства), каждая строка — просто название и сумма,
@@ -34,6 +43,11 @@ export default function NewCapitalSnapshotSheet({ user, previousSnapshotId, onCl
   const [loading, setLoading] = useState(!!previousSnapshotId && !cachedPrev);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
+  // Как у трат (EditExpenseSheet): пока дату не тронули — null, и снимок
+  // записывается моментом сохранения. Считают капитал вечером, а заносят
+  // через пару дней — цифра принадлежит дню подсчёта, а не дню ввода.
+  const [customDate, setCustomDate] = useState(null);
+  const [datePickerOpen, setDatePickerOpen] = useState(false);
 
   useEffect(() => {
     if (!previousSnapshotId) return;
@@ -63,7 +77,7 @@ export default function NewCapitalSnapshotSheet({ user, previousSnapshotId, onCl
     setSaving(true);
     setError("");
     try {
-      await createCapitalSnapshot(items);
+      await createCapitalSnapshot(items, customDate ? customDate.toISOString() : null);
       hapticHeavy();
       onCreated();
     } catch (err) {
@@ -73,14 +87,24 @@ export default function NewCapitalSnapshotSheet({ user, previousSnapshotId, onCl
   }
 
   return (
+    <>
     <div className="sheet-backdrop" onClick={withHaptic(onClose)}>
       <div className="categories-sheet" ref={sheetRef} onClick={(event) => event.stopPropagation()}>
         <div className="cats-header">
           <button className="icon-button" onClick={withHaptic(onClose)} aria-label="Закрыть">
             ✕
           </button>
-          <span className="cats-title">Новый снимок</span>
-          <span className="icon-button-spacer" />
+          <span className="cats-title">{customDate ? formatDate(customDate) : "Новый снимок"}</span>
+          <button
+            className={`icon-button ${customDate ? "active" : ""}`}
+            onClick={() => {
+              haptic();
+              setDatePickerOpen(true);
+            }}
+            aria-label="Дата снимка"
+          >
+            <CalendarIcon />
+          </button>
         </div>
 
         {loading && <p className="empty-hint">Загрузка…</p>}
@@ -98,5 +122,17 @@ export default function NewCapitalSnapshotSheet({ user, previousSnapshotId, onCl
         )}
       </div>
     </div>
+
+    {datePickerOpen && (
+      <DateTimePickerSheet
+        initial={customDate || new Date()}
+        onClose={() => setDatePickerOpen(false)}
+        onApply={(picked) => {
+          setCustomDate(picked);
+          setDatePickerOpen(false);
+        }}
+      />
+    )}
+    </>
   );
 }

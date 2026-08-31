@@ -62,15 +62,27 @@ function validateItems(items) {
   return null;
 }
 
-// createdAt is optional (YYYY-MM-DD) — lets a snapshot be backfilled for a
-// real past date (e.g. importing years of history from the spreadsheet
-// this replaced) instead of always landing on "now", same idea as
-// expenses'/debts' own created_at overrides.
+// The snapshot's own date, overridable from both the create and the edit
+// sheet — the family counts on an evening and enters it days later, and the
+// number belongs to the day they counted, not the day they typed it in.
+// Accepts a full ISO timestamp (what DateTimePickerSheet produces, same
+// picker the expense sheets use) as well as the bare YYYY-MM-DD this used
+// to take, so an older cached bundle mid-deploy keeps working. Returns
+// undefined for "not provided" and null for "provided but unparseable",
+// which the callers turn into a 400.
+function parseCreatedAt(value) {
+  if (value == null) return undefined;
+  if (typeof value !== "string" || !value.trim()) return null;
+  const parsed = new Date(value);
+  return Number.isNaN(parsed.getTime()) ? null : parsed;
+}
+
 capitalRouter.post("/", async (req, res) => {
-  const { items, createdAt } = req.body;
+  const { items } = req.body;
   const error = validateItems(items);
   if (error) return res.status(400).json({ error });
-  if (createdAt != null && !/^\d{4}-\d{2}-\d{2}$/.test(createdAt)) {
+  const createdAt = parseCreatedAt(req.body.createdAt);
+  if (createdAt === null) {
     return res.status(400).json({ error: "Некорректная дата" });
   }
 
@@ -101,15 +113,21 @@ capitalRouter.post("/", async (req, res) => {
   }
 });
 
-// Edits an existing snapshot's items — wholesale replace rather than a
+// Edits an existing snapshot — wholesale replace of the items rather than a
 // diff, same as the create form always submits a full list rather than
-// tracking which rows changed. created_at/created_by stay put; only the
-// items (and therefore the computed total) move.
+// tracking which rows changed. created_at moves too when the edit sheet
+// sends one (a snapshot entered under the wrong date is otherwise only
+// fixable by deleting and retyping the whole list); created_by stays put —
+// it records who did the counting, which re-dating doesn't change.
 capitalRouter.put("/:id", async (req, res) => {
   const { id } = req.params;
   const { items } = req.body;
   const error = validateItems(items);
   if (error) return res.status(400).json({ error });
+  const createdAt = parseCreatedAt(req.body.createdAt);
+  if (createdAt === null) {
+    return res.status(400).json({ error: "Некорректная дата" });
+  }
 
   const client = await pool.connect();
   try {
@@ -118,6 +136,11 @@ capitalRouter.put("/:id", async (req, res) => {
     if (!snapRows.length) {
       await client.query("ROLLBACK");
       return res.status(404).json({ error: "Снимок не найден" });
+    }
+    // Only when the client actually sent one — an older bundle that doesn't
+    // know about the date field must not blank out an existing snapshot's date.
+    if (createdAt !== undefined) {
+      await client.query(`UPDATE capital_snapshots SET created_at = $1 WHERE id = $2`, [createdAt, id]);
     }
 
     await client.query(`DELETE FROM capital_items WHERE snapshot_id = $1`, [id]);
@@ -128,8 +151,12 @@ capitalRouter.put("/:id", async (req, res) => {
         [id, item.kind, item.name.trim(), item.amount, order++]
       );
     }
+    const { rows: saved } = await client.query(
+      `SELECT created_at FROM capital_snapshots WHERE id = $1`,
+      [id]
+    );
     await client.query("COMMIT");
-    res.json({ id: Number(id) });
+    res.json({ id: Number(id), created_at: saved[0].created_at });
   } catch (err) {
     await client.query("ROLLBACK");
     throw err;
