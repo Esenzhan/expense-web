@@ -3,7 +3,7 @@ import { createCapitalSnapshot, fetchCapitalSnapshot } from "../api";
 import { haptic, hapticHeavy, withHaptic } from "../haptics";
 import { useSwipeDismiss } from "../sheetGestures";
 import { loadCached, saveCached } from "../offlineCache";
-import CapitalItemsEditor, { emptyRow, rowsFromItems, rowsToItems } from "./CapitalItemsEditor";
+import CapitalItemsEditor, { emptyRow, rowsFromItems, rowsToItems, numericRates } from "./CapitalItemsEditor";
 import { capitalDetailCacheKey } from "./CapitalDetailSheet";
 import DateTimePickerSheet from "./DateTimePickerSheet";
 import CalendarIcon from "./CalendarIcon";
@@ -47,6 +47,10 @@ export default function NewCapitalSnapshotSheet({ user, previousSnapshotId, onCl
   // записывается моментом сохранения. Считают капитал вечером, а заносят
   // через пару дней — цифра принадлежит дню подсчёта, а не дню ввода.
   const [customDate, setCustomDate] = useState(null);
+  // Курсы на дату снимка, {USD: "540.5"}. Предзаполняются из предыдущего
+  // снимка — от раза к разу курс меняется, но порядок тот же, поправить
+  // цифру быстрее, чем вспоминать и набирать заново.
+  const [rates, setRates] = useState({});
   const [datePickerOpen, setDatePickerOpen] = useState(false);
 
   useEffect(() => {
@@ -57,6 +61,9 @@ export default function NewCapitalSnapshotSheet({ user, previousSnapshotId, onCl
         const loadedLiabilities = rowsFromItems(detail.items.filter((item) => item.kind === "liability"));
         setAssets(loadedAssets.length ? loadedAssets : [emptyRow()]);
         setLiabilities(loadedLiabilities.length ? loadedLiabilities : [emptyRow()]);
+        if (detail.rates) {
+          setRates(Object.fromEntries(Object.entries(detail.rates).map(([k, v]) => [k, String(v)])));
+        }
         if (email) saveCached(capitalDetailCacheKey(previousSnapshotId), email, detail.items);
       })
       .catch(() => {
@@ -77,7 +84,7 @@ export default function NewCapitalSnapshotSheet({ user, previousSnapshotId, onCl
     setSaving(true);
     setError("");
     try {
-      await createCapitalSnapshot(items, customDate ? customDate.toISOString() : null);
+      await createCapitalSnapshot(items, customDate ? customDate.toISOString() : null, numericRates(rates));
       hapticHeavy();
       onCreated();
     } catch (err) {
@@ -110,7 +117,14 @@ export default function NewCapitalSnapshotSheet({ user, previousSnapshotId, onCl
         {loading && <p className="empty-hint">Загрузка…</p>}
 
         {!loading && (
-          <CapitalItemsEditor assets={assets} setAssets={setAssets} liabilities={liabilities} setLiabilities={setLiabilities} />
+          <CapitalItemsEditor
+            assets={assets}
+            setAssets={setAssets}
+            liabilities={liabilities}
+            setLiabilities={setLiabilities}
+            rates={rates}
+            setRates={setRates}
+          />
         )}
 
         {error && <p className="sheet-error">{error}</p>}

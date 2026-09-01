@@ -230,11 +230,11 @@ export async function fetchCapitalSnapshot(id) {
 
 // createdAt: an ISO string from DateTimePickerSheet, or null to let the
 // snapshot land on "now" — same shape as an expense's created_at override.
-export async function createCapitalSnapshot(items, createdAt) {
+export async function createCapitalSnapshot(items, createdAt, rates) {
   const res = await apiFetch(`/api/capital`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(createdAt ? { items, createdAt } : { items }),
+    body: JSON.stringify({ items, ...(createdAt ? { createdAt } : {}), rates: rates || {} }),
   });
   if (!res.ok) {
     const body = await res.json().catch(() => ({}));
@@ -243,11 +243,11 @@ export async function createCapitalSnapshot(items, createdAt) {
   return res.json();
 }
 
-export async function updateCapitalSnapshot(id, items, createdAt) {
+export async function updateCapitalSnapshot(id, items, createdAt, rates) {
   const res = await apiFetch(`/api/capital/${id}`, {
     method: "PUT",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(createdAt ? { items, createdAt } : { items }),
+    body: JSON.stringify({ items, ...(createdAt ? { createdAt } : {}), rates: rates || {} }),
   });
   if (!res.ok) {
     const body = await res.json().catch(() => ({}));

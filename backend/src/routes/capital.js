@@ -1,7 +1,14 @@
 import { Router } from "express";
 import { pool } from "../db.js";
+import { isValidCurrency, HOME_CURRENCY } from "../currencies.js";
 
 export const capitalRouter = Router();
+
+// Позиция хранится в своей валюте; в тенге она пересчитывается по курсу
+// ЭТОГО снимка. Тенговые позиции курса не имеют — COALESCE даёт множитель 1.
+// Единственная копия этого выражения: если оно разъедется между списком и
+// карточкой снимка, итог и сумма позиций начнут показывать разные числа.
+const IN_HOME = `(i.amount * COALESCE((s.rates->>i.currency)::numeric, 1))`;
 
 // Family-wide, unlike debts — no user_id filter, every snapshot is visible
 // to both accounts. Total is a live SUM over capital_items rather than a
@@ -9,14 +16,15 @@ export const capitalRouter = Router();
 capitalRouter.get("/", async (req, res) => {
   const { rows } = await pool.query(`
     SELECT s.id, s.created_at, u.name AS created_by_name,
-      COALESCE(SUM(i.amount) FILTER (WHERE i.kind = 'asset'), 0) AS assets_total,
-      COALESCE(SUM(i.amount) FILTER (WHERE i.kind = 'liability'), 0) AS liabilities_total,
-      COALESCE(SUM(i.amount) FILTER (WHERE i.kind = 'asset'), 0)
-        - COALESCE(SUM(i.amount) FILTER (WHERE i.kind = 'liability'), 0) AS total
+      s.rates,
+      COALESCE(SUM(${IN_HOME}) FILTER (WHERE i.kind = 'asset'), 0) AS assets_total,
+      COALESCE(SUM(${IN_HOME}) FILTER (WHERE i.kind = 'liability'), 0) AS liabilities_total,
+      COALESCE(SUM(${IN_HOME}) FILTER (WHERE i.kind = 'asset'), 0)
+        - COALESCE(SUM(${IN_HOME}) FILTER (WHERE i.kind = 'liability'), 0) AS total
     FROM capital_snapshots s
     LEFT JOIN capital_items i ON i.snapshot_id = s.id
     LEFT JOIN users u ON u.id = s.created_by
-    GROUP BY s.id, u.name
+    GROUP BY s.id, s.rates, u.name
     ORDER BY s.created_at DESC
   `);
   res.json(rows);
@@ -25,7 +33,7 @@ capitalRouter.get("/", async (req, res) => {
 capitalRouter.get("/:id", async (req, res) => {
   const { id } = req.params;
   const { rows: snapRows } = await pool.query(
-    `SELECT s.id, s.created_at, u.name AS created_by_name
+    `SELECT s.id, s.created_at, s.rates, u.name AS created_by_name
      FROM capital_snapshots s
      LEFT JOIN users u ON u.id = s.created_by
      WHERE s.id = $1`,
@@ -34,7 +42,7 @@ capitalRouter.get("/:id", async (req, res) => {
   if (!snapRows.length) return res.status(404).json({ error: "Снимок не найден" });
 
   const { rows: items } = await pool.query(
-    `SELECT id, kind, name, amount FROM capital_items WHERE snapshot_id = $1 ORDER BY sort_order, id`,
+    `SELECT id, kind, name, amount, currency FROM capital_items WHERE snapshot_id = $1 ORDER BY sort_order, id`,
     [id]
   );
   res.json({ ...snapRows[0], items });
@@ -58,7 +66,34 @@ function validateItems(items) {
     if (typeof item.amount !== "number" || !Number.isFinite(item.amount)) {
       return "Некорректная сумма";
     }
+    if (item.currency !== undefined && !isValidCurrency(item.currency)) {
+      return "Некорректная валюта позиции";
+    }
   }
+  return null;
+}
+
+// Курсы: {"USD": 540.5} — сколько тенге за единицу. Проверяем не только
+// форму, но и ПОЛНОТУ: если в снимке есть позиция в валюте, а курса для неё
+// нет, пересчёт молча возьмёт множитель 1 и итог капитала уедет на порядки.
+// Лучше отказать на сохранении, чем показать неправильный капитал.
+function validateRates(rates, items) {
+  if (rates === undefined || rates === null) return null;
+  if (typeof rates !== "object" || Array.isArray(rates)) return "Некорректные курсы валют";
+  for (const [currency, value] of Object.entries(rates)) {
+    if (!isValidCurrency(currency)) return `Неизвестная валюта в курсах: ${currency}`;
+    if (typeof value !== "number" || !Number.isFinite(value) || value <= 0) {
+      return `Некорректный курс для ${currency}`;
+    }
+  }
+  const missing = [
+    ...new Set(
+      items
+        .map((i) => i.currency || HOME_CURRENCY)
+        .filter((c) => c !== HOME_CURRENCY && !(rates && rates[c] > 0))
+    ),
+  ];
+  if (missing.length) return `Укажите курс для ${missing.join(", ")}`;
   return null;
 }
 
@@ -85,22 +120,26 @@ capitalRouter.post("/", async (req, res) => {
   if (createdAt === null) {
     return res.status(400).json({ error: "Некорректная дата" });
   }
+  const rates = req.body.rates || {};
+  const ratesProblem = validateRates(rates, items);
+  if (ratesProblem) return res.status(400).json({ error: ratesProblem });
 
   const client = await pool.connect();
   try {
     await client.query("BEGIN");
     const { rows } = await client.query(
       createdAt
-        ? `INSERT INTO capital_snapshots (created_by, created_at) VALUES ($1, $2) RETURNING id, created_at`
-        : `INSERT INTO capital_snapshots (created_by) VALUES ($1) RETURNING id, created_at`,
-      createdAt ? [req.user.id, createdAt] : [req.user.id]
+        ? `INSERT INTO capital_snapshots (created_by, created_at, rates) VALUES ($1, $2, $3) RETURNING id, created_at`
+        : `INSERT INTO capital_snapshots (created_by, rates) VALUES ($1, $2) RETURNING id, created_at`,
+      createdAt ? [req.user.id, createdAt, rates] : [req.user.id, rates]
     );
     const snapshotId = rows[0].id;
     let order = 0;
     for (const item of items) {
       await client.query(
-        `INSERT INTO capital_items (snapshot_id, kind, name, amount, sort_order) VALUES ($1, $2, $3, $4, $5)`,
-        [snapshotId, item.kind, item.name.trim(), item.amount, order++]
+        `INSERT INTO capital_items (snapshot_id, kind, name, amount, currency, sort_order)
+         VALUES ($1, $2, $3, $4, $5, $6)`,
+        [snapshotId, item.kind, item.name.trim(), item.amount, item.currency || HOME_CURRENCY, order++]
       );
     }
     await client.query("COMMIT");
@@ -128,11 +167,13 @@ capitalRouter.put("/:id", async (req, res) => {
   if (createdAt === null) {
     return res.status(400).json({ error: "Некорректная дата" });
   }
+  const ratesProblem = validateRates(req.body.rates, items);
+  if (ratesProblem) return res.status(400).json({ error: ratesProblem });
 
   const client = await pool.connect();
   try {
     await client.query("BEGIN");
-    const { rows: snapRows } = await client.query(`SELECT id FROM capital_snapshots WHERE id = $1 FOR UPDATE`, [id]);
+    const { rows: snapRows } = await client.query(`SELECT id, rates FROM capital_snapshots WHERE id = $1 FOR UPDATE`, [id]);
     if (!snapRows.length) {
       await client.query("ROLLBACK");
       return res.status(404).json({ error: "Снимок не найден" });
@@ -142,21 +183,35 @@ capitalRouter.put("/:id", async (req, res) => {
     if (createdAt !== undefined) {
       await client.query(`UPDATE capital_snapshots SET created_at = $1 WHERE id = $2`, [createdAt, id]);
     }
+    // Как и с датой: правим курсы только если клиент их прислал — старый
+    // бандл без этого поля не должен обнулить уже записанные курсы.
+    if (req.body.rates !== undefined) {
+      await client.query(`UPDATE capital_snapshots SET rates = $1 WHERE id = $2`, [req.body.rates || {}, id]);
+    } else {
+      // Курсы не менялись, но позиции могли — проверяем, что для новых
+      // валют курс в снимке уже есть.
+      const stale = validateRates(snapRows[0].rates || {}, items);
+      if (stale) {
+        await client.query("ROLLBACK");
+        return res.status(400).json({ error: stale });
+      }
+    }
 
     await client.query(`DELETE FROM capital_items WHERE snapshot_id = $1`, [id]);
     let order = 0;
     for (const item of items) {
       await client.query(
-        `INSERT INTO capital_items (snapshot_id, kind, name, amount, sort_order) VALUES ($1, $2, $3, $4, $5)`,
-        [id, item.kind, item.name.trim(), item.amount, order++]
+        `INSERT INTO capital_items (snapshot_id, kind, name, amount, currency, sort_order)
+         VALUES ($1, $2, $3, $4, $5, $6)`,
+        [id, item.kind, item.name.trim(), item.amount, item.currency || HOME_CURRENCY, order++]
       );
     }
     const { rows: saved } = await client.query(
-      `SELECT created_at FROM capital_snapshots WHERE id = $1`,
+      `SELECT created_at, rates FROM capital_snapshots WHERE id = $1`,
       [id]
     );
     await client.query("COMMIT");
-    res.json({ id: Number(id), created_at: saved[0].created_at });
+    res.json({ id: Number(id), created_at: saved[0].created_at, rates: saved[0].rates });
   } catch (err) {
     await client.query("ROLLBACK");
     throw err;

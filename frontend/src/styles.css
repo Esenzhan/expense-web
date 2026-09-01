@@ -3474,3 +3474,31 @@ button.wallet-chip {
 .capital-growth-hint {
   margin: -6px 0 14px;
 }
+
+/* Валюта позиции капитала — маленькая кнопка-переключатель ₸ → $ → ¥ рядом
+   с суммой. Ширина фиксирована, чтобы строка не дёргалась при смене знака. */
+.capital-item-currency {
+  flex: 0 0 auto;
+  width: 30px;
+  height: 30px;
+  border: none;
+  border-radius: 9px;
+  background: var(--surface-soft);
+  color: var(--ink-soft);
+  font-family: var(--font-mono);
+  font-size: 15px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.capital-item-currency:active {
+  transform: scale(0.94);
+}
+
+/* Подпись строки курса занимает место поля названия, но не редактируется. */
+.capital-rate-label {
+  display: flex;
+  align-items: center;
+  color: var(--ink-soft);
+  font-size: 13.5px;
+}

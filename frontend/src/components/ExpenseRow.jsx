@@ -1,3 +1,5 @@
+import { formatMoney } from "../currencies";
+import { walletCurrency } from "../wallets";
 import { useEffect, useRef } from "react";
 import CategoryGlyph from "./CategoryGlyph";
 import TrashIcon from "./TrashIcon";
@@ -138,7 +140,7 @@ export default function ExpenseRow({ expense, icon, readonly, onSelect, onDelete
         </div>
         <span className={`amount ${expense.type === "income" ? "income" : ""}`}>
           {expense.type === "income" ? "+" : "−"}
-          {Number(expense.amount).toLocaleString("ru-RU")} ₸
+          {formatMoney(expense.amount, walletCurrency(expense.wallet))}
         </span>
       </div>
     </div>

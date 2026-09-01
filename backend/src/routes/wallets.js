@@ -4,12 +4,13 @@ import { invalidateWalletCache } from "../wallets.js";
 import { invalidateCategoryCache } from "../categories.js";
 import { authMiddleware } from "../middleware/auth.js";
 import { renameWalletTab } from "../services/sheets.js";
+import { isValidCurrency, HOME_CURRENCY } from "../currencies.js";
 
 export const walletsRouter = Router();
 
 const isColor = (v) => typeof v === "string" && /^#[0-9a-fA-F]{6}$/.test(v);
 
-function validate({ name, emoji, bg, fg, shared }) {
+function validate({ name, emoji, bg, fg, shared, currency }) {
   if (typeof name !== "string" || !name.trim() || name.trim().length > 40) {
     return "Некорректное название счёта";
   }
@@ -22,6 +23,9 @@ function validate({ name, emoji, bg, fg, shared }) {
   if (shared !== undefined && typeof shared !== "boolean") {
     return "Некорректный тип счёта";
   }
+  if (currency !== undefined && !isValidCurrency(currency)) {
+    return "Некорректная валюта счёта";
+  }
   return null;
 }
 
@@ -29,12 +33,15 @@ function validate({ name, emoji, bg, fg, shared }) {
 // wallet created before the toggle existed already behaves — an older
 // frontend bundle that doesn't send the field keeps its exact behavior.
 const sharedFlag = (body) => (body.shared === undefined ? true : body.shared);
+// Тенге по умолчанию — и по смыслу (в ней ведётся всё, кроме Alipay и
+// наличных долларов), и для совместимости: старый бандл поля не шлёт.
+const currencyOf = (body) => body.currency || HOME_CURRENCY;
 
 // Readable by anyone (the bot needs the list too); creating/editing/deleting
 // is site-only, so those require a logged-in user.
 walletsRouter.get("/", async (req, res) => {
   const { rows } = await pool.query(
-    `SELECT name, emoji, bg, fg, shared FROM wallets ORDER BY sort_order, id`
+    `SELECT name, emoji, bg, fg, shared, currency FROM wallets ORDER BY sort_order, id`
   );
   res.json(rows);
 });
@@ -44,13 +51,14 @@ walletsRouter.post("/", authMiddleware, async (req, res) => {
   if (problem) return res.status(400).json({ error: problem });
   const { name, emoji, bg, fg } = req.body;
   const shared = sharedFlag(req.body);
+  const currency = currencyOf(req.body);
 
   try {
     const { rows } = await pool.query(
-      `INSERT INTO wallets (name, emoji, bg, fg, shared, sort_order)
-       VALUES ($1, $2, $3, $4, $5, (SELECT COALESCE(MAX(sort_order), 0) + 1 FROM wallets))
-       RETURNING name, emoji, bg, fg, shared`,
-      [name.trim(), emoji, bg, fg, shared]
+      `INSERT INTO wallets (name, emoji, bg, fg, shared, currency, sort_order)
+       VALUES ($1, $2, $3, $4, $5, $6, (SELECT COALESCE(MAX(sort_order), 0) + 1 FROM wallets))
+       RETURNING name, emoji, bg, fg, shared, currency`,
+      [name.trim(), emoji, bg, fg, shared, currency]
     );
     // A new wallet can reuse a name some older wallet was renamed away
     // from; that stale forwarding row would then point writes meant for
@@ -103,15 +111,39 @@ walletsRouter.put("/:name", authMiddleware, async (req, res) => {
   const client = await pool.connect();
   try {
     await client.query("BEGIN");
-    const { rows } = await client.query(
-      `UPDATE wallets SET name = $1, emoji = $2, bg = $3, fg = $4, shared = $5
-       WHERE name = $6 RETURNING name, emoji, bg, fg, shared`,
-      [newName, emoji, bg, fg, shared, oldName]
+    const { rows: existing } = await client.query(
+      `SELECT currency FROM wallets WHERE name = $1 FOR UPDATE`,
+      [oldName]
     );
-    if (!rows.length) {
+    if (!existing.length) {
       await client.query("ROLLBACK");
       return res.status(404).json({ error: "Счёт не найден" });
     }
+    // Валюта задаётся при создании и дальше не меняется, пока на счёте
+    // что-то есть: сумма хранится числом без валюты, так что смена валюты
+    // молча переобъявила бы каждую прошлую трату и весь баланс другими
+    // деньгами — 100 юаней стали бы 100 тенге. Пустой счёт переключить
+    // можно, там нечего портить.
+    const currency = req.body.currency || existing[0].currency;
+    if (currency !== existing[0].currency) {
+      const { rows: used } = await client.query(
+        `SELECT
+           (SELECT COUNT(*) FROM expenses WHERE wallet = $1)::int
+         + (SELECT COUNT(*) FROM wallet_balances WHERE wallet = $1)::int AS n`,
+        [oldName]
+      );
+      if (used[0].n > 0) {
+        await client.query("ROLLBACK");
+        return res.status(400).json({
+          error: "Валюту счёта нельзя поменять — на нём уже есть траты или задан баланс",
+        });
+      }
+    }
+    const { rows } = await client.query(
+      `UPDATE wallets SET name = $1, emoji = $2, bg = $3, fg = $4, shared = $5, currency = $6
+       WHERE name = $7 RETURNING name, emoji, bg, fg, shared, currency`,
+      [newName, emoji, bg, fg, shared, currency, oldName]
+    );
     if (renamed) {
       await client.query(`UPDATE expenses SET wallet = $1 WHERE wallet = $2`, [newName, oldName]);
       // category_renames is keyed by wallet name and has no FK to cascade

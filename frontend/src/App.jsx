@@ -5,7 +5,8 @@ import { getToken, setToken } from "./auth";
 import { listPendingExpenses, syncPendingExpenses, hasPendingExpenses, removePendingExpense, clearConfirmedSynced } from "./offlineQueue";
 import { computeInsights, periodRange, formatPeriodLabel } from "./insights";
 import { hydrateCategories, hydrateIncomeCategories, getCategoryIcon, getIncomeCategoryIcon } from "./categoryIcons";
-import { hydrateWallets, getWalletIcon } from "./wallets";
+import { hydrateWallets, getWalletIcon, walletCurrency, isHomeWallet } from "./wallets";
+import { HOME_CURRENCY, formatMoney } from "./currencies";
 import { haptic } from "./haptics";
 import { catIconVars } from "./catIconVars";
 import CategoryGlyph from "./components/CategoryGlyph";
@@ -316,7 +317,12 @@ export default function App() {
     const wallet = selectedWalletRef.current;
     const pendingForList = wallet ? pending.filter((p) => p.wallet === wallet) : pending;
     setInsights(
-      computeInsights({ period: periodRef.current, rows: [...pendingForList, ...(cached.insightsRows || [])] })
+      computeInsights({
+        period: periodRef.current,
+        rows: [...pendingForList, ...(cached.insightsRows || [])].filter(
+          (r) => wallet || isHomeWallet(r.wallet)
+        ),
+      })
     );
   }
 
@@ -604,7 +610,13 @@ export default function App() {
       const createdAt = new Date(p.created_at);
       return createdAt >= periodStart && createdAt < periodEnd;
     });
-    setInsights(computeInsights({ period: currentPeriod, rows: [...pendingInPeriod, ...baseInsightsRows] }));
+    // На «Все счета» в «Расходы» и Инсайты идут только тенговые счета — иначе
+    // юани из Alipay просто прибавились бы к тенге как одинаковые числа. При
+    // выбранном счёте фильтровать нечего: там и так один счёт с одной валютой.
+    const insightsInHomeCurrency = [...pendingInPeriod, ...baseInsightsRows].filter(
+      (r) => wallet || isHomeWallet(r.wallet)
+    );
+    setInsights(computeInsights({ period: currentPeriod, rows: insightsInHomeCurrency }));
     setPendingWalletDeltas(balanceDeltaByWallet);
   }
 
@@ -851,9 +863,16 @@ export default function App() {
     return <LoginScreen error={authError} />;
   }
 
+  // Валюта того, что сейчас на экране: у выбранного счёта — его собственная,
+  // на «Все счета» — тенге, потому что складываются только тенговые счета.
+  const shownCurrency = selectedWallet ? walletCurrency(selectedWallet) : HOME_CURRENCY;
+
+  // На «Все счета» валютные кошельки НЕ подмешиваются: 100 юаней и 100 тенге
+  // — разные деньги, и сложить их без курса нельзя (см. currencies.js).
+  // Alipay и наличные доллары видно, выбрав их отдельно.
   const walletBalance = selectedWallet
     ? Number(walletTotals.find((w) => w.wallet === selectedWallet)?.total || 0)
-    : walletTotals.reduce((sum, w) => sum + Number(w.total), 0);
+    : walletTotals.filter((w) => isHomeWallet(w.wallet)).reduce((sum, w) => sum + Number(w.total), 0);
 
   // Category filter options for the main list — derived from whatever rows
   // are actually loaded (not the full category registry), so the dropdown
@@ -890,11 +909,13 @@ export default function App() {
     ? accountBalanceEntry
       ? Number(accountBalanceEntry.current_balance) - (pendingWalletDeltas.get(selectedWallet) || 0)
       : null
-    : walletBalances.length
-    ? walletBalances.reduce(
-        (sum, b) => sum + Number(b.current_balance) - (pendingWalletDeltas.get(b.wallet) || 0),
-        0
-      )
+    : walletBalances.some((b) => isHomeWallet(b.wallet))
+    ? walletBalances
+        .filter((b) => isHomeWallet(b.wallet))
+        .reduce(
+          (sum, b) => sum + Number(b.current_balance) - (pendingWalletDeltas.get(b.wallet) || 0),
+          0
+        )
     : null;
 
   async function saveAccountBalance(amount) {
@@ -932,7 +953,7 @@ export default function App() {
             <div className="wallet-chip-name">{selectedWallet || "Все счета"}</div>
             <div className="wallet-chip-balance">
               {accountBalance != null
-                ? `${accountBalance.toLocaleString("ru-RU", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ₸`
+                ? formatMoney(accountBalance, shownCurrency, { decimals: true })
                 : "—"}
             </div>
           </div>
@@ -1008,9 +1029,10 @@ export default function App() {
             </button>
           </div>
         </div>
-        <div className="summary-total">−{Number(insights.total).toLocaleString("ru-RU")} ₸</div>
+        <div className="summary-total">−{formatMoney(insights.total, shownCurrency)}</div>
         <AccountBalanceRow
           balance={accountBalance}
+          currency={shownCurrency}
           editable={!!selectedWallet}
           onSave={saveAccountBalance}
         />

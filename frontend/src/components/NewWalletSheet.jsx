@@ -5,6 +5,7 @@ import { useSwipeDismiss } from "../sheetGestures";
 import CategoryGlyph from "./CategoryGlyph";
 import { catIconVars } from "../catIconVars";
 import { PALETTE, ICON_GROUPS } from "../pickerOptions";
+import { CURRENCIES, HOME_CURRENCY } from "../currencies";
 
 const SUGGESTION_KEYWORDS = [
   { match: ["бизнес", "работ", "ип", "компан"], icons: ["🤝", "💼", "🏢", "📊"] },
@@ -47,6 +48,15 @@ export default function NewWalletSheet({ initial, onClose, onSaved, onDeleted })
   // it. New wallets default to общий, which is what every wallet created
   // before this toggle existed already is.
   const [shared, setShared] = useState(initial ? initial.shared !== false : true);
+  // Валюта счёта. У существующего счёта её нельзя поменять, если на нём уже
+  // есть траты или задан баланс: суммы хранятся числом без валюты, и смена
+  // молча переобъявила бы всю историю другими деньгами (сервер это тоже
+  // отбивает — routes/wallets.js). Признак «уже используется» приходит от
+  // WalletsSheet, у которого под рукой балансы.
+  const [currency, setCurrency] = useState(initial?.currency || HOME_CURRENCY);
+  // Валюта выбирается только при создании: у существующего счёта смена молча
+  // переобъявила бы всю его историю другими деньгами (сервер тоже отбивает).
+  const currencyLocked = !!initial;
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const [confirmingDelete, setConfirmingDelete] = useState(false);
@@ -66,7 +76,7 @@ export default function NewWalletSheet({ initial, onClose, onSaved, onDeleted })
     setSaving(true);
     setError("");
     try {
-      const payload = { name: name.trim(), emoji, bg: color.bg, fg: color.fg, shared };
+      const payload = { name: name.trim(), emoji, bg: color.bg, fg: color.fg, shared, currency };
       if (initial) await updateWallet(initial.name, payload);
       else await createWallet(payload);
       hapticHeavy();
@@ -123,6 +133,33 @@ export default function NewWalletSheet({ initial, onClose, onSaved, onDeleted })
             onChange={(event) => setName(event.target.value)}
           />
         </div>
+
+        <div className="debt-direction-toggle">
+          {CURRENCIES.map((c) => (
+            <button
+              key={c.code}
+              className={`period-pill ${currency === c.code ? "active" : ""}`}
+              disabled={currencyLocked && currency !== c.code}
+              onClick={() => {
+                haptic();
+                setCurrency(c.code);
+              }}
+            >
+              {c.symbol} {c.name}
+            </button>
+          ))}
+        </div>
+        {currencyLocked ? (
+          <p className="newcat-suggestions-label">
+            Валюта задаётся при создании счёта и потом не меняется
+          </p>
+        ) : (
+          currency !== HOME_CURRENCY && (
+            <p className="newcat-suggestions-label">
+              Валютный счёт: в общий тенговый итог не входит, показывается отдельно
+            </p>
+          )
+        )}
 
         <div className="debt-direction-toggle">
           <button

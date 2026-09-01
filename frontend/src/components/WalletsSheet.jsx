@@ -1,5 +1,6 @@
 import { useRef } from "react";
-import { listWallets, isSharedWallet } from "../wallets";
+import { listWallets, isSharedWallet, isHomeWallet, walletCurrency } from "../wallets";
+import { formatMoney, HOME_CURRENCY, isHomeCurrency } from "../currencies";
 import { haptic, withHaptic } from "../haptics";
 import { useSwipeDismiss } from "../sheetGestures";
 import CategoryGlyph from "./CategoryGlyph";
@@ -20,22 +21,24 @@ export default function WalletsSheet({ balances, pendingWalletDeltas, selected, 
     const entry = balances.find((b) => b.wallet === name);
     return entry ? Number(entry.current_balance) - (pendingWalletDeltas.get(name) || 0) : null;
   };
-  const allBalance = balances.length
-    ? balances.reduce((sum, b) => sum + Number(b.current_balance) - (pendingWalletDeltas.get(b.wallet) || 0), 0)
+  // Итоги складывают только тенговые счета — Alipay и наличные доллары в
+  // общую сумму не идут, у них своя валюта (см. currencies.js). Их видно
+  // строкой каждого счёта, со своим знаком.
+  const homeBalances = balances.filter((b) => isHomeWallet(b.wallet));
+  const allBalance = homeBalances.length
+    ? homeBalances.reduce((sum, b) => sum + Number(b.current_balance) - (pendingWalletDeltas.get(b.wallet) || 0), 0)
     : null;
   // Which wallets are общие is a per-wallet flag now (set in the create/edit
   // sheet), not something derivable from the name — this used to assume
   // "Личные" was the only personal one, so any personal wallet created
   // afterwards silently counted itself into the shared total.
-  const sharedBalance = balances.length
-    ? balances
+  const sharedBalance = homeBalances.length
+    ? homeBalances
         .filter((b) => isSharedWallet(b.wallet))
         .reduce((sum, b) => sum + Number(b.current_balance) - (pendingWalletDeltas.get(b.wallet) || 0), 0)
     : null;
-  const formatBalance = (amount) =>
-    amount != null
-      ? `${amount.toLocaleString("ru-RU", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ₸`
-      : "—";
+  const formatBalance = (amount, currency = HOME_CURRENCY) =>
+    amount != null ? formatMoney(amount, currency, { decimals: true }) : "—";
 
   function choose(name) {
     haptic();
@@ -96,7 +99,9 @@ export default function WalletsSheet({ balances, pendingWalletDeltas, selected, 
                 <CategoryGlyph emoji={wallet.emoji} size={20} />
               </span>
               <span className="cat-name">{wallet.name}</span>
-              <span className="wallet-row-total">{formatBalance(balanceOf(wallet.name))}</span>
+              <span className="wallet-row-total">
+                {formatBalance(balanceOf(wallet.name), walletCurrency(wallet.name))}
+              </span>
               <button
                 className="wallet-edit"
                 aria-label="Редактировать"

@@ -5,7 +5,7 @@ import { useSwipeDismiss } from "../sheetGestures";
 import { almaty } from "../insights";
 import { loadCached, saveCached } from "../offlineCache";
 import TrashIcon from "./TrashIcon";
-import CapitalItemsEditor, { emptyRow, rowsFromItems, rowTotal, rowsToItems } from "./CapitalItemsEditor";
+import CapitalItemsEditor, { emptyRow, rowsFromItems, rowTotal, rowsToItems, numericRates } from "./CapitalItemsEditor";
 import DateTimePickerSheet from "./DateTimePickerSheet";
 import CalendarIcon from "./CalendarIcon";
 
@@ -55,6 +55,7 @@ export default function CapitalDetailSheet({ user, snapshot, previousTotal, onCl
   const [customDate, setCustomDate] = useState(() => new Date(snapshot.created_at));
   const [dateChanged, setDateChanged] = useState(false);
   const [datePickerOpen, setDatePickerOpen] = useState(false);
+  const [rates, setRates] = useState({});
 
   useEffect(() => {
     const cached = loadCached(cacheKey, email);
@@ -64,6 +65,9 @@ export default function CapitalDetailSheet({ user, snapshot, previousTotal, onCl
         const loadedLiabilities = rowsFromItems(detail.items.filter((item) => item.kind === "liability"));
         setAssets(loadedAssets.length ? loadedAssets : [emptyRow()]);
         setLiabilities(loadedLiabilities.length ? loadedLiabilities : [emptyRow()]);
+        if (detail.rates) {
+          setRates(Object.fromEntries(Object.entries(detail.rates).map(([k, v]) => [k, String(v)])));
+        }
         if (email) saveCached(cacheKey, email, detail.items);
       })
       .catch(() => {
@@ -85,7 +89,7 @@ export default function CapitalDetailSheet({ user, snapshot, previousTotal, onCl
     setSaving(true);
     setError("");
     try {
-      await updateCapitalSnapshot(snapshot.id, items, customDate.toISOString());
+      await updateCapitalSnapshot(snapshot.id, items, customDate.toISOString(), numericRates(rates));
       hapticHeavy();
       onSaved();
     } catch (err) {
@@ -113,8 +117,10 @@ export default function CapitalDetailSheet({ user, snapshot, previousTotal, onCl
     }
   }
 
-  const total = rowTotal(assets) - rowTotal(liabilities);
-  const growth = previousTotal != null ? total - Number(previousTotal) : null;
+  const assetsTotal = rowTotal(assets, rates);
+  const liabilitiesTotal = rowTotal(liabilities, rates);
+  const total = assetsTotal == null || liabilitiesTotal == null ? null : assetsTotal - liabilitiesTotal;
+  const growth = total != null && previousTotal != null ? total - Number(previousTotal) : null;
 
   return (
     <>
@@ -186,7 +192,14 @@ export default function CapitalDetailSheet({ user, snapshot, previousTotal, onCl
         {error && <p className="sheet-error">{error}</p>}
 
         {!loading && (
-          <CapitalItemsEditor assets={assets} setAssets={setAssets} liabilities={liabilities} setLiabilities={setLiabilities} />
+          <CapitalItemsEditor
+            assets={assets}
+            setAssets={setAssets}
+            liabilities={liabilities}
+            setLiabilities={setLiabilities}
+            rates={rates}
+            setRates={setRates}
+          />
         )}
 
         {!loading && (

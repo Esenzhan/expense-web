@@ -98,6 +98,23 @@ export async function initSchema() {
     await pool.query(`ALTER TABLE wallets ADD COLUMN shared BOOLEAN NOT NULL DEFAULT true`);
     await pool.query(`UPDATE wallets SET shared = false WHERE name = 'Личные'`);
   }
+
+  // Валюта кошелька. По умолчанию тенге — все существующие кошельки ведутся
+  // в ней, так что миграция ничего не меняет. Валютные кошельки (Alipay в
+  // юанях, наличные доллары) НЕ складываются с тенговыми нигде: главный
+  // экран считает тенговый итог отдельно, а валютные показывает своими
+  // суммами. Пересчёт по курсу происходит ровно в одном месте — в снимке
+  // капитала, где курс вписывается руками (см. capital_snapshots.rates).
+  await pool.query(`ALTER TABLE wallets ADD COLUMN IF NOT EXISTS currency TEXT NOT NULL DEFAULT 'KZT'`);
+  await pool.query(`
+    DO $$
+    BEGIN
+      IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'wallets_currency_check') THEN
+        ALTER TABLE wallets ADD CONSTRAINT wallets_currency_check
+          CHECK (currency IN ('KZT', 'USD', 'CNY'));
+      END IF;
+    END $$;
+  `);
   // Only for a genuinely fresh install (same reasoning as the categories
   // seed below): this used to run unconditionally on every boot, which
   // meant deleting a built-in wallet (e.g. "Ремонт" once a renovation is
@@ -631,6 +648,32 @@ export async function initSchema() {
   `);
   await pool.query(`
     CREATE INDEX IF NOT EXISTS capital_items_snapshot_idx ON capital_items (snapshot_id);
+  `);
+
+  // Курсы валют на момент снимка: {"USD": 540.5, "CNY": 75.2} — сколько
+  // тенге за единицу. Вписываются руками при добавлении снимка, потому что
+  // капитал считают на конкретный вечер и по тому курсу, который семья
+  // сама считает справедливым, а не по какому-то API задним числом.
+  //
+  // Почему курс хранится на снимке, а не глобально: между двумя снимками
+  // капитал меняется и от денег, и от курса, и разделить эти две причины
+  // можно только если у каждого снимка зафиксирован СВОЙ курс. Один
+  // «текущий курс» на всё приложение переписал бы историю задним числом.
+  await pool.query(`ALTER TABLE capital_snapshots ADD COLUMN IF NOT EXISTS rates JSONB NOT NULL DEFAULT '{}'::jsonb`);
+
+  // Валюта позиции. Сумма хранится КАК ВВЕДЕНА — в своей валюте; в тенге
+  // она пересчитывается на чтении по курсу этого же снимка (routes/capital.js).
+  // Хранить пересчитанное значение нельзя: тогда правка курса не двигала бы
+  // итог, и снимок разъехался бы сам с собой.
+  await pool.query(`ALTER TABLE capital_items ADD COLUMN IF NOT EXISTS currency TEXT NOT NULL DEFAULT 'KZT'`);
+  await pool.query(`
+    DO $$
+    BEGIN
+      IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'capital_items_currency_check') THEN
+        ALTER TABLE capital_items ADD CONSTRAINT capital_items_currency_check
+          CHECK (currency IN ('KZT', 'USD', 'CNY'));
+      END IF;
+    END $$;
   `);
 
   // Durable retry queue for the Google Sheets mirror (services/sheetsSyncQueue.js).

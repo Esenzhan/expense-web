@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { haptic, hapticHeavy } from "../haptics";
 import { formatAmountDisplay, sanitizeAmountInput } from "../amountInput";
+import { formatMoney, HOME_CURRENCY } from "../currencies";
 
 // "Баланс" — tap the number to correct it against your real bank balance.
 // `editable` is false for the "Все счета" aggregate (nothing single to edit
@@ -12,7 +13,7 @@ import { formatAmountDisplay, sanitizeAmountInput } from "../amountInput";
 // balance re-anchor is not a small edit: it resets base_at, so everything
 // logged before that moment stops counting against it — see
 // routes/walletBalances.js). Nothing here writes without two taps.
-export default function AccountBalanceRow({ balance, editable, onSave }) {
+export default function AccountBalanceRow({ balance, currency = HOME_CURRENCY, editable, onSave }) {
   const [editing, setEditing] = useState(false);
   const [value, setValue] = useState("");
   const [confirming, setConfirming] = useState(false);
@@ -96,7 +97,7 @@ export default function AccountBalanceRow({ balance, editable, onSave }) {
           <span className="balance-label">Баланс</span>
           <span className="balance-value">
             {balance != null
-              ? `${balance.toLocaleString("ru-RU", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ₸`
+              ? formatMoney(balance, currency, { decimals: true })
               : editable
               ? "Указать сумму"
               : "—"}
