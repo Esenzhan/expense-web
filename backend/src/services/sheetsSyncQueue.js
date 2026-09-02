@@ -139,5 +139,39 @@ export async function getSyncStatus(userId) {
      FROM sheets_sync_jobs WHERE user_id = $1`,
     [userId, STUCK_AFTER_ATTEMPTS]
   );
-  return rows[0];
+  const status = rows[0];
+  if (!status.stuck) return { ...status, problems: [] };
+
+  // Что именно застряло и почему. Раньше наружу шли только счётчики:
+  // пользователь видел «Проблема: 1» и не мог узнать ни какая это запись,
+  // ни в чём причина — а причины разные и лечатся по-разному (протухший
+  // токен Google, удалённая вкладка, лимит запросов).
+  //
+  // Берём немного и коротко: это диагностика в настройках, а не журнал.
+  const { rows: problems } = await pool.query(
+    `SELECT j.expense_id, j.kind, j.attempts, j.last_error, j.next_attempt_at,
+            j.expense_snapshot->>'wallet' AS wallet,
+            j.expense_snapshot->>'amount' AS amount,
+            j.expense_snapshot->>'category' AS category
+     FROM sheets_sync_jobs j
+     WHERE j.user_id = $1 AND j.attempts >= $2
+     ORDER BY j.attempts DESC, j.id
+     LIMIT 5`,
+    [userId, STUCK_AFTER_ATTEMPTS]
+  );
+  return {
+    ...status,
+    problems: problems.map((p) => ({
+      expenseId: p.expense_id,
+      kind: p.kind,
+      attempts: p.attempts,
+      wallet: p.wallet,
+      amount: p.amount,
+      category: p.category,
+      nextAttemptAt: p.next_attempt_at,
+      // Сообщения Google бывают на несколько абзацев — в интерфейсе нужна
+      // одна строка, по которой понятно, что делать.
+      error: (p.last_error || "").split("\n")[0].slice(0, 300),
+    })),
+  };
 }

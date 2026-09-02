@@ -49,6 +49,13 @@ function I({ children }) {
   );
 }
 
+// Что очередь пыталась сделать с записью — по-русски, а не kind из базы.
+const KIND_LABEL = {
+  append: "добавление в таблицу",
+  update: "обновление строки",
+  delete: "удаление строки",
+};
+
 const Icons = {
   grid: <I><rect x="4" y="4" width="7" height="7" rx="2" /><rect x="13" y="4" width="7" height="7" rx="2" /><rect x="4" y="13" width="7" height="7" rx="2" /><rect x="13" y="13" width="7" height="7" rx="2" /></I>,
   currency: <I><circle cx="12" cy="12" r="5" /><path d="M5 5l2 2M17 17l2 2M19 5l-2 2M7 17l-2 2" /></I>,
@@ -190,6 +197,26 @@ export default function SettingsSheet({ user, theme, onClose, onOpenCategories, 
               }
               danger={!!syncStatus?.stuck}
             />
+            {/* Что именно застряло и почему. Без этого было видно только
+                «Проблема: 1» — а причины лечатся по-разному: протухший
+                доступ к Google, удалённая вкладка, лимит запросов. */}
+            {syncStatus?.problems?.map((p) => (
+              <div className="settings-row sync-problem" key={p.expenseId}>
+                <span className="sync-problem-main">
+                  <span className="sync-problem-title">
+                    {p.wallet ? `${p.wallet} · ` : ""}
+                    {p.category || "запись"}
+                    {p.amount ? ` · ${Number(p.amount).toLocaleString("ru-RU")} ₸` : ""}
+                  </span>
+                  <span className="sync-problem-error">
+                    {p.error || "причина не записана"}
+                  </span>
+                  <span className="sync-problem-meta">
+                    {KIND_LABEL[p.kind] || p.kind} · попыток {p.attempts}
+                  </span>
+                </span>
+              </div>
+            ))}
             <Row icon={Icons.logout} label="Выйти" onPress={logout} />
           </div>
         </>
