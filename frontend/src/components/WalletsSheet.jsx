@@ -1,5 +1,5 @@
 import { useRef } from "react";
-import { listWallets, isSharedWallet, isHomeWallet, walletCurrency } from "../wallets";
+import { walletsByScope, isSharedWallet, isHomeWallet, walletCurrency } from "../wallets";
 import { formatMoney, HOME_CURRENCY, isHomeCurrency } from "../currencies";
 import { haptic, withHaptic } from "../haptics";
 import { useSwipeDismiss } from "../sheetGestures";
@@ -12,7 +12,7 @@ export default function WalletsSheet({ balances, pendingWalletDeltas, selected, 
   const sheetRef = useRef(null);
   useSwipeDismiss(sheetRef, onClose);
 
-  const wallets = listWallets();
+  const groups = walletsByScope();
   // Same formula as accountBalance in App.jsx's "Баланс" row — a wallet with
   // no balance entry (never given a starting amount) has none to show here
   // either, and the pending delta keeps an in-flight add/undo-window delete
@@ -88,41 +88,58 @@ export default function WalletsSheet({ balances, pendingWalletDeltas, selected, 
           <span className="wallet-row-total">{formatBalance(allBalance)}</span>
         </button>
 
-        <div className="cats-list">
-          {wallets.map((wallet) => (
-            <div
-              className={`wallet-row ${selected === wallet.name ? "current" : ""}`}
-              key={wallet.name}
-              onClick={() => choose(wallet.name)}
-            >
-              <span className="category-icon" style={catIconVars(wallet.bg, wallet.fg)}>
-                <CategoryGlyph emoji={wallet.emoji} size={20} />
-              </span>
-              <span className="cat-name">{wallet.name}</span>
-              <span className="wallet-row-total">
-                {formatBalance(balanceOf(wallet.name), walletCurrency(wallet.name))}
-              </span>
-              <button
-                className="wallet-edit"
-                aria-label="Редактировать"
-                onClick={(event) => {
-                  event.stopPropagation();
-                  haptic();
-                  onEdit(wallet);
-                }}
-              >
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M15.5 5.5 18.5 8.5 8 19l-4 1 1-4L15.5 5.5Z" />
-                </svg>
-              </button>
-            </div>
-          ))}
-        </div>
+        {groups.map((group) => (
+          <div key={group.scope}>
+            {/* Заголовок группы стоит НАД её счетами и тем самым отделяет её
+                от предыдущей. У общих он заодно несёт их суммарный баланс —
+                раньше эта строка висела в самом низу списка, оторванная от
+                счетов, к которым относится. У «Другого» суммы нет намеренно:
+                там лежат счета в разных валютах, складывать их нечем. */}
+            {group.scope === "shared" && (
+              <div className="wallet-row all wallet-row-summary">
+                <span className="cat-name">Общие счета</span>
+                <span className="wallet-row-total">{formatBalance(sharedBalance)}</span>
+              </div>
+            )}
+            {group.scope === "other" && (
+              <div className="wallet-row all wallet-row-summary">
+                <span className="cat-name">Другое</span>
+                <span className="wallet-row-hint">видно только тебе</span>
+              </div>
+            )}
 
-        <div className="wallet-row all wallet-row-summary">
-          <span className="cat-name">Общие счета</span>
-          <span className="wallet-row-total">{formatBalance(sharedBalance)}</span>
-        </div>
+            <div className="cats-list">
+              {group.items.map((wallet) => (
+                <div
+                  className={`wallet-row ${selected === wallet.name ? "current" : ""}`}
+                  key={wallet.name}
+                  onClick={() => choose(wallet.name)}
+                >
+                  <span className="category-icon" style={catIconVars(wallet.bg, wallet.fg)}>
+                    <CategoryGlyph emoji={wallet.emoji} size={20} />
+                  </span>
+                  <span className="cat-name">{wallet.name}</span>
+                  <span className="wallet-row-total">
+                    {formatBalance(balanceOf(wallet.name), walletCurrency(wallet.name))}
+                  </span>
+                  <button
+                    className="wallet-edit"
+                    aria-label="Редактировать"
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      haptic();
+                      onEdit(wallet);
+                    }}
+                  >
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M15.5 5.5 18.5 8.5 8 19l-4 1 1-4L15.5 5.5Z" />
+                    </svg>
+                  </button>
+                </div>
+              ))}
+            </div>
+          </div>
+        ))}
       </div>
     </div>
   );

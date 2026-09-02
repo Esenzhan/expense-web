@@ -3502,3 +3502,11 @@ button.wallet-chip {
   color: var(--ink-soft);
   font-size: 13.5px;
 }
+
+/* Подпись у заголовка группы «Другое» — вместо суммы, которой там быть не
+   может: счета в разных валютах складывать нечем. */
+.wallet-row-hint {
+  margin-left: auto;
+  font-size: 12.5px;
+  color: var(--ink-soft);
+}

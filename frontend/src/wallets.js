@@ -3,10 +3,10 @@
 import { HOME_CURRENCY } from "./currencies";
 
 const DEFAULTS = [
-  { name: "Личные", emoji: "👛", bg: "#d7f5e9", fg: "#159969", shared: false, currency: "KZT" },
-  { name: "Семья", emoji: "👨‍👩‍👧", bg: "#e3ecfd", fg: "#2f5fc2", shared: true, currency: "KZT" },
-  { name: "Бизнес", emoji: "💼", bg: "#fde2e1", fg: "#c23b3b", shared: true, currency: "KZT" },
-  { name: "Ремонт", emoji: "🔨", bg: "#fff2cf", fg: "#a9790a", shared: true, currency: "KZT" },
+  { name: "Личные", emoji: "👛", bg: "#d7f5e9", fg: "#159969", scope: "personal", currency: "KZT" },
+  { name: "Семья", emoji: "👨‍👩‍👧", bg: "#e3ecfd", fg: "#2f5fc2", scope: "shared", currency: "KZT" },
+  { name: "Бизнес", emoji: "💼", bg: "#fde2e1", fg: "#c23b3b", scope: "shared", currency: "KZT" },
+  { name: "Ремонт", emoji: "🔨", bg: "#fff2cf", fg: "#a9790a", scope: "shared", currency: "KZT" },
 ];
 
 const FALLBACK = { emoji: "👛", bg: "#e9e9ec", fg: "#5b5b63" };
@@ -44,8 +44,35 @@ export function isHomeWallet(name) {
   return walletCurrency(name) === HOME_CURRENCY;
 }
 
+// Три группы счетов, порядок как в списке: сначала личные, потом общие,
+// потом «Другое». Сервер решает группу за нас (wallets.scope), из названия
+// счёта ничего не выводим.
+export const SCOPE_ORDER = ["personal", "shared", "other"];
+
+// `shared` — алиас для старого закэшированного ответа, который ещё не знает
+// про группы: там true значило «общий», false — «личный».
+function scopeOf(wallet) {
+  if (!wallet) return "shared";
+  return wallet.scope || (wallet.shared === false ? "personal" : "shared");
+}
+
+export function walletScope(name) {
+  return scopeOf(wallets.find((w) => w.name === name));
+}
+
+// «Общий» — траты видны обоим аккаунтам и идут в общие итоги. Всё
+// остальное (личные и «Другое») у каждого аккаунта своё.
 export function isSharedWallet(name) {
-  const wallet = wallets.find((w) => w.name === name);
-  return wallet ? wallet.shared !== false : true;
+  return walletScope(name) === "shared";
+}
+
+// Счета, разложенные по группам в порядке SCOPE_ORDER; внутри группы —
+// порядок, пришедший с сервера. Пустые группы не возвращаются, чтобы
+// список не показывал заголовок без единого счёта под ним.
+export function walletsByScope() {
+  return SCOPE_ORDER.map((scope) => ({
+    scope,
+    items: wallets.filter((w) => scopeOf(w) === scope),
+  })).filter((group) => group.items.length > 0);
 }
 

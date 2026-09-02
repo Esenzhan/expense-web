@@ -1,8 +1,8 @@
 import { Router } from "express";
-import { pool } from "../db.js";
-import { invalidateWalletCache } from "../wallets.js";
+import { pool, SEED_CATEGORIES, SEED_INCOME_CATEGORIES } from "../db.js";
+import { invalidateWalletCache, visibleWallets } from "../wallets.js";
 import { invalidateCategoryCache } from "../categories.js";
-import { authMiddleware } from "../middleware/auth.js";
+import { authMiddleware, verifyToken } from "../middleware/auth.js";
 import { renameWalletTab } from "../services/sheets.js";
 import { isValidCurrency, HOME_CURRENCY } from "../currencies.js";
 
@@ -10,7 +10,9 @@ export const walletsRouter = Router();
 
 const isColor = (v) => typeof v === "string" && /^#[0-9a-fA-F]{6}$/.test(v);
 
-function validate({ name, emoji, bg, fg, shared, currency }) {
+const SCOPES = ["personal", "shared", "other"];
+
+function validate({ name, emoji, bg, fg, scope, currency }) {
   if (typeof name !== "string" || !name.trim() || name.trim().length > 40) {
     return "Некорректное название счёта";
   }
@@ -20,7 +22,7 @@ function validate({ name, emoji, bg, fg, shared, currency }) {
   if (!isColor(bg) || !isColor(fg)) {
     return "Некорректный цвет";
   }
-  if (shared !== undefined && typeof shared !== "boolean") {
+  if (scope !== undefined && !SCOPES.includes(scope)) {
     return "Некорректный тип счёта";
   }
   if (currency !== undefined && !isValidCurrency(currency)) {
@@ -29,10 +31,18 @@ function validate({ name, emoji, bg, fg, shared, currency }) {
   return null;
 }
 
-// Defaults to shared, matching both the column default and how every
-// wallet created before the toggle existed already behaves — an older
-// frontend bundle that doesn't send the field keeps its exact behavior.
-const sharedFlag = (body) => (body.shared === undefined ? true : body.shared);
+// Тип счёта. Старый бандл (пока Vercel не докатил новый) шлёт булев
+// `shared` вместо `scope` — принимаем и его, иначе в окно между деплоями
+// фронта и бэка создание счёта ломалось бы.
+function scopeOf(body) {
+  if (body.scope !== undefined) return body.scope;
+  if (body.shared !== undefined) return body.shared ? "shared" : "personal";
+  return "shared";
+}
+
+// В ответе отдаём и `shared` — его читает старый закэшированный бандл. Это
+// производное от scope, а не второе хранимое поле: в базе истина одна.
+const withSharedAlias = (row) => ({ ...row, shared: row.scope === "shared" });
 // Тенге по умолчанию — и по смыслу (в ней ведётся всё, кроме Alipay и
 // наличных долларов), и для совместимости: старый бандл поля не шлёт.
 const currencyOf = (body) => body.currency || HOME_CURRENCY;
@@ -40,32 +50,60 @@ const currencyOf = (body) => body.currency || HOME_CURRENCY;
 // Readable by anyone (the bot needs the list too); creating/editing/deleting
 // is site-only, so those require a logged-in user.
 walletsRouter.get("/", async (req, res) => {
+  // Мягкая авторизация: эндпоинт публичный (так было задумано для бота), но
+  // счета группы «Другое» показываем только их владельцу. Нет токена —
+  // «Другое» не показываем вовсе.
+  //
+  // req.user идёт первым: если роутер когда-нибудь смонтируют за
+  // authMiddleware, пользователь будет уже разобран, и повторный разбор
+  // заголовка молча вернул бы null — счета владельца исчезли бы из списка.
+  const authHeader = req.header("Authorization") || "";
+  const token = authHeader.startsWith("Bearer ") ? authHeader.slice(7) : null;
+  const user = req.user || (token ? await verifyToken(token) : null);
+
+  const allowed = new Set((await visibleWallets(user?.id ?? null)).map((w) => w.name));
   const { rows } = await pool.query(
-    `SELECT name, emoji, bg, fg, shared, currency FROM wallets ORDER BY sort_order, id`
+    `SELECT name, emoji, bg, fg, scope, currency, created_by FROM wallets ORDER BY sort_order, id`
   );
-  res.json(rows);
+  res.json(rows.filter((r) => allowed.has(r.name)).map(withSharedAlias));
 });
 
 walletsRouter.post("/", authMiddleware, async (req, res) => {
   const problem = validate(req.body);
   if (problem) return res.status(400).json({ error: problem });
   const { name, emoji, bg, fg } = req.body;
-  const shared = sharedFlag(req.body);
+  const scope = scopeOf(req.body);
   const currency = currencyOf(req.body);
 
   try {
     const { rows } = await pool.query(
-      `INSERT INTO wallets (name, emoji, bg, fg, shared, currency, sort_order)
-       VALUES ($1, $2, $3, $4, $5, $6, (SELECT COALESCE(MAX(sort_order), 0) + 1 FROM wallets))
-       RETURNING name, emoji, bg, fg, shared, currency`,
-      [name.trim(), emoji, bg, fg, shared, currency]
+      `INSERT INTO wallets (name, emoji, bg, fg, scope, currency, created_by, sort_order)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, (SELECT COALESCE(MAX(sort_order), 0) + 1 FROM wallets))
+       RETURNING name, emoji, bg, fg, scope, currency, created_by`,
+      [name.trim(), emoji, bg, fg, scope, currency, req.user.id]
     );
     // A new wallet can reuse a name some older wallet was renamed away
     // from; that stale forwarding row would then point writes meant for
     // this wallet somewhere else entirely.
     await pool.query(`DELETE FROM wallet_renames WHERE old_name = $1`, [name.trim()]);
+    // Набор категорий по умолчанию: без единой категории счёт не принимает
+    // ни одной траты (см. ремонт в db.js). Дальше их правят как обычно —
+    // список у каждого счёта свой и сразу же расходится с этим сидом.
+    for (const [seed, type] of [
+      [SEED_CATEGORIES, "expense"],
+      [SEED_INCOME_CATEGORIES, "income"],
+    ]) {
+      for (const cat of seed) {
+        await pool.query(
+          `INSERT INTO categories (name, emoji, bg, fg, sort_order, wallet, type)
+           VALUES ($1, $2, $3, $4, $5, $6, $7) ON CONFLICT (wallet, name) DO NOTHING`,
+          [cat.name, cat.emoji, cat.bg, cat.fg, cat.sort, name.trim(), type]
+        );
+      }
+    }
+    invalidateCategoryCache();
     invalidateWalletCache();
-    res.status(201).json(rows[0]);
+    res.status(201).json(withSharedAlias(rows[0]));
   } catch (err) {
     if (err.code === "23505") {
       return res.status(409).json({ error: "Такой счёт уже есть" });
@@ -81,6 +119,13 @@ walletsRouter.delete("/:name", authMiddleware, async (req, res) => {
   const name = req.params.name;
   if (name === "Личные") {
     return res.status(400).json({ error: "Этот счёт нельзя удалить" });
+  }
+  const { rows: own } = await pool.query(
+    `SELECT scope, created_by FROM wallets WHERE name = $1`,
+    [name]
+  );
+  if (own.length && own[0].scope === "other" && own[0].created_by !== req.user.id) {
+    return res.status(404).json({ error: "Счёт не найден" });
   }
   const { rows } = await pool.query(
     `SELECT COUNT(*)::int AS n FROM expenses WHERE wallet = $1`,
@@ -104,7 +149,7 @@ walletsRouter.put("/:name", authMiddleware, async (req, res) => {
   if (problem) return res.status(400).json({ error: problem });
   const oldName = req.params.name;
   const { name, emoji, bg, fg } = req.body;
-  const shared = sharedFlag(req.body);
+  const scope = scopeOf(req.body);
   const newName = name.trim();
   const renamed = newName !== oldName;
 
@@ -112,10 +157,16 @@ walletsRouter.put("/:name", authMiddleware, async (req, res) => {
   try {
     await client.query("BEGIN");
     const { rows: existing } = await client.query(
-      `SELECT currency FROM wallets WHERE name = $1 FOR UPDATE`,
+      `SELECT currency, scope, created_by FROM wallets WHERE name = $1 FOR UPDATE`,
       [oldName]
     );
     if (!existing.length) {
+      await client.query("ROLLBACK");
+      return res.status(404).json({ error: "Счёт не найден" });
+    }
+    // Чужой счёт из «Другого» второй аккаунт не видит — значит и править
+    // его не может, даже зная название.
+    if (existing[0].scope === "other" && existing[0].created_by !== req.user.id) {
       await client.query("ROLLBACK");
       return res.status(404).json({ error: "Счёт не найден" });
     }
@@ -139,10 +190,13 @@ walletsRouter.put("/:name", authMiddleware, async (req, res) => {
         });
       }
     }
+    // Уходя в «Другое», счёт должен обрести владельца — иначе он станет
+    // невидимым вообще для всех, включая того, кто его только что перенёс.
+    const owner = scope === "other" ? existing[0].created_by ?? req.user.id : existing[0].created_by;
     const { rows } = await client.query(
-      `UPDATE wallets SET name = $1, emoji = $2, bg = $3, fg = $4, shared = $5, currency = $6
-       WHERE name = $7 RETURNING name, emoji, bg, fg, shared, currency`,
-      [newName, emoji, bg, fg, shared, currency, oldName]
+      `UPDATE wallets SET name = $1, emoji = $2, bg = $3, fg = $4, scope = $5, currency = $6, created_by = $7
+       WHERE name = $8 RETURNING name, emoji, bg, fg, scope, currency, created_by`,
+      [newName, emoji, bg, fg, scope, currency, owner, oldName]
     );
     if (renamed) {
       await client.query(`UPDATE expenses SET wallet = $1 WHERE wallet = $2`, [newName, oldName]);
@@ -203,7 +257,7 @@ walletsRouter.put("/:name", authMiddleware, async (req, res) => {
         console.error(`Не удалось переименовать вкладку Sheets ${oldName} → ${newName}:`, err.message)
       );
     }
-    res.json(rows[0]);
+    res.json(withSharedAlias(rows[0]));
   } catch (err) {
     await client.query("ROLLBACK");
     if (err.code === "23505") {

@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { pool } from "../db.js";
-import { resolveWalletName, sharedWalletNames } from "../wallets.js";
+import { resolveWalletName, canUseWallet, sharedWalletNames } from "../wallets.js";
 import { resolveCategoryName } from "../categories.js";
 import { enqueueSheetsSync, getSyncStatus } from "../services/sheetsSyncQueue.js";
 import { parseReceiptFromImage, parseReceiptItemsFromImage } from "../services/parseReceipt.js";
@@ -84,7 +84,10 @@ expensesRouter.post("/", async (req, res) => {
   // still on its cached list, would otherwise be rejected outright. Every
   // use of `wallet` below is this resolved name.
   const wallet = await resolveWalletName(req.body.wallet);
-  if (!wallet) {
+  // canUseWallet, а не просто «счёт существует»: счета группы «Другое»
+  // принадлежат одному аккаунту, и без этой проверки второй мог бы писать
+  // на них по API, хотя в интерфейсе их не видит.
+  if (!wallet || !(await canUseWallet(wallet, req.user.id))) {
     return res.status(400).json({ error: "Некорректный кошелёк" });
   }
   if (typeof amount !== "number" || !Number.isFinite(amount) || amount <= 0) {
@@ -178,7 +181,7 @@ expensesRouter.put("/:id", async (req, res) => {
   // Same forwarding as the create path above — an edit sheet opened before
   // a rename still posts the old wallet name.
   const wallet = await resolveWalletName(req.body.wallet);
-  if (!wallet) {
+  if (!wallet || !(await canUseWallet(wallet, req.user.id))) {
     return res.status(400).json({ error: "Некорректный кошелёк" });
   }
   if (typeof amount !== "number" || !Number.isFinite(amount) || amount <= 0) {

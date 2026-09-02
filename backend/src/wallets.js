@@ -2,12 +2,12 @@ import { pool } from "./db.js";
 
 // Wallets live in the DB (user-creatable). Cached briefly for the hot paths
 // (expense validation, voice parsing, visibility filtering).
-let cachedWallets = null; // [{ name, shared }]
+let cachedWallets = null; // [{ name, scope, created_by }]
 let cachedAt = 0;
 
 async function allWallets() {
   if (cachedWallets && Date.now() - cachedAt < 60000) return cachedWallets;
-  const { rows } = await pool.query(`SELECT name, shared FROM wallets ORDER BY sort_order, id`);
+  const { rows } = await pool.query(`SELECT name, scope, created_by FROM wallets ORDER BY sort_order, id`);
   cachedWallets = rows;
   cachedAt = Date.now();
   return cachedWallets;
@@ -21,11 +21,29 @@ export async function walletNames() {
   return (await allWallets()).map((w) => w.name);
 }
 
-// Shared wallets (Семья/Бизнес/Ремонт by default) are visible to and
-// editable by both accounts, unlike private ones (Личные) which stay
-// scoped to whoever logged them.
+// Общие счета (по умолчанию Семья/Бизнес/Ремонт): траты видны обоим
+// аккаунтам, складываются в общие итоги, мирроятся в обе Google-таблицы и
+// делят один лимит на категорию. Всё остальное — personal и other — у
+// каждого аккаунта своё.
 export async function sharedWalletNames() {
-  return (await allWallets()).filter((w) => w.shared).map((w) => w.name);
+  return (await allWallets()).filter((w) => w.scope === "shared").map((w) => w.name);
+}
+
+// Счета группы «Другое» видны только тому, кто их завёл: наличка и Alipay
+// — это карманы конкретного человека, второму аккаунту их даже показывать
+// незачем. personal и shared видны всем (у personal просто траты у каждого
+// свои). userId = null (нет сессии) — «Другое» не показываем никому.
+export async function visibleWallets(userId) {
+  return (await allWallets()).filter(
+    (w) => w.scope !== "other" || (userId != null && w.created_by === userId)
+  );
+}
+
+// Можно ли этому аккаунту вообще писать на этот счёт. Без проверки чужой
+// счёт из «Другого» принимал бы траты по API, хотя в интерфейсе его не
+// видно.
+export async function canUseWallet(name, userId) {
+  return (await visibleWallets(userId)).some((w) => w.name === name);
 }
 
 export async function isValidWallet(wallet) {

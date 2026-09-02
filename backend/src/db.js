@@ -9,7 +9,7 @@ export const pool = new Pool({
 
 // Default categories, inserted once on first boot. "Прочее" is pinned to the
 // end via sort_order 999 — user-created categories slot in before it.
-const SEED_CATEGORIES = [
+export const SEED_CATEGORIES = [
   { name: "Кафе и рестораны", emoji: "🍴", bg: "#fde2e1", fg: "#c23b3b", sort: 1 },
   { name: "Продукты", emoji: "🛒", bg: "#e1f3e3", fg: "#2f8f4e", sort: 2 },
   { name: "Такси", emoji: "🚕", bg: "#fff2cf", fg: "#a9790a", sort: 3 },
@@ -28,7 +28,7 @@ const SEED_CATEGORIES = [
 // independently-idempotent check below (an existing prod DB already has the
 // expense seed, so "categories table has any row at all" can't be reused to
 // decide whether the income seed still needs to run).
-const SEED_INCOME_CATEGORIES = [
+export const SEED_INCOME_CATEGORIES = [
   { name: "Зарплата", emoji: "💵", bg: "#e1f3e3", fg: "#2f8f4e", sort: 1 },
   { name: "Бизнес", emoji: "💼", bg: "#fde2e1", fg: "#c23b3b", sort: 2 },
   { name: "Подарки", emoji: "🎁", bg: "#fde1ef", fg: "#c23b8f", sort: 3 },
@@ -42,10 +42,10 @@ const SEED_INCOME_CATEGORIES = [
 // and editable by both accounts, pooled in stats, mirrored to both
 // personal Sheets.
 const SEED_WALLETS = [
-  { name: "Личные", emoji: "👛", bg: "#d7f5e9", fg: "#159969", sort: 1, shared: false },
-  { name: "Семья", emoji: "👨‍👩‍👧", bg: "#e3ecfd", fg: "#2f5fc2", sort: 2, shared: true },
-  { name: "Бизнес", emoji: "💼", bg: "#fde2e1", fg: "#c23b3b", sort: 3, shared: true },
-  { name: "Ремонт", emoji: "🔨", bg: "#fff2cf", fg: "#a9790a", sort: 4, shared: true },
+  { name: "Личные", emoji: "👛", bg: "#d7f5e9", fg: "#159969", sort: 1, scope: "personal" },
+  { name: "Семья", emoji: "👨‍👩‍👧", bg: "#e3ecfd", fg: "#2f5fc2", sort: 2, scope: "shared" },
+  { name: "Бизнес", emoji: "💼", bg: "#fde2e1", fg: "#c23b3b", sort: 3, scope: "shared" },
+  { name: "Ремонт", emoji: "🔨", bg: "#fff2cf", fg: "#a9790a", sort: 4, scope: "shared" },
 ];
 
 export async function initSchema() {
@@ -80,24 +80,51 @@ export async function initSchema() {
       bg TEXT NOT NULL,
       fg TEXT NOT NULL,
       sort_order INT NOT NULL DEFAULT 0,
-      shared BOOLEAN NOT NULL DEFAULT true
+      scope TEXT NOT NULL DEFAULT 'shared'
     );
   `);
-  // Idempotent for wallets tables created before "shared" existed. The
-  // column defaults to true, so the one wallet that predates it and must
-  // NOT be shared ("Личные") is corrected here — but only on the boot that
-  // actually adds the column. It used to be an unconditional UPDATE on
-  // every boot, which was harmless only while the choice wasn't user-
-  // editable; now that the create/edit sheet exposes it, that would silently
-  // undo "make Личные shared" on the next deploy.
-  const { rows: sharedCol } = await pool.query(`
+  // Три группы кошельков вместо булева "shared":
+  //   personal — виден обоим аккаунтам, но траты на нём у каждого свои
+  //   shared   — общий: траты видны обоим, идут в общие итоги и лимиты
+  //   other    — виден ТОЛЬКО создавшему аккаунту (наличка, Alipay)
+  //
+  // Раньше это был флаг shared BOOLEAN. Переносим один раз: true → shared,
+  // false → personal. Старый столбец после переноса удаляется — держать
+  // два поля, кодирующих одно и то же, значит однажды забыть обновить одно
+  // из них (этот класс багов здесь уже ловили).
+  const { rows: scopeCol } = await pool.query(`
     SELECT 1 FROM information_schema.columns
-    WHERE table_name = 'wallets' AND column_name = 'shared'
+    WHERE table_name = 'wallets' AND column_name = 'scope'
   `);
-  if (!sharedCol.length) {
-    await pool.query(`ALTER TABLE wallets ADD COLUMN shared BOOLEAN NOT NULL DEFAULT true`);
-    await pool.query(`UPDATE wallets SET shared = false WHERE name = 'Личные'`);
+  if (!scopeCol.length) {
+    await pool.query(`ALTER TABLE wallets ADD COLUMN scope TEXT NOT NULL DEFAULT 'shared'`);
+    const { rows: hadShared } = await pool.query(`
+      SELECT 1 FROM information_schema.columns
+      WHERE table_name = 'wallets' AND column_name = 'shared'
+    `);
+    if (hadShared.length) {
+      await pool.query(`UPDATE wallets SET scope = CASE WHEN shared THEN 'shared' ELSE 'personal' END`);
+    } else {
+      await pool.query(`UPDATE wallets SET scope = 'personal' WHERE name = 'Личные'`);
+    }
   }
+  await pool.query(`ALTER TABLE wallets DROP COLUMN IF EXISTS shared`);
+  await pool.query(`
+    DO $$
+    BEGIN
+      IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'wallets_scope_check') THEN
+        ALTER TABLE wallets ADD CONSTRAINT wallets_scope_check
+          CHECK (scope IN ('personal', 'shared', 'other'));
+      END IF;
+    END $$;
+  `);
+
+  // Кто завёл счёт. Нужен только группе "other": она видна одному аккаунту,
+  // и без владельца непонятно, кому именно. У старых счетов пусто — они не
+  // "other", так что это ни на что не влияет.
+  await pool.query(`
+    ALTER TABLE wallets ADD COLUMN IF NOT EXISTS created_by INTEGER REFERENCES users(id) ON DELETE SET NULL
+  `);
 
   // Валюта кошелька. По умолчанию тенге — все существующие кошельки ведутся
   // в ней, так что миграция ничего не меняет. Валютные кошельки (Alipay в
@@ -123,9 +150,9 @@ export async function initSchema() {
   if (!anyWallet.length) {
     for (const wallet of SEED_WALLETS) {
       await pool.query(
-        `INSERT INTO wallets (name, emoji, bg, fg, sort_order, shared)
+        `INSERT INTO wallets (name, emoji, bg, fg, sort_order, scope)
          VALUES ($1, $2, $3, $4, $5, $6) ON CONFLICT (name) DO NOTHING`,
-        [wallet.name, wallet.emoji, wallet.bg, wallet.fg, wallet.sort, wallet.shared]
+        [wallet.name, wallet.emoji, wallet.bg, wallet.fg, wallet.sort, wallet.scope]
       );
     }
   }
@@ -343,6 +370,33 @@ export async function initSchema() {
           [cat.name, cat.emoji, cat.bg, cat.fg, cat.sort, wallet.name]
         );
       }
+    }
+  }
+
+  // Счёт без единой категории не принимает вообще ни одной траты
+  // (resolveCategoryName не находит, на что списать, и отдаёт 400). Сид
+  // выше заполняет только счета из SEED_WALLETS, поэтому любой созданный
+  // руками счёт получался «мёртвым» — так и случилось с Наличкой и Alipay.
+  // Разовый ремонт: досеваем набор по умолчанию тем счетам, где категорий
+  // этого типа нет ВООБЩЕ. Пустота — не осознанный выбор пользователя
+  // (пользоваться таким счётом нельзя), в отличие от удалённой отдельной
+  // категории, которую воскрешать нельзя и мы не воскрешаем.
+  const { rows: emptyWallets } = await pool.query(`
+    SELECT w.name, c.type
+    FROM wallets w
+    CROSS JOIN (VALUES ('expense'), ('income')) AS c(type)
+    WHERE NOT EXISTS (
+      SELECT 1 FROM categories cat WHERE cat.wallet = w.name AND cat.type = c.type
+    )
+  `);
+  for (const row of emptyWallets) {
+    const seed = row.type === "income" ? SEED_INCOME_CATEGORIES : SEED_CATEGORIES;
+    for (const cat of seed) {
+      await pool.query(
+        `INSERT INTO categories (name, emoji, bg, fg, sort_order, wallet, type)
+         VALUES ($1, $2, $3, $4, $5, $6, $7) ON CONFLICT (wallet, name) DO NOTHING`,
+        [cat.name, cat.emoji, cat.bg, cat.fg, cat.sort, row.name, row.type]
+      );
     }
   }
 
