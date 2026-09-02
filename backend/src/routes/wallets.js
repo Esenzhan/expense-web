@@ -12,6 +12,13 @@ const isColor = (v) => typeof v === "string" && /^#[0-9a-fA-F]{6}$/.test(v);
 
 const SCOPES = ["personal", "shared", "other"];
 
+// «Общим» является только scope='shared'. И «Личный», и «Другое» —
+// персональные: их видит лишь владелец. Счёт без владельца (created_by
+// NULL) — исторический, он виден всем, пока владельца не проставят.
+function isForeignPersonal(wallet, userId) {
+  return wallet.scope !== "shared" && wallet.created_by != null && wallet.created_by !== userId;
+}
+
 function validate({ name, emoji, bg, fg, scope, currency }) {
   if (typeof name !== "string" || !name.trim() || name.trim().length > 40) {
     return "Некорректное название счёта";
@@ -124,7 +131,9 @@ walletsRouter.delete("/:name", authMiddleware, async (req, res) => {
     `SELECT scope, created_by FROM wallets WHERE name = $1`,
     [name]
   );
-  if (own.length && own[0].scope === "other" && own[0].created_by !== req.user.id) {
+  // Чужой персональный счёт («Личный» или «Другое» с другим владельцем)
+  // второй аккаунт не видит — значит и удалить не может.
+  if (own.length && isForeignPersonal(own[0], req.user.id)) {
     return res.status(404).json({ error: "Счёт не найден" });
   }
   const { rows } = await pool.query(
@@ -164,9 +173,9 @@ walletsRouter.put("/:name", authMiddleware, async (req, res) => {
       await client.query("ROLLBACK");
       return res.status(404).json({ error: "Счёт не найден" });
     }
-    // Чужой счёт из «Другого» второй аккаунт не видит — значит и править
+    // Чужой персональный счёт второй аккаунт не видит — значит и править
     // его не может, даже зная название.
-    if (existing[0].scope === "other" && existing[0].created_by !== req.user.id) {
+    if (isForeignPersonal(existing[0], req.user.id)) {
       await client.query("ROLLBACK");
       return res.status(404).json({ error: "Счёт не найден" });
     }
@@ -190,9 +199,14 @@ walletsRouter.put("/:name", authMiddleware, async (req, res) => {
         });
       }
     }
-    // Уходя в «Другое», счёт должен обрести владельца — иначе он станет
-    // невидимым вообще для всех, включая того, кто его только что перенёс.
-    const owner = scope === "other" ? existing[0].created_by ?? req.user.id : existing[0].created_by;
+    // Уходя в персональную группу, счёт должен обрести владельца — иначе
+    // останется «ничьим» и будет виден обоим (см. visibleWallets). Явно
+    // переданный ownerId позволяет отдать счёт другому аккаунту — это нужно,
+    // когда счёт исторически ничей и надо закрепить его за человеком.
+    const owner =
+      scope === "shared"
+        ? existing[0].created_by
+        : req.body.ownerId ?? existing[0].created_by ?? req.user.id;
     const { rows } = await client.query(
       `UPDATE wallets SET name = $1, emoji = $2, bg = $3, fg = $4, scope = $5, currency = $6, created_by = $7
        WHERE name = $8 RETURNING name, emoji, bg, fg, scope, currency, created_by`,

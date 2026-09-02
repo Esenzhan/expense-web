@@ -102,6 +102,12 @@ export default function WalletsSheet({ balances, pendingWalletDeltas, selected, 
                 <span className="wallet-row-total">{formatBalance(sharedBalance)}</span>
               </div>
             )}
+            {group.scope === "personal" && (
+              <div className="wallet-row all wallet-row-summary">
+                <span className="cat-name">Личные</span>
+                <span className="wallet-row-hint">видно только тебе</span>
+              </div>
+            )}
             {group.scope === "other" && (
               <div className="wallet-row all wallet-row-summary">
                 <span className="cat-name">Другое</span>
