@@ -199,14 +199,21 @@ walletsRouter.put("/:name", authMiddleware, async (req, res) => {
         });
       }
     }
-    // Уходя в персональную группу, счёт должен обрести владельца — иначе
-    // останется «ничьим» и будет виден обоим (см. visibleWallets). Явно
-    // переданный ownerId позволяет отдать счёт другому аккаунту — это нужно,
-    // когда счёт исторически ничей и надо закрепить его за человеком.
+    // Владелец назначается только осознанно, тремя способами: явным
+    // ownerId, переносом счёта В персональную группу, или созданием счёта.
+    // Простое переименование или смена иконки НЕ забирают счёт себе — раньше
+    // забирали, и Есенжан, переименовав общий для обоих «Каспи Дакош», молча
+    // сделал его своим, а у Дарии счёт исчез из списка.
+    // ownerId === null снимает владельца — счёт снова становится «ничьим» и
+    // виден обоим. Нужен как раз для отката, когда счёт закрепился не за тем
+    // человеком: иначе владельца было бы не отменить, только переназначить.
+    const scopeChanged = scope !== existing[0].scope;
     const owner =
       scope === "shared"
         ? existing[0].created_by
-        : req.body.ownerId ?? existing[0].created_by ?? req.user.id;
+        : "ownerId" in req.body
+        ? req.body.ownerId
+        : existing[0].created_by ?? (scopeChanged ? req.user.id : null);
     const { rows } = await client.query(
       `UPDATE wallets SET name = $1, emoji = $2, bg = $3, fg = $4, scope = $5, currency = $6, created_by = $7
        WHERE name = $8 RETURNING name, emoji, bg, fg, scope, currency, created_by`,
