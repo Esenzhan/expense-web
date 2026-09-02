@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { pool } from "../db.js";
-import { isValidWallet } from "../wallets.js";
+import { isValidWallet, visibleWallets } from "../wallets.js";
 import { getCurrentBalance, getCurrentBalances, setBalance, logBalanceChange } from "../services/balanceHistory.js";
 
 export const walletBalancesRouter = Router();
@@ -15,7 +15,15 @@ export const walletBalancesRouter = Router();
 // the reasoning behind its logged_at cutoff — lives in
 // services/balanceHistory.js; it used to be copy-pasted here as well.
 walletBalancesRouter.get("/", async (req, res) => {
-  res.json(await getCurrentBalances(pool, req.user.id));
+  // Только по счетам, которые этот аккаунт вообще видит. wallet_balances
+  // хранит строку на каждую пару (счёт, аккаунт), и она переживает потерю
+  // доступа к счёту: если счёт стал чужим персональным, строка остаётся, а
+  // счёт из списка пропадает. Тогда её сумма продолжала бы попадать в «Все
+  // счета», хотя ни одной строки под этим числом на экране нет — ровно то
+  // расхождение «цифра не сходится со списком», которое тут уже ловили.
+  const allowed = new Set((await visibleWallets(req.user.id)).map((w) => w.name));
+  const rows = await getCurrentBalances(pool, req.user.id);
+  res.json(rows.filter((r) => allowed.has(r.wallet)));
 });
 
 walletBalancesRouter.put("/:wallet", async (req, res) => {

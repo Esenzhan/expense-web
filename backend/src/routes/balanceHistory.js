@@ -1,6 +1,7 @@
 import { Router } from "express";
 import { pool } from "../db.js";
 import { getCurrentBalances } from "../services/balanceHistory.js";
+import { visibleWallets } from "../wallets.js";
 
 export const balanceHistoryRouter = Router();
 
@@ -52,7 +53,11 @@ balanceHistoryRouter.get("/", async (req, res) => {
     ),
   ]);
 
-  const events = [
+  // По той же причине, что и в /api/wallet-balances: события по счёту,
+  // который аккаунт больше не видит, показывать не надо.
+  const allowed = new Set((await visibleWallets(userId)).map((w) => w.name));
+
+  const allEvents = [
     ...adjustments.rows.map((r) => ({
       key: `adj-${r.id}`,
       id: r.id,
@@ -80,6 +85,11 @@ balanceHistoryRouter.get("/", async (req, res) => {
       spent_at: r.created_at,
     })),
   ];
+
+  // Отбрасываем события по счетам, которые этот аккаунт больше не видит
+  // (см. `allowed` выше) — до сортировки и до подсчёта остатков, чтобы
+  // отброшенное не участвовало вообще нигде.
+  const events = allEvents.filter((e) => allowed.has(e.wallet));
 
   // Свежие сверху. При совпадении времени правка опорной суммы идёт ПЕРЕД
   // тратой (то есть позже неё по времени): формула баланса вычитает траты
