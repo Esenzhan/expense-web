@@ -159,6 +159,16 @@ export async function renameWalletTab(oldWallet, newWallet) {
   if (errors.length) throw errors[0];
 }
 
+// Чья именно таблица отказала. Общий счёт мирроится в таблицы ОБОИХ
+// аккаунтов, каждая своим токеном и в свой файл, — и без этой пометки в
+// очереди оседало голое «The caller does not have permission», по которому
+// невозможно понять, у кого чинить доступ.
+function labelled(target, err) {
+  const wrapped = new Error(`${target.name}: ${err?.message || err}`);
+  wrapped.cause = err;
+  return wrapped;
+}
+
 // Best-effort across targets — one target's failure (e.g. the other
 // account's token expired) shouldn't stop this one from mirroring — but
 // the caller (sheetsSyncQueue.js) needs to know if ANYTHING failed so it
@@ -171,7 +181,7 @@ export async function appendExpenseRow(loggingUser, expense) {
     try {
       await appendToOne(target, expense, who);
     } catch (err) {
-      errors.push(err);
+      errors.push(labelled(target, err));
     }
   }
   if (errors.length) throw errors[0];
@@ -212,7 +222,7 @@ export async function updateExpenseRow(loggingUser, expense, previousWallet) {
     try {
       await updateOne(target, expense, who);
     } catch (err) {
-      errors.push(err);
+      errors.push(labelled(target, err));
     }
   }
   if (errors.length) throw errors[0];
@@ -255,7 +265,7 @@ export async function deleteExpenseRow(loggingUser, expense) {
     try {
       await deleteOne(target, expense);
     } catch (err) {
-      errors.push(err);
+      errors.push(labelled(target, err));
     }
   }
   if (errors.length) throw errors[0];
