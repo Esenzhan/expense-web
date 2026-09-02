@@ -1,11 +1,11 @@
 import { useEffect, useRef, useState } from "react";
-import { reorderCategories, fetchExpenses, fetchExpensesRange, fetchWalletTotals, fetchWalletBalances, setWalletBalance, fetchCategories, fetchWallets, fetchMe, warmBackend, createExpense, deleteExpense, deleteCategory, saveThemeSetting } from "./api";
+import { reorderCategories, fetchExpenses, fetchExpensesRange, fetchWalletTotals, fetchWalletBalances, setWalletBalance, fetchCategories, fetchWallets, fetchMe, warmBackend, createExpense, deleteExpense, deleteCategory, saveThemeSetting, reorderWallets } from "./api";
 import { loadLocalTheme, setLocalTheme } from "./theme";
 import { getToken, setToken } from "./auth";
 import { listPendingExpenses, syncPendingExpenses, hasPendingExpenses, removePendingExpense, clearConfirmedSynced } from "./offlineQueue";
 import { computeInsights, periodRange, formatPeriodLabel } from "./insights";
 import { hydrateCategories, hydrateIncomeCategories, getCategoryIcon, getIncomeCategoryIcon } from "./categoryIcons";
-import { hydrateWallets, getWalletIcon, walletCurrency, isInAllAccounts } from "./wallets";
+import { hydrateWallets, getWalletIcon, walletCurrency, isInAllAccounts, walletsByScope } from "./wallets";
 import { HOME_CURRENCY, formatMoney } from "./currencies";
 import { haptic } from "./haptics";
 import { catIconVars } from "./catIconVars";

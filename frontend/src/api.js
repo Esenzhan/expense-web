@@ -290,6 +290,20 @@ export async function updateWallet(oldName, payload) {
   return res.json();
 }
 
+// Полный список имён в новом порядке — целиком, а не «откуда/куда»: так
+// клиент со устаревшим списком не вплетёт своё представление в чужое.
+export async function reorderWallets(names) {
+  const res = await apiFetch(`/api/wallets/order`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ names }),
+  });
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    throw new Error(body.error || "Не удалось сохранить порядок счетов");
+  }
+}
+
 export async function deleteWallet(name) {
   const res = await apiFetch(`/api/wallets/${encodeURIComponent(name)}`, { method: "DELETE" });
   if (!res.ok) {

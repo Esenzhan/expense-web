@@ -1,14 +1,96 @@
-import { useRef } from "react";
+import { useRef, useState } from "react";
 import { walletsByScope, isSharedWallet, isInAllAccounts, walletCurrency } from "../wallets";
 import { formatMoney, HOME_CURRENCY, isHomeCurrency } from "../currencies";
 import { haptic, withHaptic } from "../haptics";
 import { useSwipeDismiss } from "../sheetGestures";
 import CategoryGlyph from "./CategoryGlyph";
+import { DragHandle, useReorderDrag } from "./ReorderDrag";
 import { catIconVars } from "../catIconVars";
+
+
+// Одна группа счетов со своим перетаскиванием. Отдельный компонент, потому
+// что хук перетаскивания нужен каждой группе свой, а хуки нельзя вызывать
+// в цикле.
+//
+// Порядок меняется ТОЛЬКО внутри группы: вытащить счёт из «Личных» в
+// «Общие» перетаскиванием нельзя — это смена типа счёта, у неё другие
+// последствия (кто его видит, чьи на нём траты), и делается она в шторке
+// правки осознанно.
+function WalletGroup({ items, selected, balanceOf, formatBalance, onChoose, onEdit, onReorder }) {
+  const [localOrder, setLocalOrder] = useState(null);
+
+  // Пока сохранение летит, показываем уже новый порядок; когда приедет свежая
+  // гидрация счетов, localOrder сбрасывается сам собой — новый список
+  // приходит из пропса, а неизвестные ему имена уезжают в конец.
+  const wallets = (() => {
+    if (!localOrder) return items;
+    const byName = new Map(items.map((w) => [w.name, w]));
+    const ordered = localOrder.map((n) => byName.get(n)).filter(Boolean);
+    for (const w of items) if (!localOrder.includes(w.name)) ordered.push(w);
+    return ordered;
+  })();
+
+  const { drag, listRef, rowOffset, onHandleTouchStart } = useReorderDrag(
+    wallets.map((w) => w.name),
+    (names) => {
+      setLocalOrder(names);
+      Promise.resolve(onReorder(names)).catch(() => setLocalOrder(null));
+    }
+  );
+
+  return (
+    <div className="cats-list" ref={listRef}>
+      {wallets.map((wallet, index) => (
+        <div
+          className={`wallet-row-wrap ${drag?.from === index ? "dragging" : ""}`}
+          key={wallet.name}
+          style={{ transform: `translateY(${rowOffset(index)}px)` }}
+        >
+          <div
+            className={`wallet-row ${selected === wallet.name ? "current" : ""}`}
+            onClick={() => {
+              if (drag) return; // это было перетаскивание, а не тап
+              onChoose(wallet.name);
+            }}
+          >
+            <span className="category-icon" style={catIconVars(wallet.bg, wallet.fg)}>
+              <CategoryGlyph emoji={wallet.emoji} size={20} />
+            </span>
+            <span className="cat-name">{wallet.name}</span>
+            <span className="wallet-row-total">
+              {formatBalance(balanceOf(wallet.name), walletCurrency(wallet.name))}
+            </span>
+            <button
+              className="wallet-edit"
+              aria-label="Редактировать"
+              onClick={(event) => {
+                event.stopPropagation();
+                haptic();
+                onEdit(wallet);
+              }}
+            >
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M15.5 5.5 18.5 8.5 8 19l-4 1 1-4L15.5 5.5Z" />
+              </svg>
+            </button>
+            <span
+              className="wallet-drag-handle"
+              onTouchStart={(event) => onHandleTouchStart(event, index)}
+              aria-label="Перетащить"
+              role="button"
+            >
+              <DragHandle />
+            </span>
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
 
 // «Счета»: pick the wallet the whole main screen is scoped to, add new ones,
 // or edit an existing one via the pencil.
-export default function WalletsSheet({ balances, pendingWalletDeltas, selected, onSelect, onAdd, onEdit, onClose, onTransfer }) {
+export default function WalletsSheet({ balances, pendingWalletDeltas, selected, onSelect, onAdd, onEdit, onClose, onTransfer, onReorder }) {
   const sheetRef = useRef(null);
   useSwipeDismiss(sheetRef, onClose);
 
@@ -115,36 +197,18 @@ export default function WalletsSheet({ balances, pendingWalletDeltas, selected, 
               </div>
             )}
 
-            <div className="cats-list">
-              {group.items.map((wallet) => (
-                <div
-                  className={`wallet-row ${selected === wallet.name ? "current" : ""}`}
-                  key={wallet.name}
-                  onClick={() => choose(wallet.name)}
-                >
-                  <span className="category-icon" style={catIconVars(wallet.bg, wallet.fg)}>
-                    <CategoryGlyph emoji={wallet.emoji} size={20} />
-                  </span>
-                  <span className="cat-name">{wallet.name}</span>
-                  <span className="wallet-row-total">
-                    {formatBalance(balanceOf(wallet.name), walletCurrency(wallet.name))}
-                  </span>
-                  <button
-                    className="wallet-edit"
-                    aria-label="Редактировать"
-                    onClick={(event) => {
-                      event.stopPropagation();
-                      haptic();
-                      onEdit(wallet);
-                    }}
-                  >
-                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
-                      <path d="M15.5 5.5 18.5 8.5 8 19l-4 1 1-4L15.5 5.5Z" />
-                    </svg>
-                  </button>
-                </div>
-              ))}
-            </div>
+            <WalletGroup
+              items={group.items}
+              selected={selected}
+              balanceOf={balanceOf}
+              formatBalance={formatBalance}
+              onChoose={choose}
+              onEdit={onEdit}
+              // Порядок уходит на сервер целиком, включая соседние группы:
+              // sort_order сквозной, и присылать только одну группу значило
+              // бы перенумеровать её поверх остальных.
+              onReorder={(names) => onReorder(group.scope, names)}
+            />
           </div>
         ))}
       </div>

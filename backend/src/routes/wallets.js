@@ -120,6 +120,44 @@ walletsRouter.post("/", authMiddleware, async (req, res) => {
   }
 });
 
+// Явный порядок счетов, как его выставили перетаскиванием за ручку в шторке
+// «Счета». Принимает ПОЛНЫЙ список имён в новом порядке и перенумеровывает
+// sort_order — целиком, а не парой «откуда/куда»: клиент со устаревшим
+// списком иначе вплёл бы своё представление о порядке в чужое.
+//
+// Порядок общий для обоих аккаунтов, как и сам список счетов: sort_order —
+// свойство счёта, а не пары (счёт, аккаунт). Переставить можно только те
+// счета, которые этот аккаунт видит, — чужие персональные в присланном
+// списке просто не найдутся и останутся на своих местах.
+//
+// Объявлен до "/:name" осознанно: Express разбирает пути по порядку, и
+// иначе "order" уехал бы в параметр name.
+walletsRouter.put("/order", authMiddleware, async (req, res) => {
+  const { names } = req.body;
+  if (!Array.isArray(names) || !names.length || !names.every((n) => typeof n === "string")) {
+    return res.status(400).json({ error: "Некорректный порядок" });
+  }
+  const allowed = new Set((await visibleWallets(req.user.id)).map((w) => w.name));
+
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+    for (let i = 0; i < names.length; i++) {
+      if (!allowed.has(names[i])) continue;
+      await client.query(`UPDATE wallets SET sort_order = $1 WHERE name = $2`, [i, names[i]]);
+    }
+    await client.query("COMMIT");
+  } catch (err) {
+    await client.query("ROLLBACK");
+    console.error("Не удалось сохранить порядок счетов:", err);
+    return res.status(500).json({ error: "Не удалось сохранить порядок" });
+  } finally {
+    client.release();
+  }
+  invalidateWalletCache();
+  res.status(204).end();
+});
+
 // A wallet can be deleted only while no expenses reference it; "Личные"
 // stays as the voice-parse fallback
 walletsRouter.delete("/:name", authMiddleware, async (req, res) => {
