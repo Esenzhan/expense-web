@@ -1311,14 +1311,22 @@ export default function App() {
             setEditingWallet(null);
           }}
           onSaved={async (newName, oldName) => {
-            await reloadWallets();
+            // Категории тоже перезагружаем, а не только счета: реестр
+            // категорий (categoryIcons.js) разложен по ИМЕНИ счёта, и после
+            // переименования все его категории лежат под старым ключом — по
+            // новому имени их не найти, и в интерфейсе они исчезают все
+            // разом. В базе при этом всё цело: categories.wallet переезжает
+            // по ON UPDATE CASCADE.
+            await Promise.all([reloadWallets(), reloadCategories()]);
             if (oldName && selectedWallet === oldName) selectWallet(newName);
             setNewWalletOpen(false);
             setEditingWallet(null);
             refreshAll(period);
           }}
           onDeleted={async (deletedName) => {
-            await reloadWallets();
+            // Удаление счёта уносит его категории (ON DELETE CASCADE) —
+            // перечитываем по той же причине, что и выше.
+            await Promise.all([reloadWallets(), reloadCategories()]);
             const wasSelected = selectedWallet === deletedName;
             if (wasSelected) selectWallet(null);
             setNewWalletOpen(false);
