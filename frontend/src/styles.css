@@ -2957,9 +2957,22 @@ button.wallet-chip {
   padding: 14px 12px;
 }
 
+/* Заголовок группы («Общие счета», «Другое») — подпись секции, а не счёт.
+   Поэтому без карточки: с тем же фоном, что у строк под ним, и зазором
+   ровно как между строками, он читался как ещё один счёт и слипался с
+   группой. Прозрачный фон плюс отступы с обеих сторон дают понятную
+   структуру: подпись, под ней — блок карточек. */
 .wallet-row-summary {
-  margin-top: 10px;
+  background: transparent;
+  border: none;
+  margin: 22px 0 10px;
+  padding: 0 4px;
   color: var(--ink-soft);
+}
+
+/* Первая группа идёт сразу под «Все счета» — там отступ сверху меньше. */
+.cats-scope-group:first-child .wallet-row-summary {
+  margin-top: 14px;
 }
 
 .wallet-row-summary .wallet-row-total {

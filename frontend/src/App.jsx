@@ -5,7 +5,7 @@ import { getToken, setToken } from "./auth";
 import { listPendingExpenses, syncPendingExpenses, hasPendingExpenses, removePendingExpense, clearConfirmedSynced } from "./offlineQueue";
 import { computeInsights, periodRange, formatPeriodLabel } from "./insights";
 import { hydrateCategories, hydrateIncomeCategories, getCategoryIcon, getIncomeCategoryIcon } from "./categoryIcons";
-import { hydrateWallets, getWalletIcon, walletCurrency, isHomeWallet } from "./wallets";
+import { hydrateWallets, getWalletIcon, walletCurrency, isInAllAccounts } from "./wallets";
 import { HOME_CURRENCY, formatMoney } from "./currencies";
 import { haptic } from "./haptics";
 import { catIconVars } from "./catIconVars";
@@ -320,7 +320,7 @@ export default function App() {
       computeInsights({
         period: periodRef.current,
         rows: [...pendingForList, ...(cached.insightsRows || [])].filter(
-          (r) => wallet || isHomeWallet(r.wallet)
+          (r) => wallet || isInAllAccounts(r.wallet)
         ),
       })
     );
@@ -610,11 +610,12 @@ export default function App() {
       const createdAt = new Date(p.created_at);
       return createdAt >= periodStart && createdAt < periodEnd;
     });
-    // На «Все счета» в «Расходы» и Инсайты идут только тенговые счета — иначе
-    // юани из Alipay просто прибавились бы к тенге как одинаковые числа. При
-    // выбранном счёте фильтровать нечего: там и так один счёт с одной валютой.
+    // На «Все счета» в «Расходы» и Инсайты идёт ровно то же, что и в общий
+    // итог: тенговые счета групп «Личные» и «Общие». Иначе юани из Alipay
+    // прибавились бы к тенге как одинаковые числа, а траты из «Другого»
+    // попали бы в цифру, из которой их итог исключён.
     const insightsInHomeCurrency = [...pendingInPeriod, ...baseInsightsRows].filter(
-      (r) => wallet || isHomeWallet(r.wallet)
+      (r) => wallet || isInAllAccounts(r.wallet)
     );
     setInsights(computeInsights({ period: currentPeriod, rows: insightsInHomeCurrency }));
     setPendingWalletDeltas(balanceDeltaByWallet);
@@ -867,19 +868,27 @@ export default function App() {
   // на «Все счета» — тенге, потому что складываются только тенговые счета.
   const shownCurrency = selectedWallet ? walletCurrency(selectedWallet) : HOME_CURRENCY;
 
-  // На «Все счета» валютные кошельки НЕ подмешиваются: 100 юаней и 100 тенге
-  // — разные деньги, и сложить их без курса нельзя (см. currencies.js).
-  // Alipay и наличные доллары видно, выбрав их отдельно.
+  // На «Все счета» идут только тенговые счета групп «Личные» и «Общие»:
+  // валюты не складываются, а «Другое» — отдельный карман. Его видно,
+  // выбрав нужный счёт в списке.
   const walletBalance = selectedWallet
     ? Number(walletTotals.find((w) => w.wallet === selectedWallet)?.total || 0)
-    : walletTotals.filter((w) => isHomeWallet(w.wallet)).reduce((sum, w) => sum + Number(w.total), 0);
+    : walletTotals.filter((w) => isInAllAccounts(w.wallet)).reduce((sum, w) => sum + Number(w.total), 0);
+
+  // Список трат показывает ровно то, что посчитано в «Расходы» над ним: на
+  // «Все счета» — без «Другого» и без валютных счетов. Иначе в списке была
+  // бы строка, которой нет в сумме прямо над ней. Фильтруем на отрисовке,
+  // а не в данных: кэши и офлайн-очередь продолжают знать про все счета.
+  const visibleExpenses = selectedWallet
+    ? expenses
+    : expenses.filter((e) => isInAllAccounts(e.wallet));
 
   // Category filter options for the main list — derived from whatever rows
   // are actually loaded (not the full category registry), so the dropdown
   // never offers a category that would filter the list down to empty.
   const categoryFilterOptions = [];
   const seenFilterKeys = new Set();
-  for (const e of expenses) {
+  for (const e of visibleExpenses) {
     const key = `${e.type}:${e.category}`;
     if (seenFilterKeys.has(key)) continue;
     seenFilterKeys.add(key);
@@ -888,8 +897,8 @@ export default function App() {
     categoryFilterOptions.push({ key, type: e.type, name: e.category, icon });
   }
   const displayedExpenses = categoryFilter
-    ? expenses.filter((e) => `${e.type}:${e.category}` === categoryFilter)
-    : expenses;
+    ? visibleExpenses.filter((e) => `${e.type}:${e.category}` === categoryFilter)
+    : visibleExpenses;
   const chipIcon = selectedWallet ? getWalletIcon(selectedWallet) : null;
   const customPeriodValue = customRange ? `custom:${customRange.from}:${customRange.to}` : null;
 
@@ -909,9 +918,9 @@ export default function App() {
     ? accountBalanceEntry
       ? Number(accountBalanceEntry.current_balance) - (pendingWalletDeltas.get(selectedWallet) || 0)
       : null
-    : walletBalances.some((b) => isHomeWallet(b.wallet))
+    : walletBalances.some((b) => isInAllAccounts(b.wallet))
     ? walletBalances
-        .filter((b) => isHomeWallet(b.wallet))
+        .filter((b) => isInAllAccounts(b.wallet))
         .reduce(
           (sum, b) => sum + Number(b.current_balance) - (pendingWalletDeltas.get(b.wallet) || 0),
           0

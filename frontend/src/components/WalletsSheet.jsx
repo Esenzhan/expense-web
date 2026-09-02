@@ -1,5 +1,5 @@
 import { useRef } from "react";
-import { walletsByScope, isSharedWallet, isHomeWallet, walletCurrency } from "../wallets";
+import { walletsByScope, isSharedWallet, isInAllAccounts, walletCurrency } from "../wallets";
 import { formatMoney, HOME_CURRENCY, isHomeCurrency } from "../currencies";
 import { haptic, withHaptic } from "../haptics";
 import { useSwipeDismiss } from "../sheetGestures";
@@ -21,10 +21,11 @@ export default function WalletsSheet({ balances, pendingWalletDeltas, selected, 
     const entry = balances.find((b) => b.wallet === name);
     return entry ? Number(entry.current_balance) - (pendingWalletDeltas.get(name) || 0) : null;
   };
-  // Итоги складывают только тенговые счета — Alipay и наличные доллары в
-  // общую сумму не идут, у них своя валюта (см. currencies.js). Их видно
-  // строкой каждого счёта, со своим знаком.
-  const homeBalances = balances.filter((b) => isHomeWallet(b.wallet));
+  // В «Все счета» идут только тенговые счета из групп «Личные» и «Общие»:
+  // валюты не складываются, а «Другое» — отдельный карман (см.
+  // isInAllAccounts). Каждый счёт всё равно виден своей строкой со своей
+  // суммой и своим знаком.
+  const homeBalances = balances.filter((b) => isInAllAccounts(b.wallet));
   const allBalance = homeBalances.length
     ? homeBalances.reduce((sum, b) => sum + Number(b.current_balance) - (pendingWalletDeltas.get(b.wallet) || 0), 0)
     : null;
@@ -89,7 +90,7 @@ export default function WalletsSheet({ balances, pendingWalletDeltas, selected, 
         </button>
 
         {groups.map((group) => (
-          <div key={group.scope}>
+          <div className="cats-scope-group" key={group.scope}>
             {/* Заголовок группы стоит НАД её счетами и тем самым отделяет её
                 от предыдущей. У общих он заодно несёт их суммарный баланс —
                 раньше эта строка висела в самом низу списка, оторванная от
