@@ -1,5 +1,6 @@
 import { useRef, useState } from "react";
-import { listWallets } from "../wallets";
+import { listWallets, walletCurrency } from "../wallets";
+import { currencySymbol } from "../currencies";
 import { transferBetweenWallets } from "../api";
 import { haptic, hapticHeavy, withHaptic } from "../haptics";
 import { useSwipeDismiss } from "../sheetGestures";
@@ -14,16 +15,39 @@ export default function WalletTransferSheet({ initialFrom, onClose, onTransferre
   useSwipeDismiss(sheetRef, onClose);
 
   const wallets = listWallets();
-  const [from, setFrom] = useState(initialFrom || wallets[0]?.name);
-  const [to, setTo] = useState(wallets.find((w) => w.name !== (initialFrom || wallets[0]?.name))?.name || "");
+  // Куда переводить можно только в той же валюте: перевод переносит число,
+  // а курса в этом пути нет (см. routes/walletTransfers.js). Поэтому «Куда»
+  // показывает не все счета, а только совместимые — вместо того чтобы дать
+  // выбрать несовместимый и отбить его ошибкой уже на сохранении.
+  function targetsFor(source) {
+    return wallets.filter((w) => w.name !== source && walletCurrency(w.name) === walletCurrency(source));
+  }
+
+  const initialSource = initialFrom || wallets[0]?.name;
+  const [from, setFrom] = useState(initialSource);
+  const [to, setTo] = useState(() => targetsFor(initialSource)[0]?.name || "");
   const [amount, setAmount] = useState("");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
+
+  const targets = targetsFor(from);
+  const symbol = currencySymbol(walletCurrency(from));
 
   function pick(setter, name) {
     haptic();
     setter(name);
     setError("");
+  }
+
+  // Смена счёта-источника может увести выбранного получателя в другую
+  // валюту — тогда выбираем первого совместимого вместо него, чтобы в
+  // «Куда» никогда не оставалась подсвеченной строка, которой там уже нет.
+  function pickFrom(name) {
+    haptic();
+    setFrom(name);
+    setError("");
+    const nextTargets = targetsFor(name);
+    if (!nextTargets.some((w) => w.name === to)) setTo(nextTargets[0]?.name || "");
   }
 
   async function handleSave() {
@@ -32,7 +56,7 @@ export default function WalletTransferSheet({ initialFrom, onClose, onTransferre
       setError("Введите сумму больше нуля");
       return;
     }
-    if (from === to) {
+    if (!to || from === to) {
       setError("Выберите разные счета");
       return;
     }
@@ -66,7 +90,7 @@ export default function WalletTransferSheet({ initialFrom, onClose, onTransferre
               key={w.name}
               type="button"
               className={`wallet-pick ${from === w.name ? "active" : ""}`}
-              onClick={() => pick(setFrom, w.name)}
+              onClick={() => pickFrom(w.name)}
             >
               <span className="wallet-pick-icon" style={catIconVars(w.bg, w.fg)}>
                 <CategoryGlyph emoji={w.emoji} size={18} />
@@ -77,24 +101,30 @@ export default function WalletTransferSheet({ initialFrom, onClose, onTransferre
         </div>
 
         <p className="newcat-group-title">Куда</p>
-        <div className="wallet-pick-row">
-          {wallets.map((w) => (
-            <button
-              key={w.name}
-              type="button"
-              className={`wallet-pick ${to === w.name ? "active" : ""}`}
-              onClick={() => pick(setTo, w.name)}
-            >
-              <span className="wallet-pick-icon" style={catIconVars(w.bg, w.fg)}>
-                <CategoryGlyph emoji={w.emoji} size={18} />
-              </span>
-              <span className="wallet-pick-label">{w.name}</span>
-            </button>
-          ))}
-        </div>
+        {targets.length > 0 ? (
+          <div className="wallet-pick-row">
+            {targets.map((w) => (
+              <button
+                key={w.name}
+                type="button"
+                className={`wallet-pick ${to === w.name ? "active" : ""}`}
+                onClick={() => pick(setTo, w.name)}
+              >
+                <span className="wallet-pick-icon" style={catIconVars(w.bg, w.fg)}>
+                  <CategoryGlyph emoji={w.emoji} size={18} />
+                </span>
+                <span className="wallet-pick-label">{w.name}</span>
+              </button>
+            ))}
+          </div>
+        ) : (
+          <p className="empty-hint">
+            Нет другого счёта в {symbol} — перевести можно только между счетами одной валюты.
+          </p>
+        )}
 
         <div className="balance-row" style={{ marginTop: 16 }}>
-          <span className="balance-label">Сумма</span>
+          <span className="balance-label">Сумма, {symbol}</span>
           <input
             className="balance-input"
             type="number"
@@ -110,7 +140,7 @@ export default function WalletTransferSheet({ initialFrom, onClose, onTransferre
 
         {error && <p className="sheet-error">{error}</p>}
 
-        <button className="sheet-close" onClick={handleSave} disabled={saving}>
+        <button className="sheet-close" onClick={handleSave} disabled={saving || !to}>
           {saving ? "Перевожу…" : "Перевести"}
         </button>
       </div>

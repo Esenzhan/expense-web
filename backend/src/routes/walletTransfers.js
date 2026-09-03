@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { pool } from "../db.js";
-import { isValidWallet } from "../wallets.js";
+import { isValidWallet, walletCurrency } from "../wallets.js";
 import { getCurrentBalance, setBalance, logBalanceChange } from "../services/balanceHistory.js";
 
 export const walletTransfersRouter = Router();
@@ -19,6 +19,15 @@ walletTransfersRouter.post("/", async (req, res) => {
   }
   if (from === to) {
     return res.status(400).json({ error: "Выберите разные счета" });
+  }
+  // Перевод переносит ЧИСЛО, а не сумму: курса в этом пути нет и быть не
+  // должно (единственное место, где курс вписывают руками, — снимок
+  // капитала). Без этой проверки 100 000 с тенгового счёта приходили на
+  // долларовый как 100 000 $, и в истории баланса это выглядело обычным
+  // переводом. Шторка перевода такие счета уже не показывает — здесь та же
+  // проверка для всего, что придёт мимо неё (старый бандл, API).
+  if ((await walletCurrency(from)) !== (await walletCurrency(to))) {
+    return res.status(400).json({ error: "Перевести можно только между счетами в одной валюте" });
   }
   if (typeof amount !== "number" || !Number.isFinite(amount) || amount <= 0) {
     return res.status(400).json({ error: "Некорректная сумма" });

@@ -1,13 +1,14 @@
 import { pool } from "./db.js";
+import { HOME_CURRENCY } from "./currencies.js";
 
 // Wallets live in the DB (user-creatable). Cached briefly for the hot paths
 // (expense validation, voice parsing, visibility filtering).
-let cachedWallets = null; // [{ name, scope, created_by }]
+let cachedWallets = null; // [{ name, scope, currency, created_by }]
 let cachedAt = 0;
 
 async function allWallets() {
   if (cachedWallets && Date.now() - cachedAt < 60000) return cachedWallets;
-  const { rows } = await pool.query(`SELECT name, scope, created_by FROM wallets ORDER BY sort_order, id`);
+  const { rows } = await pool.query(`SELECT name, scope, currency, created_by FROM wallets ORDER BY sort_order, id`);
   cachedWallets = rows;
   cachedAt = Date.now();
   return cachedWallets;
@@ -52,6 +53,14 @@ export async function visibleWallets(userId) {
 // видно.
 export async function canUseWallet(name, userId) {
   return (await visibleWallets(userId)).some((w) => w.name === name);
+}
+
+// Валюта счёта. Неизвестный счёт читается как тенговый — это и значение
+// по умолчанию в базе, и безопасная сторона ошибки. Кэш сбрасывается на
+// правке счёта (invalidateWalletCache), а поменять валюту можно только пока
+// на счёте пусто, так что устареть эта величина не успевает.
+export async function walletCurrency(name) {
+  return (await allWallets()).find((w) => w.name === name)?.currency || HOME_CURRENCY;
 }
 
 export async function isValidWallet(wallet) {
