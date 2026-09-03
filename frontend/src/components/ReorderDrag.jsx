@@ -49,7 +49,7 @@ export function useReorderDrag(keys, onCommit) {
         ? rows[1].getBoundingClientRect().top - rows[0].getBoundingClientRect().top
         : rows?.[0]?.getBoundingClientRect().height || 0;
 
-    const pending = { index, startX, startY, step, active: false };
+    const pending = { index, startX, startY, step, active: false, to: index };
     dragRef.current = pending;
 
     clearTimeout(holdTimerRef.current);
@@ -57,7 +57,7 @@ export function useReorderDrag(keys, onCommit) {
       if (dragRef.current !== pending) return;
       pending.active = true;
       haptic(); // "поднял"
-      setDrag({ from: index, to: index, dy: 0 });
+      setDrag({ from: index, to: index, dy: 0, step });
     }, HOLD_MS);
 
     function onMove(moveEvent) {
@@ -79,17 +79,16 @@ export function useReorderDrag(keys, onCommit) {
       const count = keysRef.current.length;
       const raw = state.index + (state.step ? Math.round(dy / state.step) : 0);
       const to = Math.max(0, Math.min(count - 1, raw));
-      setDrag((prev) => {
-        if (prev && prev.to !== to) hapticTick(); // прошли ещё одну позицию
-        return { from: state.index, to, dy };
-      });
+      if (state.to !== to) hapticTick(); // прошли ещё одну позицию
+      state.to = to;
+      setDrag({ from: state.index, to, dy, step: state.step });
     }
 
     function onEnd() {
       const state = dragRef.current;
       clearTimeout(holdTimerRef.current);
-      if (state?.active) commitDrag();
       cleanup();
+      if (state?.active) commitDrag(state);
     }
 
     function cleanup() {
@@ -104,19 +103,21 @@ export function useReorderDrag(keys, onCommit) {
     document.addEventListener("touchcancel", onEnd);
   }
 
-  function commitDrag() {
-    setDrag((current) => {
-      if (!current) return null;
-      const { from, to } = current;
-      if (from !== to) {
-        const next = [...keysRef.current];
-        const [moved] = next.splice(from, 1);
-        next.splice(to, 0, moved);
-        haptic();
-        onCommit(next);
-      }
-      return null;
-    });
+  // onCommit зовётся ЗДЕСЬ, а не внутри обновления состояния: обновляющая
+  // функция обязана быть чистой, и любая ошибка в ней (например, забытый
+  // проп onReorder) падает уже в фазе отрисовки — React сносит всё дерево, и
+  // вместо строки, вернувшейся на место, пользователь получает белый экран.
+  // Тот же побочный эффект в StrictMode вызывался бы дважды.
+  function commitDrag(state) {
+    const from = state.index;
+    const to = state.to ?? from;
+    setDrag(null);
+    if (from === to) return;
+    const next = [...keysRef.current];
+    const [moved] = next.splice(from, 1);
+    next.splice(to, 0, moved);
+    haptic();
+    onCommit(next);
   }
 
   // Where a row sits while a drag is in progress: the dragged one follows the
@@ -125,7 +126,7 @@ export function useReorderDrag(keys, onCommit) {
     if (!drag) return 0;
     const { from, to, dy } = drag;
     if (index === from) return dy;
-    const step = dragRef.current?.step || 0;
+    const step = drag.step || 0;
     if (from < to && index > from && index <= to) return -step;
     if (from > to && index >= to && index < from) return step;
     return 0;

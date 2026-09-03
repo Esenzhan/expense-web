@@ -1285,6 +1285,16 @@ export default function App() {
           onEdit={(wallet) => setEditingWallet(wallet)}
           onClose={() => setWalletsOpen(false)}
           onTransfer={() => setTransferOpen(true)}
+          // Перетаскивание меняет порядок внутри одной группы, но sort_order
+          // сквозной по всем счетам — на сервер уходит полный список всех
+          // групп, иначе эта группа перенумеровалась бы поверх остальных.
+          onReorder={async (scope, names) => {
+            const full = walletsByScope().flatMap((group) =>
+              group.scope === scope ? names : group.items.map((w) => w.name)
+            );
+            await reorderWallets(full);
+            await reloadWallets();
+          }}
         />
       )}
 
