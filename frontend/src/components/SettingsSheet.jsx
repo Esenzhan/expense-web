@@ -5,6 +5,8 @@ import { haptic, withHaptic } from "../haptics";
 import { useSwipeDismissRight } from "../sheetGestures";
 import { REMINDERS_ENABLED_KEY } from "./RemindersSheet";
 import { THEME_LABELS } from "./ThemeSheet";
+import { walletCurrency } from "../wallets";
+import { formatMoney } from "../currencies";
 
 const SETTINGS_KEY = "traty-settings";
 
@@ -206,7 +208,7 @@ export default function SettingsSheet({ user, theme, onClose, onOpenCategories, 
                   <span className="sync-problem-title">
                     {p.wallet ? `${p.wallet} · ` : ""}
                     {p.category || "запись"}
-                    {p.amount ? ` · ${Number(p.amount).toLocaleString("ru-RU")} ₸` : ""}
+                    {p.amount ? ` · ${formatMoney(p.amount, walletCurrency(p.wallet))}` : ""}
                   </span>
                   <span className="sync-problem-error">
                     {p.error || "причина не записана"}

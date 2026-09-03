@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { fetchBalanceHistory } from "../api";
-import { getWalletIcon } from "../wallets";
+import { getWalletIcon, walletCurrency } from "../wallets";
+import { formatMoney } from "../currencies";
 import { getCategoryIcon, getIncomeCategoryIcon } from "../categoryIcons";
 import { almaty } from "../insights";
 import { haptic } from "../haptics";
@@ -46,14 +47,16 @@ function reasonLabel(row) {
   return row.reason.replace(/_/g, " ");
 }
 
-function formatAmount(amount) {
-  return `${Number(amount).toLocaleString("ru-RU", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ₸`;
+// Валюта — счёта, к которому относится строка: журнал долларового счёта
+// ведётся в долларах (ничего никуда не пересчитывается, см. currencies.js).
+function formatAmount(amount, wallet) {
+  return formatMoney(amount, walletCurrency(wallet), { decimals: true });
 }
 
 // Знаковая величина движения: трата уменьшает, доход увеличивает.
 function formatDelta(row) {
   const sign = row.kind === "income" ? "+" : "−";
-  return `${sign}${formatAmount(row.amount)}`;
+  return `${sign}${formatAmount(row.amount, row.wallet)}`;
 }
 
 // День траты по-астанински — нужен, только когда он отличается от дня
@@ -159,13 +162,13 @@ export default function BalanceHistorySheet({ user, onClose }) {
             const from = isEntry
               ? formatDelta(row)
               : row.old_amount != null
-              ? formatAmount(row.old_amount)
+              ? formatAmount(row.old_amount, row.wallet)
               : null;
             const to = isEntry
               ? row.balance_after != null
-                ? formatAmount(row.balance_after)
+                ? formatAmount(row.balance_after, row.wallet)
                 : null
-              : formatAmount(row.new_amount);
+              : formatAmount(row.new_amount, row.wallet);
             return (
               <div className="settings-row balance-history-row" key={row.key}>
                 <span className="category-icon" style={catIconVars(icon.bg, icon.fg)}>

@@ -5,7 +5,8 @@ import { listCategories, getCategoryIcon, listIncomeCategories, getIncomeCategor
 import CategoryGlyph from "./CategoryGlyph";
 import TrashIcon from "./TrashIcon";
 import DateTimePickerSheet from "./DateTimePickerSheet";
-import { listWallets } from "../wallets";
+import { listWallets, walletCurrency } from "../wallets";
+import { currencySymbol } from "../currencies";
 import { haptic, hapticTick, withHaptic } from "../haptics";
 import { useSwipeDismiss } from "../sheetGestures";
 import { catIconVars } from "../catIconVars";
@@ -36,10 +37,15 @@ const OPS = ["+", "−", "×", "÷"];
 const isOp = (token) => OPS.includes(token);
 
 // Amount display with reference-style digit entry: a freshly typed digit
-// fades/scales in, and both halves of the line (digits and the ₸ sign)
-// slide apart from the center instead of jumping — a FLIP on each group,
-// with opposite deltas since the whole line stays centered.
-function AnimatedAmount({ text }) {
+// fades/scales in, and both halves of the line (digits and the currency
+// sign) slide apart from the center instead of jumping — a FLIP on each
+// group, with opposite deltas since the whole line stays centered.
+//
+// The sign follows the selected wallet's currency: a dollar wallet takes
+// dollars, a юаневый — юани. Nothing is converted anywhere (see
+// currencies.js), so a ₸ over a $ wallet wasn't a cosmetic slip — it
+// mislabelled the amount being saved.
+function AnimatedAmount({ text, symbol }) {
   const digitsRef = useRef(null);
   const tengeRef = useRef(null);
   const prevWidthRef = useRef(null);
@@ -69,7 +75,7 @@ function AnimatedAmount({ text }) {
           </span>
         ))}
       </span>
-      <span ref={tengeRef}>₸</span>
+      <span ref={tengeRef}>{symbol}</span>
     </>
   );
 }
@@ -467,6 +473,7 @@ export default function EditExpenseSheet({
               text={formatDisplay(
                 calc.tokens.length === 1 ? calc.tokens[0] : resultToDisplay(evaluateTokens(calc.tokens))
               )}
+              symbol={currencySymbol(walletCurrency(wallet))}
             />
           </div>
         </div>

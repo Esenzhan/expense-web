@@ -2,7 +2,8 @@ import { useEffect, useRef, useState } from "react";
 import { withHaptic, haptic } from "../haptics";
 import { createPortal } from "react-dom";
 import { getCategoryIcon, listCategories } from "../categoryIcons";
-import { getWalletIcon } from "../wallets";
+import { getWalletIcon, walletCurrency } from "../wallets";
+import { currencySymbol, formatMoney } from "../currencies";
 import { fetchCategoryLimits, setCategoryLimit, deleteCategoryLimit } from "../api";
 import CategoryGlyph from "./CategoryGlyph";
 import InsightsChart from "./InsightsChart";
@@ -15,8 +16,10 @@ function categoryLimitsCacheKey(wallet) {
   return `traty-category-limits-${wallet}`;
 }
 
-function tenge(value) {
-  return `${Math.round(value).toLocaleString("ru-RU")} ₸`;
+// Валюта здесь — валюта выбранного счёта; «Все счета» считаются в тенге
+// (валютные счета в общий итог и так не входят, см. wallets.isHomeWallet).
+function money(value, code) {
+  return formatMoney(Math.round(value), code);
 }
 
 // Monthly spending limit, kept on the client per wallet («all» = все счета)
@@ -35,6 +38,8 @@ function daysInCurrentMonth() {
 }
 
 export default function InsightsSheet({ user, period, insights: data, wallet, walletBalance, onClose }) {
+  const currency = walletCurrency(wallet);
+  const fmt = (value) => money(value, currency);
   const email = user?.email;
   const [monthlyLimit, setMonthlyLimit] = useState(() => readLimit(wallet));
   const [editingLimit, setEditingLimit] = useState(false);
@@ -141,7 +146,7 @@ export default function InsightsSheet({ user, period, insights: data, wallet, wa
             </span>
             <div>
               <div className="wallet-chip-name">{wallet || "Все счета"}</div>
-              <div className="wallet-chip-balance">−{walletBalance.toLocaleString("ru-RU")} ₸</div>
+              <div className="wallet-chip-balance">−{formatMoney(walletBalance, currency)}</div>
             </div>
           </div>
           <button className="icon-button" onClick={withHaptic(onClose)} aria-label="Закрыть">
@@ -154,13 +159,14 @@ export default function InsightsSheet({ user, period, insights: data, wallet, wa
         {data && (
           <>
             <div className="insights-period-pill">{formatPeriodLabel(period)}</div>
-            <div className="insights-total">−{tenge(data.total)}</div>
+            <div className="insights-total">−{fmt(data.total)}</div>
 
             <InsightsChart
               series={data.series}
               daysInPeriod={data.daysInPeriod}
               todayIndex={data.todayIndex}
               total={data.total}
+              currency={currency}
               plannedTotal={
                 period === "month"
                   ? monthlyLimit
@@ -175,7 +181,7 @@ export default function InsightsSheet({ user, period, insights: data, wallet, wa
                   type="text"
                   inputMode="numeric"
                   autoFocus
-                  placeholder="Лимит на месяц, ₸"
+                  placeholder={`Лимит на месяц, ${currencySymbol(currency)}`}
                   value={limitDraft}
                   onChange={(event) => setLimitDraft(event.target.value)}
                   onKeyDown={(event) => event.key === "Enter" && saveLimit()}
@@ -193,7 +199,7 @@ export default function InsightsSheet({ user, period, insights: data, wallet, wa
                   setEditingLimit(true);
                 }}
               >
-                {monthlyLimit ? `Лимит на месяц: ${tenge(monthlyLimit)} ✎` : "✎ Задать лимит на месяц"}
+                {monthlyLimit ? `Лимит на месяц: ${fmt(monthlyLimit)} ✎` : "✎ Задать лимит на месяц"}
               </button>
             )}
 
@@ -203,7 +209,7 @@ export default function InsightsSheet({ user, period, insights: data, wallet, wa
                   <span className="insights-card-title">Средние траты в день</span>
                   <span className="insights-card-icon">📅</span>
                 </div>
-                <div className="insights-card-value">{data.avgPerDay.toLocaleString("ru-RU", { maximumFractionDigits: 2 })} ₸</div>
+                <div className="insights-card-value">{formatMoney(Number(data.avgPerDay.toFixed(2)), currency)}</div>
               </div>
 
               <div
@@ -225,7 +231,7 @@ export default function InsightsSheet({ user, period, insights: data, wallet, wa
                       <CategoryGlyph emoji={biggestIcon.emoji} size={20} />
                     </span>
                     <div className="insights-card-sub">{data.biggestExpense.category}</div>
-                    <div className="insights-card-value accent">{tenge(data.biggestExpense.amount)}</div>
+                    <div className="insights-card-value accent">{fmt(data.biggestExpense.amount)}</div>
                   </>
                 ) : (
                   <div className="insights-card-sub">Нет данных</div>
@@ -240,7 +246,7 @@ export default function InsightsSheet({ user, period, insights: data, wallet, wa
                 {data.mostExpensiveDay ? (
                   <>
                     <div className="insights-card-sub">{data.mostExpensiveDay.label}</div>
-                    <div className="insights-card-value">{tenge(data.mostExpensiveDay.amount)}</div>
+                    <div className="insights-card-value">{fmt(data.mostExpensiveDay.amount)}</div>
                   </>
                 ) : (
                   <div className="insights-card-sub">Нет данных</div>
@@ -301,7 +307,7 @@ export default function InsightsSheet({ user, period, insights: data, wallet, wa
                           <span className="category-limit-head">
                             <span className="category-limit-name">Весь кошелёк</span>
                             <span className="category-limit-amounts">
-                              {totalLimit ? `${tenge(totalSpent)} / ${tenge(totalLimit)}` : tenge(totalSpent)}
+                              {totalLimit ? `${fmt(totalSpent)} / ${fmt(totalLimit)}` : fmt(totalSpent)}
                             </span>
                           </span>
                           {totalLimit > 0 && (
@@ -331,7 +337,7 @@ export default function InsightsSheet({ user, period, insights: data, wallet, wa
                               type="text"
                               inputMode="numeric"
                               autoFocus
-                              placeholder="Лимит, ₸"
+                              placeholder={`Лимит, ${currencySymbol(currency)}`}
                               value={categoryLimitDraft}
                               onChange={(event) => setCategoryLimitDraft(event.target.value)}
                               onKeyDown={(event) => event.key === "Enter" && saveCategoryLimit(cat.name)}
@@ -363,7 +369,7 @@ export default function InsightsSheet({ user, period, insights: data, wallet, wa
                               <span className="category-limit-head">
                                 <span className="category-limit-name">{cat.name}</span>
                                 <span className="category-limit-amounts">
-                                  {limit ? `${tenge(spent)} / ${tenge(limit)}` : "Лимит не задан"}
+                                  {limit ? `${fmt(spent)} / ${fmt(limit)}` : "Лимит не задан"}
                                 </span>
                               </span>
                               {limit > 0 && (

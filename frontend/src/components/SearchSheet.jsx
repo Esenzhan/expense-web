@@ -6,6 +6,8 @@ import { almaty } from "../insights";
 import CategoryGlyph from "./CategoryGlyph";
 import { useSwipeDismiss } from "../sheetGestures";
 import { catIconVars } from "../catIconVars";
+import { walletCurrency } from "../wallets";
+import { formatMoney } from "../currencies";
 
 const SEARCH_DEBOUNCE_MS = 300;
 const MIN_QUERY_LENGTH = 1;
@@ -108,7 +110,7 @@ export default function SearchSheet({ wallet, currentUserId, onSelect, onClose }
                         <span className="search-result-category">{expense.category}</span>
                         <span className={`search-result-amount ${expense.type === "income" ? "income" : ""}`}>
                           {expense.type === "income" ? "+" : "−"}
-                          {Number(expense.amount).toLocaleString("ru-RU")} ₸
+                          {formatMoney(expense.amount, walletCurrency(expense.wallet))}
                         </span>
                       </span>
                       <span className="search-result-sub">

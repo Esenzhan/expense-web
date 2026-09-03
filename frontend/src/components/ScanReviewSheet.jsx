@@ -7,6 +7,8 @@ import { catIconVars } from "../catIconVars";
 import { haptic, hapticHeavy, withHaptic } from "../haptics";
 import { useSwipeDismiss } from "../sheetGestures";
 import { formatDateHeader } from "./ExpenseList";
+import { walletCurrency } from "../wallets";
+import { formatMoney } from "../currencies";
 
 function ImageIcon() {
   return (
@@ -27,8 +29,16 @@ function WalletTagIcon() {
   );
 }
 
-function formatAmount(amount) {
-  return `${Number(amount).toLocaleString("ru-RU")} ₸`;
+function formatAmount(amount, wallet) {
+  return formatMoney(amount, walletCurrency(wallet));
+}
+
+// Итог по списку имеет смысл только пока все записи в одной валюте —
+// валюты не складываются (см. currencies.js). Разнесённый по счетам с
+// разной валютой скан показывает только количество записей.
+function totalCurrency(items) {
+  const codes = new Set(items.map((item) => walletCurrency(item.wallet)));
+  return codes.size === 1 ? [...codes][0] : null;
 }
 
 function itemsWord(n) {
@@ -85,6 +95,8 @@ export default function ScanReviewSheet({ items: initialItems, onClose, onCommit
   useSwipeDismiss(sheetRef, onClose);
 
   const total = items.reduce((sum, item) => sum + Number(item.amount), 0);
+  const totalCode = totalCurrency(items);
+  const totalText = totalCode ? formatMoney(total, totalCode) : null;
   const mergeable = items.length > 1 && canMerge(items);
   const dateHeader = formatDateHeader(new Date().toISOString());
 
@@ -127,14 +139,15 @@ export default function ScanReviewSheet({ items: initialItems, onClose, onCommit
 
         {items.length > 1 && (
           <p className="scan-review-subtitle">
-            {items.length} {itemsWord(items.length)}, {formatAmount(total)}
+            {items.length} {itemsWord(items.length)}
+            {totalText ? `, ${totalText}` : ""}
           </p>
         )}
 
         <div className="expense-group">
           <div className="expense-date-header scan-review-date-header">
             <span>{dateHeader}</span>
-            {items.length > 1 && <span>{formatAmount(total)}</span>}
+            {items.length > 1 && totalText && <span>{totalText}</span>}
           </div>
           <div className="expense-list">
             {items.map((item, index) => {
@@ -151,7 +164,7 @@ export default function ScanReviewSheet({ items: initialItems, onClose, onCommit
                       <WalletTagIcon /> {item.wallet}
                     </span>
                   </div>
-                  <span className="amount">−{formatAmount(item.amount)}</span>
+                  <span className="amount">−{formatAmount(item.amount, item.wallet)}</span>
                 </div>
               );
             })}

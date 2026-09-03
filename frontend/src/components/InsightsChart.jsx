@@ -1,3 +1,5 @@
+import { formatMoney, HOME_CURRENCY } from "../currencies";
+
 const WIDTH = 300;
 const HEIGHT = 150;
 const PAD_LEFT = 34;
@@ -13,14 +15,17 @@ function niceMax(value) {
   return niceResidual * magnitude;
 }
 
-function tenge(value) {
-  return `${Math.round(value).toLocaleString("ru-RU")} ₸`;
+// Подписи — в валюте счёта, по которому построен график (см. currencies.js:
+// суммы разных валют не смешиваются, поэтому и знак не может быть один).
+function money(value, code) {
+  return formatMoney(Math.round(value), code);
 }
 
 // Two lines: dashed — the even-pace plan toward the period's budget
 // (plannedTotal), solid — actual cumulative spending. The gap between them
 // is how far ahead of / behind the plan we are.
-export default function InsightsChart({ series, daysInPeriod, todayIndex, total, plannedTotal }) {
+export default function InsightsChart({ series, daysInPeriod, todayIndex, total, plannedTotal, currency = HOME_CURRENCY }) {
+  const fmt = (value) => money(value, currency);
   const hasPlan = plannedTotal > 0;
   const chartMax = niceMax(Math.max(total, hasPlan ? plannedTotal : 0, 1000));
   const plotWidth = WIDTH - PAD_LEFT - PAD_RIGHT;
@@ -88,11 +93,11 @@ export default function InsightsChart({ series, daysInPeriod, todayIndex, total,
 
       <div className="chart-legend">
         <span className="legend-item">
-          <span className="legend-swatch solid" /> Факт · {tenge(total)}
+          <span className="legend-swatch solid" /> Факт · {fmt(total)}
         </span>
         {hasPlan && (
           <span className="legend-item">
-            <span className="legend-swatch plan" /> План · {tenge(plannedToday)}
+            <span className="legend-swatch plan" /> План · {fmt(plannedToday)}
           </span>
         )}
       </div>
@@ -100,8 +105,8 @@ export default function InsightsChart({ series, daysInPeriod, todayIndex, total,
       {hasPlan && (
         <div className={`chart-deviation ${deviation > 0 ? "over" : "under"}`}>
           {deviation > 0
-            ? `Превышение плана на ${tenge(deviation)}`
-            : `Запас до плана · ${tenge(-deviation)}`}
+            ? `Превышение плана на ${fmt(deviation)}`
+            : `Запас до плана · ${fmt(-deviation)}`}
         </div>
       )}
     </div>

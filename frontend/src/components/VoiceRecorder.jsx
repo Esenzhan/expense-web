@@ -6,6 +6,8 @@ import { getCategoryIcon } from "../categoryIcons";
 import CategoryGlyph from "./CategoryGlyph";
 import { haptic, hapticHeavy, withHaptic } from "../haptics";
 import { catIconVars } from "../catIconVars";
+import { walletCurrency } from "../wallets";
+import { formatMoney } from "../currencies";
 import ReceiptCameraSheet from "./ReceiptCameraSheet";
 
 const CANDIDATE_MIME_TYPES = [
@@ -366,7 +368,7 @@ export default function VoiceRecorder({ onSaved, onManualAdd, onScanned }) {
                 <div className="confirm-wallet">{proposal.wallet}</div>
               </div>
               <div className="confirm-amount">
-                −{Number(proposal.amount).toLocaleString("ru-RU")} ₸
+                −{formatMoney(proposal.amount, walletCurrency(proposal.wallet))}
               </div>
             </div>
             <div className="confirm-actions">
