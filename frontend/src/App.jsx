@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { reorderCategories, fetchExpenses, fetchExpensesRange, fetchWalletTotals, fetchWalletBalances, setWalletBalance, fetchCategories, fetchWallets, fetchMe, warmBackend, createExpense, deleteExpense, deleteCategory, saveThemeSetting, reorderWallets } from "./api";
 import { loadLocalTheme, setLocalTheme } from "./theme";
 import { getToken, setToken } from "./auth";
-import { listPendingExpenses, syncPendingExpenses, hasPendingExpenses, removePendingExpense, clearConfirmedSynced } from "./offlineQueue";
+import { listPendingExpenses, syncPendingExpenses, hasPendingExpenses, removePendingExpense, clearConfirmedSynced, onExpenseRejected } from "./offlineQueue";
 import { computeInsights, periodRange, formatPeriodLabel } from "./insights";
 import { hydrateCategories, hydrateIncomeCategories, getCategoryIcon, getIncomeCategoryIcon } from "./categoryIcons";
 import { hydrateWallets, getWalletIcon, walletCurrency, isInAllAccounts, walletsByScope } from "./wallets";
@@ -294,6 +294,15 @@ export default function App() {
   const [undoBannerEl, setUndoBannerEl] = useState(null);
   useSwipeDismissUp(undoBannerEl, dismissUndoBanner);
 
+  // Запись, которую сервер отклонил насовсем и очередь отложила в сторону
+  // (см. offlineQueue.js). Она в тот же момент уходит из списка и из
+  // итогов — на сервере её нет, — поэтому про неё надо сказать вслух, а не
+  // ждать, пока человек сам заглянет в настройки. { entry, count }: если
+  // за один проход отложилось несколько, баннер один и считает их.
+  const [rejectedNotice, setRejectedNotice] = useState(null);
+  const [rejectedBannerEl, setRejectedBannerEl] = useState(null);
+  useSwipeDismissUp(rejectedBannerEl, () => setRejectedNotice(null));
+
   // Paints straight from this account's last cached snapshot — used both
   // by the offline-first bootstrap below and, once fetchMe() actually
   // resolves, for a brand new device that had no cached session yet.
@@ -384,6 +393,18 @@ export default function App() {
     window.addEventListener("traty:unauthorized", onUnauthorized);
     return () => window.removeEventListener("traty:unauthorized", onUnauthorized);
   }, []);
+
+  // Один слушатель на всё приложение — сообщение появится независимо от
+  // того, кто запустил синхронизацию: фоновый опрос, возврат в приложение
+  // или шторка сразу после сохранения.
+  useEffect(
+    () =>
+      onExpenseRejected((entry) => {
+        haptic();
+        setRejectedNotice((prev) => ({ entry, count: (prev?.count || 0) + 1 }));
+      }),
+    []
+  );
 
   // Pulls the account's saved theme in once, on first login on this device
   // (e.g. this browser has never touched the local "traty-theme" mirror) —
@@ -934,6 +955,32 @@ export default function App() {
 
   return (
     <div className={`app ${insightsOpen ? "app-behind" : ""}`}>
+      {rejectedNotice && (
+        <div
+          className={`undo-banner error ${pendingDelete ? "stacked" : ""}`}
+          ref={setRejectedBannerEl}
+        >
+          <span className="undo-banner-text">
+            {rejectedNotice.count > 1
+              ? `Не сохранилось записей: ${rejectedNotice.count}`
+              : `Не сохранилось: ${rejectedNotice.entry.payload?.category || "запись"} · ${formatMoney(
+                  rejectedNotice.entry.payload?.amount,
+                  walletCurrency(rejectedNotice.entry.payload?.wallet)
+                )}`}
+          </span>
+          <button
+            className="undo-banner-action"
+            onClick={() => {
+              haptic();
+              setRejectedNotice(null);
+              setSettingsOpen(true);
+            }}
+          >
+            Почему
+          </button>
+        </div>
+      )}
+
       {pendingDelete && (
         <div className="undo-banner" ref={setUndoBannerEl}>
           <UndoTimerRing key={pendingDelete.startedAt} durationMs={UNDO_WINDOW_MS} />

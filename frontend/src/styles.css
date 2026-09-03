@@ -183,6 +183,22 @@ select,
   animation: row-in 0.24s ease;
 }
 
+/* Тот же баннер, но про отказ: запись, которую сервер не принял и очередь
+   отложила в сторону (см. offlineQueue.js). Цвет — единственное отличие:
+   это то же самое сообщение «вот что сейчас произошло со строкой», и
+   заводить под него вторую конструкцию незачем. --on-accent читается на
+   --danger в обеих темах (тёмно-красный с белым, светло-красный с чёрным). */
+.undo-banner.error {
+  background: var(--danger);
+}
+
+/* Оба баннера — position: fixed в одной точке, так что удаление в своём
+   окне отмены и отказ синхронизации могут совпасть. Тогда отказ встаёт
+   под баннером отмены, а не поверх него. */
+.undo-banner.error.stacked {
+  top: calc(env(safe-area-inset-top) + 16px + 50px);
+}
+
 /* Countdown ring: a full circle that empties counter-clockwise as the undo
    window runs out (SVG stroke-dashoffset animated from JS-set duration) */
 .undo-banner-timer {

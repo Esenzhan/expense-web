@@ -124,6 +124,32 @@ export function removeRejectedExpense(localId) {
   saveRejected(loadRejected().filter((e) => e.localId !== localId));
 }
 
+// Подписка на «запись отложена». Нужна, чтобы приложение сказало об этом
+// вслух в тот же момент: отложенная запись исчезает из списка трат (её на
+// сервере так и нет), и без баннера это выглядело бы как молча пропавшая
+// трата. Слушателя ставит App.jsx — один на всё приложение, поэтому
+// сообщение появится независимо от того, кто запустил синхронизацию:
+// фоновый опрос, возврат в приложение или сама шторка сразу после
+// сохранения.
+let rejectionListeners = [];
+
+export function onExpenseRejected(listener) {
+  rejectionListeners.push(listener);
+  return () => {
+    rejectionListeners = rejectionListeners.filter((l) => l !== listener);
+  };
+}
+
+function notifyRejected(entry) {
+  for (const listener of rejectionListeners) {
+    try {
+      listener(entry);
+    } catch {
+      // слушатель не должен уметь уронить синхронизацию
+    }
+  }
+}
+
 // Отказ, который сам не пройдёт: сервер понял запрос и ответил «нет» —
 // счёт удалили, на счёте не осталось категорий, сумма не проходит
 // проверку. Такую запись надо убирать из очереди, иначе она блокирует
@@ -183,10 +209,13 @@ export async function syncPendingExpenses(createExpense) {
         // за этой записью встанет вся очередь. Причина сохраняется вместе с
         // ней: в настройках человек увидит, что именно не сохранилось.
         saveQueue(loadQueue().filter((e) => e.localId !== entry.localId));
-        saveRejected([
-          ...loadRejected(),
-          { ...entry, error: err.message || "Сервер отклонил запись", rejectedAt: new Date().toISOString() },
-        ]);
+        const rejected = {
+          ...entry,
+          error: err.message || "Сервер отклонил запись",
+          rejectedAt: new Date().toISOString(),
+        };
+        saveRejected([...loadRejected(), rejected]);
+        notifyRejected(rejected);
         changed = true;
         continue;
       }
