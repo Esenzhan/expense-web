@@ -7,6 +7,7 @@ import { REMINDERS_ENABLED_KEY } from "./RemindersSheet";
 import { THEME_LABELS } from "./ThemeSheet";
 import { walletCurrency } from "../wallets";
 import { formatMoney } from "../currencies";
+import { listRejectedExpenses, removeRejectedExpense } from "../offlineQueue";
 
 const SETTINGS_KEY = "traty-settings";
 
@@ -85,7 +86,14 @@ const Icons = {
   chevron: <I><path d="m10 7 5 5-5 5" /></I>,
   logout: <I><path d="M9 4H6a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h3" /><path d="M15 16l4-4-4-4" /><path d="M19 12H9" /></I>,
   sync: <I><path d="M4 12a8 8 0 0 1 14-5.2M20 12a8 8 0 0 1-14 5.2" /><path d="M18 3v4h-4M6 21v-4h4" /></I>,
+  warning: <I><path d="M12 4.5 3.5 19h17L12 4.5Z" /><path d="M12 10v4M12 17h.01" /></I>,
 };
+
+function formatRejectedAt(value) {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "";
+  return date.toLocaleString("ru-RU", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" });
+}
 
 function Row({ icon, label, value, badge, danger, onPress }) {
   return (
@@ -119,6 +127,11 @@ export default function SettingsSheet({ user, theme, onClose, onOpenCategories, 
   // is the only case worth flagging red — a couple of rows still waiting
   // out their normal retry backoff is expected, not a problem.
   const [syncStatus, setSyncStatus] = useState(null);
+  // Записи, которые сервер отклонил насовсем: очередь отложила их в
+  // сторону, чтобы не держать за ними всё остальное (см. offlineQueue.js).
+  // Кроме как здесь, их больше нигде не видно — из списка трат они уже
+  // ушли, а на сервер так и не попали.
+  const [rejected, setRejected] = useState(listRejectedExpenses);
 
   useSwipeDismissRight(pageRef, onClose);
 
@@ -217,6 +230,41 @@ export default function SettingsSheet({ user, theme, onClose, onOpenCategories, 
                     {KIND_LABEL[p.kind] || p.kind} · попыток {p.attempts}
                   </span>
                 </span>
+              </div>
+            ))}
+            {rejected.length > 0 && (
+              <Row
+                icon={Icons.warning}
+                label="Не удалось сохранить"
+                value={`${rejected.length}`}
+                danger
+              />
+            )}
+            {rejected.map((entry) => (
+              <div className="settings-row sync-problem" key={entry.localId}>
+                <span className="sync-problem-main">
+                  <span className="sync-problem-title">
+                    {entry.payload?.wallet ? `${entry.payload.wallet} · ` : ""}
+                    {entry.payload?.category || "запись"}
+                    {entry.payload?.amount != null
+                      ? ` · ${formatMoney(entry.payload.amount, walletCurrency(entry.payload.wallet))}`
+                      : ""}
+                  </span>
+                  <span className="sync-problem-error">{entry.error}</span>
+                  <span className="sync-problem-meta">
+                    {entry.payload?.description ? `${entry.payload.description} · ` : ""}
+                    {formatRejectedAt(entry.rejectedAt)}
+                  </span>
+                </span>
+                <button
+                  className="sync-problem-action"
+                  onClick={withHaptic(() => {
+                    removeRejectedExpense(entry.localId);
+                    setRejected(listRejectedExpenses());
+                  })}
+                >
+                  Удалить
+                </button>
               </div>
             ))}
             <Row icon={Icons.logout} label="Выйти" onPress={logout} />

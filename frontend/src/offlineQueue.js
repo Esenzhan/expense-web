@@ -5,6 +5,11 @@
 // wallet totals) can treat it like any other expense, modulo the `pending`
 // flag used to show a small sync badge.
 const QUEUE_KEY = "traty-pending-expenses";
+// Записи, которые сервер отклонил насовсем (см. isPermanentRejection). Лежат
+// отдельно от очереди: очередь отправляет по одной и по порядку, и такая
+// запись держала бы за собой всё, что добавлено после неё, — а пройти сама
+// уже не может. Показываются в настройках, откуда их удаляют руками.
+const REJECTED_KEY = "traty-rejected-expenses";
 
 function loadQueue() {
   try {
@@ -20,6 +25,22 @@ function saveQueue(list) {
   } catch {
     // storage full/unavailable — the expense still lives in React state
     // for this session, it just won't survive a reload
+  }
+}
+
+function loadRejected() {
+  try {
+    return JSON.parse(localStorage.getItem(REJECTED_KEY)) || [];
+  } catch {
+    return [];
+  }
+}
+
+function saveRejected(list) {
+  try {
+    localStorage.setItem(REJECTED_KEY, JSON.stringify(list));
+  } catch {
+    // storage full/unavailable — nothing better to do than drop it
   }
 }
 
@@ -92,9 +113,38 @@ export function hasPendingExpenses() {
   return loadQueue().length > 0;
 }
 
+// Отложенные записи для экрана настроек: что пытались сохранить, почему
+// сервер отказал и когда. Сумма/счёт/категория лежат в payload — ровно то,
+// что ушло бы на сервер, чтобы человек мог решить, вносить ли это заново.
+export function listRejectedExpenses() {
+  return loadRejected();
+}
+
+export function removeRejectedExpense(localId) {
+  saveRejected(loadRejected().filter((e) => e.localId !== localId));
+}
+
+// Отказ, который сам не пройдёт: сервер понял запрос и ответил «нет» —
+// счёт удалили, на счёте не осталось категорий, сумма не проходит
+// проверку. Такую запись надо убирать из очереди, иначе она блокирует
+// всё, что за ней.
+//
+// Исключения — отказы, которые пройдут сами: 401 (сессия протухла, после
+// входа запись уйдёт), 408 и 429 (сервер просит подождать). Всё, что вообще
+// без кода — сеть, спящий Render, обрыв — сюда не попадает: у такой ошибки
+// нет `status`, и очередь по-прежнему просто ждёт следующей попытки.
+function isPermanentRejection(err) {
+  const status = err?.status;
+  if (typeof status !== "number") return false;
+  return status >= 400 && status < 500 && status !== 401 && status !== 408 && status !== 429;
+}
+
 // Flushes the queue through the real API, oldest first. Stops at the first
-// failure (still offline, or server still asleep) so order is preserved —
-// returns whether anything actually synced, so the caller knows to refresh.
+// failure that could still succeed later (offline, server asleep) so order
+// is preserved; a permanent rejection is set aside instead (see
+// isPermanentRejection) and the queue moves on. Returns whether the queue
+// changed at all, so the caller knows to refresh — a set-aside row leaves
+// the list and the totals just like a synced one does.
 //
 // Guarded against concurrent calls: App.jsx fires this from four independent
 // triggers (mount, the `online` event, visibilitychange, and a 15s poll)
@@ -108,7 +158,7 @@ export async function syncPendingExpenses(createExpense) {
   if (syncing) return false;
   syncing = true;
   try {
-    let syncedAny = false;
+    let changed = false;
     while (true) {
       // Re-read fresh on every iteration instead of looping over one
       // snapshot taken at the top: createExpense can take tens of seconds
@@ -127,16 +177,26 @@ export async function syncPendingExpenses(createExpense) {
         // back, e.g. a cold Render start dropping the connection), the
         // retry below returns that original row instead of a new one.
         created = await createExpense({ ...entry.payload, idempotencyKey: entry.localId });
-      } catch {
-        break;
+      } catch (err) {
+        if (!isPermanentRejection(err)) break;
+        // Не пройдёт никогда — откладываем в сторону и идём дальше, иначе
+        // за этой записью встанет вся очередь. Причина сохраняется вместе с
+        // ней: в настройках человек увидит, что именно не сохранилось.
+        saveQueue(loadQueue().filter((e) => e.localId !== entry.localId));
+        saveRejected([
+          ...loadRejected(),
+          { ...entry, error: err.message || "Сервер отклонил запись", rejectedAt: new Date().toISOString() },
+        ]);
+        changed = true;
+        continue;
       }
       // Read fresh again before removing, for the same reason — anything
       // enqueued during the await above must survive this save.
       saveQueue(loadQueue().filter((e) => e.localId !== entry.localId));
       syncedShadow.push({ ...created, pending: false, syncedAt: Date.now() });
-      syncedAny = true;
+      changed = true;
     }
-    return syncedAny;
+    return changed;
   } finally {
     syncing = false;
   }

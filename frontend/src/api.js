@@ -69,7 +69,12 @@ export async function createExpense(payload) {
   });
   if (!res.ok) {
     const body = await res.json().catch(() => ({}));
-    throw new Error(body.error || "Не удалось сохранить трату");
+    const err = new Error(body.error || "Не удалось сохранить трату");
+    // Код ответа нужен офлайн-очереди: по нему она отличает «сервер занят,
+    // попробуй позже» от «эта запись не пройдёт никогда» — см.
+    // isPermanentRejection в offlineQueue.js.
+    err.status = res.status;
+    throw err;
   }
   return res.json();
 }
