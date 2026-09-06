@@ -1,12 +1,18 @@
 import { useRef, useState } from "react";
-import { walletsByScope, isSharedWallet, isInAllAccounts, walletCurrency } from "../wallets";
-import { formatMoney, HOME_CURRENCY, isHomeCurrency } from "../currencies";
+import { walletsByScope, isInAllAccounts, walletCurrency, walletScope } from "../wallets";
+import { formatMoney, HOME_CURRENCY } from "../currencies";
 import { haptic, withHaptic } from "../haptics";
 import { useSwipeDismiss } from "../sheetGestures";
 import CategoryGlyph from "./CategoryGlyph";
 import { DragHandle, useReorderDrag } from "./ReorderDrag";
 import { catIconVars } from "../catIconVars";
 
+
+const GROUP_TITLE = {
+  personal: "Личные",
+  shared: "Общие счета",
+  other: "Другое",
+};
 
 // Одна группа счетов со своим перетаскиванием. Отдельный компонент, потому
 // что хук перетаскивания нужен каждой группе свой, а хуки нельзя вызывать
@@ -111,15 +117,30 @@ export default function WalletsSheet({ balances, pendingWalletDeltas, selected, 
   const allBalance = homeBalances.length
     ? homeBalances.reduce((sum, b) => sum + Number(b.current_balance) - (pendingWalletDeltas.get(b.wallet) || 0), 0)
     : null;
-  // Which wallets are общие is a per-wallet flag now (set in the create/edit
-  // sheet), not something derivable from the name — this used to assume
-  // "Личные" was the only personal one, so any personal wallet created
-  // afterwards silently counted itself into the shared total.
-  const sharedBalance = homeBalances.length
-    ? homeBalances
-        .filter((b) => isSharedWallet(b.wallet))
-        .reduce((sum, b) => sum + Number(b.current_balance) - (pendingWalletDeltas.get(b.wallet) || 0), 0)
-    : null;
+  // Итог группы — по валютам, а не одним числом: тенге складываются с
+  // тенге, юани с юанями, и никакого курса тут нет (он вписывается руками
+  // ровно в одном месте — в снимке капитала). Поэтому у «Другого», где
+  // лежат наличные доллары рядом с тенге, в заголовке стоят обе суммы
+  // своими знаками: сложить их нечем, а прятать валютный счёт из итога его
+  // же группы — это ровно то расхождение «сумма не сходится со списком
+  // под ней», которое здесь уже ловили.
+  //
+  // Группа определяется флагом счёта (wallets.scope), а не названием: когда
+  // это выводили из имени, любой заведённый позже личный счёт молча попадал
+  // в общий итог.
+  function groupTotals(scope) {
+    const totals = new Map();
+    for (const entry of balances) {
+      if (walletScope(entry.wallet) !== scope) continue;
+      const currency = walletCurrency(entry.wallet);
+      const value = Number(entry.current_balance) - (pendingWalletDeltas.get(entry.wallet) || 0);
+      totals.set(currency, (totals.get(currency) || 0) + value);
+    }
+    // Тенге первыми — это валюта, в которой ведётся почти всё.
+    return [...totals.entries()].sort(([a], [b]) =>
+      a === HOME_CURRENCY ? -1 : b === HOME_CURRENCY ? 1 : a.localeCompare(b)
+    );
+  }
   const formatBalance = (amount, currency = HOME_CURRENCY) =>
     amount != null ? formatMoney(amount, currency, { decimals: true }) : "—";
 
@@ -174,28 +195,26 @@ export default function WalletsSheet({ balances, pendingWalletDeltas, selected, 
         {groups.map((group) => (
           <div className="cats-scope-group" key={group.scope}>
             {/* Заголовок группы стоит НАД её счетами и тем самым отделяет её
-                от предыдущей. У общих он заодно несёт их суммарный баланс —
-                раньше эта строка висела в самом низу списка, оторванная от
-                счетов, к которым относится. У «Другого» суммы нет намеренно:
-                там лежат счета в разных валютах, складывать их нечем. */}
-            {group.scope === "shared" && (
-              <div className="wallet-row all wallet-row-summary">
-                <span className="cat-name">Общие счета</span>
-                <span className="wallet-row-total">{formatBalance(sharedBalance)}</span>
-              </div>
-            )}
-            {group.scope === "personal" && (
-              <div className="wallet-row all wallet-row-summary">
-                <span className="cat-name">Личные</span>
-                <span className="wallet-row-hint">видно только тебе</span>
-              </div>
-            )}
-            {group.scope === "other" && (
-              <div className="wallet-row all wallet-row-summary">
-                <span className="cat-name">Другое</span>
-                <span className="wallet-row-hint">видно только тебе</span>
-              </div>
-            )}
+                от предыдущей, а заодно несёт итог по ней — у всех трёх
+                групп одинаково: раньше сумма была только у общих, и
+                «Личные» с «Другим» приходилось складывать глазами.
+                Подпись «видно только тебе» уехала отсюда: на её место встал
+                итог, а что значит каждая группа, написано там, где счёт
+                относят к группе, — в шторке создания/правки счёта. */}
+            <div className="wallet-row all wallet-row-summary">
+              <span className="cat-name">{GROUP_TITLE[group.scope]}</span>
+              <span className="wallet-row-totals">
+                {(() => {
+                  const totals = groupTotals(group.scope);
+                  if (!totals.length) return <span className="wallet-row-total">—</span>;
+                  return totals.map(([currency, amount]) => (
+                    <span className="wallet-row-total" key={currency}>
+                      {formatBalance(amount, currency)}
+                    </span>
+                  ));
+                })()}
+              </span>
+            </div>
 
             <WalletGroup
               items={group.items}

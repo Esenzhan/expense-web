@@ -3038,6 +3038,29 @@ button.wallet-chip {
   color: var(--ink-soft);
 }
 
+/* Итог группы. Обычно это одно число в тенге, но в группе могут лежать
+   валютные счета — тогда рядом стоят их суммы своими знаками: сложить их
+   нечем (курс вписывается руками только в снимке капитала), а спрятать —
+   значит показать итог, который не сходится со списком под ним. */
+.wallet-row-totals {
+  display: flex;
+  align-items: baseline;
+  justify-content: flex-end;
+  /* Переносим, а не прячем в скролл: сумма, которую надо доскроллить, — это
+     сумма, которой не видно. Лишняя валюта уходит на вторую строку и
+     заголовок группы просто становится выше. */
+  flex-wrap: wrap;
+  margin-left: auto;
+  gap: 2px 8px;
+  min-width: 0;
+}
+
+.wallet-row-totals .wallet-row-total + .wallet-row-total::before {
+  content: "·";
+  margin-right: 8px;
+  color: var(--ink-soft);
+}
+
 .wallet-row-total {
   font-family: var(--font-mono);
   font-weight: 700;
