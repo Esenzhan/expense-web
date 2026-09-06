@@ -165,10 +165,10 @@ export default function App() {
   const [authError, setAuthError] = useState(null);
 
   const [period, setPeriod] = useState("month");
-  // Last "Выбрать период" selection — kept separately from `period` so the
-  // pill still shows the previously picked range even while "Этот месяц"/
-  // "Сегодня" is the active one, ready to reselect without reopening the
-  // picker.
+  // Текущий выбор из «Выбрать период». Живёт отдельно от `period`, потому
+  // что задаёт подпись третьей пилюли, но существует ровно пока этот
+  // период выбран: уход на «Этот месяц»/«Сегодня» его сбрасывает, и
+  // пилюля снова читается как «Выбрать период».
   const [customRange, setCustomRange] = useState(null);
   const [periodPickerOpen, setPeriodPickerOpen] = useState(false);
   const [expenses, setExpenses] = useState([]);
@@ -1069,6 +1069,12 @@ export default function App() {
                 onClick={() => {
                   haptic();
                   setPeriod(p.value);
+                  // Свой период сбрасывается вместе с уходом на «Этот
+                  // месяц»/«Сегодня»: иначе третья пилюля так и стоит
+                  // «Август», хотя выбран уже не он. Нажатие на неё всё
+                  // равно открывает выбор периода, а не возвращает
+                  // прошлый, — значит и помнить его незачем.
+                  setCustomRange(null);
                 }}
               >
                 {p.label}

@@ -1,4 +1,4 @@
-import { useRef, useState } from "react";
+import { useLayoutEffect, useRef, useState } from "react";
 import { useSwipeDismiss } from "../sheetGestures";
 import { haptic, withHaptic } from "../haptics";
 import { almaty, monthLabel, monthRangeStrings } from "../insights";
@@ -13,10 +13,15 @@ const MONTHS_BACK = 12;
 // Текущий месяц и одиннадцать предыдущих — по астанинскому календарю, как и
 // всё остальное в приложении: под утро первого числа месяц на телефоне в
 // другом поясе был бы уже (или ещё) не тот.
+//
+// По времени слева направо, как читают: старый месяц слева, текущий —
+// крайний справа. Ряд при открытии домотан до конца (см. useLayoutEffect
+// ниже), так что видно сразу текущий и пару предыдущих — те, за которыми
+// сюда и приходят.
 function recentMonths(now = new Date()) {
   const a = almaty(now);
   const months = [];
-  for (let back = 0; back < MONTHS_BACK; back++) {
+  for (let back = MONTHS_BACK - 1; back >= 0; back--) {
     const point = new Date(Date.UTC(a.getUTCFullYear(), a.getUTCMonth() - back, 1));
     months.push({ year: point.getUTCFullYear(), month: point.getUTCMonth() });
   }
@@ -38,6 +43,15 @@ export default function PeriodPickerSheet({ initialFrom, initialTo, onClose, onA
 
   const valid = from && to && from <= to;
   const months = recentMonths();
+
+  // Домотать ряд месяцев вправо, к текущему. useLayoutEffect, а не
+  // useEffect: сдвиг применяется до отрисовки, иначе видно, как ряд
+  // прыгает с прошлогоднего октября на сентябрь.
+  const monthsRef = useRef(null);
+  useLayoutEffect(() => {
+    const row = monthsRef.current;
+    if (row) row.scrollLeft = row.scrollWidth;
+  }, []);
 
   function apply() {
     if (!valid) return;
@@ -69,7 +83,7 @@ export default function PeriodPickerSheet({ initialFrom, initialTo, onClose, onA
         </div>
 
         <p className="newcat-group-title">Месяц целиком</p>
-        <div className="period-month-row">
+        <div className="period-month-row" ref={monthsRef}>
           {months.map((m) => {
             const range = monthRangeStrings(m.year, m.month);
             const active = from === range.from && to === range.to;
