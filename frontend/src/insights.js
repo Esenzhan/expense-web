@@ -64,6 +64,62 @@ export function periodRange(period, now = new Date()) {
 
 const MONTH_SHORT = ["янв", "фев", "мар", "апр", "мая", "июн", "июл", "авг", "сен", "окт", "ноя", "дек"];
 
+const MONTH_NAMES = [
+  "Январь", "Февраль", "Март", "Апрель", "Май", "Июнь",
+  "Июль", "Август", "Сентябрь", "Октябрь", "Ноябрь", "Декабрь",
+];
+
+// Сколько дней в этом календарном месяце (month — 0-based, как у Date).
+export function daysInMonth(year, month) {
+  return new Date(Date.UTC(year, month + 1, 0)).getUTCDate();
+}
+
+// Какому календарному месяцу целиком соответствует период — или null, если
+// период месяцем не является (сегодня, произвольный отрезок, кусок месяца).
+// «Этот месяц» — всегда месяц; произвольный период считается месяцем, только
+// если он выставлен ровно с первого по последнее число одного месяца.
+//
+// Нужен там, где сравнение идёт с МЕСЯЧНЫМ лимитом: за полный месяц лимит
+// берётся целиком, а за кусок его пришлось бы делить — и «лимит по
+// категории» перестал бы значить то, что на нём написано.
+export function fullMonthOf(period, now = new Date()) {
+  if (period === "month") {
+    const a = almaty(now);
+    return { year: a.getUTCFullYear(), month: a.getUTCMonth() };
+  }
+  if (typeof period !== "string" || !period.startsWith("custom:")) return null;
+  const [, fromStr, toStr] = period.split(":");
+  const from = /^(\d{4})-(\d{2})-(\d{2})$/.exec(fromStr || "");
+  const to = /^(\d{4})-(\d{2})-(\d{2})$/.exec(toStr || "");
+  if (!from || !to) return null;
+  const year = Number(from[1]);
+  const month = Number(from[2]) - 1;
+  if (Number(to[1]) !== year || Number(to[2]) - 1 !== month) return null;
+  if (Number(from[3]) !== 1 || Number(to[3]) !== daysInMonth(year, month)) return null;
+  return { year, month };
+}
+
+export function isFullMonthPeriod(period, now = new Date()) {
+  return fullMonthOf(period, now) !== null;
+}
+
+// Название месяца для подписей. Год добавляется, только если он не
+// текущий — «Август» в сентябре 2026-го однозначен, «Август 2025» уже нет.
+export function monthLabel(year, month, now = new Date()) {
+  const name = MONTH_NAMES[month];
+  return year === almaty(now).getUTCFullYear() ? name : `${name} ${year}`;
+}
+
+// Границы календарного месяца в виде YYYY-MM-DD — то, чем период
+// кодируется в "custom:from:to" (см. periodRange выше).
+export function monthRangeStrings(year, month) {
+  const mm = String(month + 1).padStart(2, "0");
+  return {
+    from: `${year}-${mm}-01`,
+    to: `${year}-${mm}-${String(daysInMonth(year, month)).padStart(2, "0")}`,
+  };
+}
+
 function shortDateLabel(dateOnlyStr) {
   const [, m, d] = dateOnlyStr.split("-").map(Number);
   return `${d} ${MONTH_SHORT[m - 1]}`;
@@ -71,9 +127,14 @@ function shortDateLabel(dateOnlyStr) {
 
 // Human label for a `period` string — used on both the main screen's pill
 // and the Insights sheet, so the two never drift apart.
-export function formatPeriodLabel(period) {
+export function formatPeriodLabel(period, now = new Date()) {
   if (period === "today") return "Сегодня";
   if (typeof period === "string" && period.startsWith("custom:")) {
+    // Период, выставленный ровно на календарный месяц, так и подписываем:
+    // «Август» читается с одного взгляда, «1 авг – 31 авг» — нет. Год
+    // добавляется, только если он не текущий.
+    const month = fullMonthOf(period, now);
+    if (month) return monthLabel(month.year, month.month, now);
     const [, fromStr, toStr] = period.split(":");
     return fromStr === toStr ? shortDateLabel(fromStr) : `${shortDateLabel(fromStr)} – ${shortDateLabel(toStr)}`;
   }

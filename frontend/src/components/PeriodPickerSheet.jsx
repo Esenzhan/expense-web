@@ -1,9 +1,26 @@
 import { useRef, useState } from "react";
 import { useSwipeDismiss } from "../sheetGestures";
 import { haptic, withHaptic } from "../haptics";
+import { almaty, monthLabel, monthRangeStrings } from "../insights";
 
 function todayDateOnly() {
   return new Date().toISOString().slice(0, 10);
+}
+
+// Сколько месяцев назад предлагать одним нажатием.
+const MONTHS_BACK = 12;
+
+// Текущий месяц и одиннадцать предыдущих — по астанинскому календарю, как и
+// всё остальное в приложении: под утро первого числа месяц на телефоне в
+// другом поясе был бы уже (или ещё) не тот.
+function recentMonths(now = new Date()) {
+  const a = almaty(now);
+  const months = [];
+  for (let back = 0; back < MONTHS_BACK; back++) {
+    const point = new Date(Date.UTC(a.getUTCFullYear(), a.getUTCMonth() - back, 1));
+    months.push({ year: point.getUTCFullYear(), month: point.getUTCMonth() });
+  }
+  return months;
 }
 
 // Custom "От — До" range for the main screen's period toggle. Dates are
@@ -20,11 +37,24 @@ export default function PeriodPickerSheet({ initialFrom, initialTo, onClose, onA
   const [to, setTo] = useState(initialTo || fallback);
 
   const valid = from && to && from <= to;
+  const months = recentMonths();
 
   function apply() {
     if (!valid) return;
     haptic();
     onApply(from, to);
+  }
+
+  // Месяц целиком — одним нажатием, без двух календарей: за этим сюда и
+  // приходят («посмотреть за август»). Границы обязаны быть ровно первым и
+  // последним числом — по ним Инсайты понимают, что период это месяц, и
+  // показывают лимиты (см. fullMonthOf в insights.js).
+  function applyMonth({ year, month }) {
+    const range = monthRangeStrings(year, month);
+    setFrom(range.from);
+    setTo(range.to);
+    haptic();
+    onApply(range.from, range.to);
   }
 
   return (
@@ -38,6 +68,25 @@ export default function PeriodPickerSheet({ initialFrom, initialTo, onClose, onA
           <div className="icon-button-spacer" />
         </div>
 
+        <p className="newcat-group-title">Месяц целиком</p>
+        <div className="period-month-row">
+          {months.map((m) => {
+            const range = monthRangeStrings(m.year, m.month);
+            const active = from === range.from && to === range.to;
+            return (
+              <button
+                key={`${m.year}-${m.month}`}
+                type="button"
+                className={`period-pill ${active ? "active" : ""}`}
+                onClick={() => applyMonth(m)}
+              >
+                {monthLabel(m.year, m.month)}
+              </button>
+            );
+          })}
+        </div>
+
+        <p className="newcat-group-title">Свой период</p>
         <div className="period-picker-fields">
           <label className="period-picker-field">
             <span>С</span>

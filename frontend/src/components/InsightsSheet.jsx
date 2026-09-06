@@ -9,7 +9,7 @@ import CategoryGlyph from "./CategoryGlyph";
 import InsightsChart from "./InsightsChart";
 import { catIconVars } from "../catIconVars";
 import { useSwipeDismiss } from "../sheetGestures";
-import { formatPeriodLabel } from "../insights";
+import { formatPeriodLabel, isFullMonthPeriod } from "../insights";
 import { loadCached, saveCached } from "../offlineCache";
 
 function categoryLimitsCacheKey(wallet) {
@@ -168,7 +168,10 @@ export default function InsightsSheet({ user, period, insights: data, wallet, wa
               total={data.total}
               currency={currency}
               plannedTotal={
-                period === "month"
+                // Полный календарный месяц — хоть текущий, хоть август:
+                // лимит месячный, значит берётся целиком. Кусок месяца
+                // («Сегодня», произвольный отрезок) — доля лимита по дням.
+                isFullMonthPeriod(period)
                   ? monthlyLimit
                   : (monthlyLimit / daysInCurrentMonth()) * data.daysInPeriod
               }
@@ -288,7 +291,13 @@ export default function InsightsSheet({ user, period, insights: data, wallet, wa
               </div>
             </div>
 
-            {wallet && period === "month" && (
+            {/* Лимиты — месячные, поэтому показываются за календарный месяц
+                целиком: и за текущий, и за любой прошедший, выбранный
+                периодом. За кусок месяца их не показываем — трёхдневная
+                сумма против месячного лимита не значит ничего. Сами лимиты
+                у категорий одни, без истории: за прошлый месяц сумма
+                сравнивается с тем лимитом, который стоит сейчас. */}
+            {wallet && isFullMonthPeriod(period) && (
               <div className="category-limits-section">
                 <p className="section-title">Лимиты по категориям</p>
                 {categoryLimitError && <p className="sheet-error">{categoryLimitError}</p>}
