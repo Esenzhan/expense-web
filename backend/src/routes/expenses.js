@@ -5,6 +5,7 @@ import { resolveCategoryName } from "../categories.js";
 import { enqueueSheetsSync, getSyncStatus } from "../services/sheetsSyncQueue.js";
 import { parseReceiptFromImage, parseReceiptItemsFromImage } from "../services/parseReceipt.js";
 import { tryLogScan, DAILY_SCAN_LIMIT } from "../services/receiptScans.js";
+import { applyExpenseChangeToBalances } from "../services/balanceHistory.js";
 
 export const expensesRouter = Router();
 
@@ -195,46 +196,89 @@ expensesRouter.put("/:id", async (req, res) => {
     }
   }
 
-  const { rows: existingRows } = await pool.query(
-    `SELECT * FROM expenses WHERE id = $1 AND user_id = $2`,
-    [req.params.id, req.user.id]
-  );
-  if (!existingRows.length) {
-    return res.status(404).json({ error: "Трата не найдена" });
+  const client = await pool.connect();
+  let updated;
+  let previousWallet;
+  try {
+    await client.query("BEGIN");
+    // FOR UPDATE: строку читаем и правим в одной транзакции вместе с
+    // опорной суммой счёта (см. applyExpenseChangeToBalances ниже) — две
+    // одновременные правки одной траты иначе посчитали бы дельту от одного
+    // и того же «до».
+    const { rows: existingRows } = await client.query(
+      `SELECT * FROM expenses WHERE id = $1 AND user_id = $2 FOR UPDATE`,
+      [req.params.id, req.user.id]
+    );
+    if (!existingRows.length) {
+      await client.query("ROLLBACK");
+      return res.status(404).json({ error: "Трата не найдена" });
+    }
+    const existing = existingRows[0];
+    previousWallet = existing.wallet;
+    // Falls back to whatever the row already was — the edit sheet always
+    // sends its current type, but this keeps an older cached bundle mid-deploy
+    // from silently flipping a row's type back to 'expense'.
+    const type = req.body.type === "income" || req.body.type === "expense" ? req.body.type : existing.type;
+
+    const finalCategory = await resolveCategoryName(wallet, category, type);
+    if (!finalCategory) {
+      await client.query("ROLLBACK");
+      return res.status(400).json({ error: "В этом кошельке нет категорий — сначала добавь хотя бы одну" });
+    }
+
+    const { rows } = await client.query(
+      createdAt
+        ? `UPDATE expenses SET wallet = $1, amount = $2, category = $3, description = $4, type = $6, created_at = $7
+           WHERE id = $5 RETURNING *`
+        : `UPDATE expenses SET wallet = $1, amount = $2, category = $3, description = $4, type = $6
+           WHERE id = $5 RETURNING *`,
+      createdAt
+        ? [wallet, amount, finalCategory, description || null, req.params.id, type, createdAt]
+        : [wallet, amount, finalCategory, description || null, req.params.id, type]
+    );
+    updated = rows[0];
+
+    // Правка записи, которая старше опорной точки счёта, иначе не двигала
+    // бы баланс вообще — она уже свёрнута в base_amount.
+    await applyExpenseChangeToBalances(client, req.user.id, existing, updated, "expense_edit");
+    await client.query("COMMIT");
+  } catch (err) {
+    await client.query("ROLLBACK");
+    throw err;
+  } finally {
+    client.release();
   }
-  const existing = existingRows[0];
-  // Falls back to whatever the row already was — the edit sheet always
-  // sends its current type, but this keeps an older cached bundle mid-deploy
-  // from silently flipping a row's type back to 'expense'.
-  const type = req.body.type === "income" || req.body.type === "expense" ? req.body.type : existing.type;
 
-  const finalCategory = await resolveCategoryName(wallet, category, type);
-  if (!finalCategory) {
-    return res.status(400).json({ error: "В этом кошельке нет категорий — сначала добавь хотя бы одну" });
-  }
-
-  const { rows } = await pool.query(
-    createdAt
-      ? `UPDATE expenses SET wallet = $1, amount = $2, category = $3, description = $4, type = $6, created_at = $7
-         WHERE id = $5 RETURNING *`
-      : `UPDATE expenses SET wallet = $1, amount = $2, category = $3, description = $4, type = $6
-         WHERE id = $5 RETURNING *`,
-    createdAt
-      ? [wallet, amount, finalCategory, description || null, req.params.id, type, createdAt]
-      : [wallet, amount, finalCategory, description || null, req.params.id, type]
-  );
-
-  await enqueueSheetsSync("update", req.user.id, rows[0], existing.wallet);
-  res.json(rows[0]);
+  await enqueueSheetsSync("update", req.user.id, updated, previousWallet);
+  res.json(updated);
 });
 
 expensesRouter.delete("/:id", async (req, res) => {
-  const { rows } = await pool.query(
-    `DELETE FROM expenses WHERE id = $1 AND user_id = $2 RETURNING *`,
-    [req.params.id, req.user.id]
-  );
-  if (rows.length) {
-    await enqueueSheetsSync("delete", req.user.id, rows[0]);
+  const client = await pool.connect();
+  let deleted;
+  try {
+    await client.query("BEGIN");
+    const { rows } = await client.query(
+      `DELETE FROM expenses WHERE id = $1 AND user_id = $2 RETURNING *`,
+      [req.params.id, req.user.id]
+    );
+    deleted = rows[0];
+    // Та же поправка, что и при правке: удаление старой записи обязано
+    // вернуть её сумму на баланс, хотя из вычитаемой части формулы она
+    // давно вышла.
+    if (deleted) {
+      await applyExpenseChangeToBalances(client, req.user.id, deleted, null, "expense_delete");
+    }
+    await client.query("COMMIT");
+  } catch (err) {
+    await client.query("ROLLBACK");
+    throw err;
+  } finally {
+    client.release();
+  }
+
+  if (deleted) {
+    await enqueueSheetsSync("delete", req.user.id, deleted);
   }
   res.status(204).end();
 });

@@ -76,3 +76,99 @@ export async function logBalanceChange(client, { wallet, oldAmount, newAmount, r
     [wallet, oldAmount, newAmount, reason, counterpartWallet || null, changedBy]
   );
 }
+
+// Знаковый вклад записи в баланс: трата уменьшает остаток, доход увеличивает.
+function signedAmount(row) {
+  return row.type === "income" ? -Number(row.amount) : Number(row.amount);
+}
+
+// Правка и удаление записи, которая старше опорной точки счёта.
+//
+// Формула выше вычитает только то, что записано ПОСЛЕ base_at: всё, что
+// старше, уже свёрнуто внутрь base_amount. Для создания записи это неважно
+// (у новой строки logged_at = now(), она всегда попадает в вычитаемую
+// часть), но правка и удаление трогают как раз старые строки — и до этой
+// функции не двигали баланс вообще: уменьшил трату 15 августа после того,
+// как в сентябре выставил баланс руками, — и остаток не менялся, потому
+// что менять было нечего, старая сумма сидела в base_amount.
+//
+// Поэтому здесь ровно на дельту правится сама опорная сумма. logged_at при
+// правке не меняется (иначе запись перепрыгнула бы через опорную точку и
+// вычлась бы второй раз), так что «свёрнута ли она» определяется её
+// собственным logged_at на каждом из затронутых счетов отдельно — при
+// смене счёта строка может быть старой для одного и новой для другого.
+//
+// before/after — строки `expenses` до и после операции (null = записи не
+// было / больше нет). Возвращает Map счёт → на сколько сдвинули
+// base_amount, чтобы вызывающий записал это в журнал (0 не попадает).
+export async function reconcileExpenseChange(client, userId, before, after) {
+  const wallets = [...new Set([before?.wallet, after?.wallet].filter(Boolean))].sort();
+  const deltas = new Map();
+  if (!wallets.length) return deltas;
+
+  // FOR UPDATE + сортировка по имени счёта: две одновременные правки по
+  // одной паре счетов иначе могли бы взять строки в разном порядке и
+  // встать в дедлок, а без блокировки — потерять одну из дельт.
+  const { rows } = await client.query(
+    `SELECT wallet, base_at FROM wallet_balances
+     WHERE user_id = $1 AND wallet = ANY($2) ORDER BY wallet FOR UPDATE`,
+    [userId, wallets]
+  );
+  // Счёт без опорной точки для этого аккаунта — баланс ему не задавали,
+  // двигать нечего.
+  const baseAt = new Map(rows.map((r) => [r.wallet, new Date(r.base_at)]));
+  const isFoldedIn = (row) => baseAt.has(row.wallet) && new Date(row.logged_at) <= baseAt.get(row.wallet);
+  const bump = (wallet, delta) => deltas.set(wallet, (deltas.get(wallet) || 0) + delta);
+
+  // Убрали старую версию записи из опорной суммы, внесли новую. Совпадает
+  // счёт — дельты складываются в одну (разницу сумм), разошёлся — каждый
+  // счёт правится сам по себе.
+  if (before && isFoldedIn(before)) bump(before.wallet, signedAmount(before));
+  if (after && isFoldedIn(after)) bump(after.wallet, -signedAmount(after));
+
+  for (const [wallet, delta] of [...deltas]) {
+    // До копеек: дельта складывается из сумм в JS, и 2606.84 - 2600.13 там
+    // даёт 6.710000000000036 — а base_amount NUMERIC, он сохранил бы этот
+    // хвост целиком и таскал его по всей истории счёта.
+    const rounded = Math.round(delta * 100) / 100;
+    if (!rounded) {
+      deltas.delete(wallet);
+      continue;
+    }
+    deltas.set(wallet, rounded);
+    await client.query(
+      `UPDATE wallet_balances SET base_amount = base_amount + $3 WHERE user_id = $1 AND wallet = $2`,
+      [userId, wallet, rounded]
+    );
+  }
+  return deltas;
+}
+
+// То же самое, но сразу с записью в журнал балансов — этим пользуются
+// роуты правки и удаления траты.
+//
+// В журнал попадает ТОЛЬКО поправка опорной суммы, и только когда она
+// ненулевая. Правка свежей записи (моложе опорной точки) баланс тоже
+// меняет, но там его пересчитывает сама формула, а сама запись уже стоит
+// в журнале отдельным событием — добавить рядом ещё и «правку опорной
+// суммы» значило бы посчитать одно движение дважды, и остатки в истории
+// разъехались бы ниже по цепочке.
+//
+// old_amount = новый баланс минус дельта: это ровно тот остаток, что был
+// на счету до правки, от него история и продолжает мотать назад.
+export async function applyExpenseChangeToBalances(client, userId, before, after, reason) {
+  const deltas = await reconcileExpenseChange(client, userId, before, after);
+  for (const [wallet, delta] of deltas) {
+    const newAmount = await getCurrentBalance(client, wallet, userId);
+    // Счёт без опорной точки сюда не доходит (дельта была бы нулевой), но
+    // на всякий случай: без баланса писать в журнал нечего.
+    if (newAmount == null) continue;
+    await logBalanceChange(client, {
+      wallet,
+      oldAmount: Math.round((newAmount - delta) * 100) / 100,
+      newAmount,
+      reason,
+      changedBy: userId,
+    });
+  }
+}

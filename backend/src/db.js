@@ -456,7 +456,14 @@ export async function initSchema() {
   // all separate paths into `expenses`). Instead the live balance is always
   // computed as base_amount minus the sum of this wallet's expenses created
   // AFTER base_at (see routes/walletBalances.js) — self-consistent no matter
-  // how those expenses got there. One row per (wallet, user) always, even
+  // how those expenses got there.
+  //
+  // Одно исключение: правка и удаление записи, которая СТАРШЕ base_at. Она
+  // уже свёрнута в base_amount, вычитаемая часть её не видит, и без
+  // поправки самой опорной суммы такая правка не двигала бы баланс вообще
+  // (см. reconcileExpenseChange в services/balanceHistory.js). Путей сюда
+  // при этом ровно два — PUT и DELETE /api/expenses/:id: любая новая
+  // запись, каким бы путём ни пришла, всегда моложе base_at. One row per (wallet, user) always, even
   // for a shared wallet like "Семья" — each account tracks its own balance
   // on every wallet, see the migration just below for why.
   await pool.query(`
