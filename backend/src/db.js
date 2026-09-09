@@ -770,4 +770,28 @@ export async function initSchema() {
   // clear the exact revision that was picked up, never whatever is in the
   // row now.
   await pool.query(`ALTER TABLE sheets_sync_jobs ADD COLUMN IF NOT EXISTS revision BIGINT NOT NULL DEFAULT 0`);
+
+  // Черновики трат «снаружи» — сумма уже известна, а счёт и категория ещё
+  // нет. Сюда пишет шорткат Команд (iOS) по ключу X-Bot-Key, а приложение
+  // при открытии поднимает шторку добавления с проставленной суммой.
+  //
+  // Отдельная таблица, а не сразу строка в expenses: у траты обязателен
+  // счёт (баланс, лимиты, Google Sheets — всё считается по нему), и
+  // записать её «пока в Личные, потом поправлю» значило бы двинуть не тот
+  // баланс и отзеркалить в таблицу не ту строку. Черновик ничего не
+  // двигает, пока человек его не подтвердил.
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS expense_drafts (
+      id SERIAL PRIMARY KEY,
+      user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      amount NUMERIC NOT NULL,
+      description TEXT,
+      source TEXT NOT NULL DEFAULT 'shortcut',
+      raw_text TEXT,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+    );
+  `);
+  await pool.query(`
+    CREATE INDEX IF NOT EXISTS expense_drafts_user_idx ON expense_drafts (user_id, created_at DESC);
+  `);
 }

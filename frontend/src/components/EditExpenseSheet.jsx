@@ -154,6 +154,10 @@ function calcReducer(state, action) {
 export default function EditExpenseSheet({
   expense,
   defaultWallet,
+  // Заполненная сумма/заметка для новой траты — приходит из черновика,
+  // который прислал шорткат Команд (см. App.jsx, drafts).
+  defaultAmount,
+  defaultNote,
   onClose,
   onSaved,
   onDeleted,
@@ -173,7 +177,13 @@ export default function EditExpenseSheet({
     setTimeout(after, 300);
   }
   const [calc, dispatch] = useReducer(calcReducer, {
-    tokens: [!isNew ? String(Number(expense.amount)).replace(".", ",") : "0"],
+    tokens: [
+      !isNew
+        ? String(Number(expense.amount)).replace(".", ",")
+        : defaultAmount
+        ? String(Number(defaultAmount)).replace(".", ",")
+        : "0",
+    ],
   });
   const wallets = listWallets();
   const walletNames = wallets.map((w) => w.name);
@@ -186,7 +196,7 @@ export default function EditExpenseSheet({
     (c) => c.name
   );
   const [category, setCategory] = useState(expense?.category || categoryNames[0]);
-  const [note, setNote] = useState(expense?.description || "");
+  const [note, setNote] = useState(expense?.description || defaultNote || "");
   const [menuOpen, setMenuOpen] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [saving, setSaving] = useState(false);

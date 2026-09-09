@@ -83,6 +83,21 @@ authRouter.get("/me", authMiddleware, (req, res) => {
   res.json({ id, email, name, avatar_url, theme });
 });
 
+// Долгоживущий ключ аккаунта (тот же X-Bot-Key, см. middleware/auth.js) —
+// его вставляют заголовком в шорткат Команд, который шлёт сумму платежа в
+// /api/expense-drafts. Отдельным запросом, а не полем в /me: ключ даёт
+// полный доступ к API аккаунта, и лежать в кэше пользователя на устройстве
+// ему незачем — фронт спрашивает его только в момент копирования.
+authRouter.get("/shortcut-key", authMiddleware, async (req, res) => {
+  let key = req.user.bot_api_key;
+  // Аккаунт, заведённый до появления ключей, — выдаём при первом запросе.
+  if (!key) {
+    key = crypto.randomBytes(24).toString("hex");
+    await pool.query(`UPDATE users SET bot_api_key = $1 WHERE id = $2`, [key, req.user.id]);
+  }
+  res.json({ key });
+});
+
 const THEMES = ["system", "light", "dark"];
 
 authRouter.put("/theme", authMiddleware, async (req, res) => {

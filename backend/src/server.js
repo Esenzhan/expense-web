@@ -6,6 +6,7 @@ import { WebSocketServer } from "ws";
 
 import { initSchema } from "./db.js";
 import { expensesRouter } from "./routes/expenses.js";
+import { expenseDraftsRouter } from "./routes/expenseDrafts.js";
 import { statsRouter } from "./routes/stats.js";
 import { categoriesRouter } from "./routes/categories.js";
 import { walletsRouter } from "./routes/wallets.js";
@@ -35,6 +36,7 @@ app.use(express.json({ limit: "5mb" }));
 // for why Express 4 would otherwise answer that with nothing at all.
 app.use("/api/auth", wrapRouterAsync(authRouter));
 app.use("/api/expenses", authMiddleware, wrapRouterAsync(expensesRouter));
+app.use("/api/expense-drafts", authMiddleware, wrapRouterAsync(expenseDraftsRouter));
 app.use("/api/stats", authMiddleware, wrapRouterAsync(statsRouter));
 // Categories/wallets: readable by anyone (the bot needs the list too), but
 // creating/deleting is site-only — routes/categories.js and routes/wallets.js

@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { reorderCategories, fetchExpenses, fetchExpensesRange, fetchWalletTotals, fetchWalletBalances, setWalletBalance, fetchCategories, fetchWallets, fetchMe, warmBackend, createExpense, deleteExpense, deleteCategory, saveThemeSetting, reorderWallets } from "./api";
+import { reorderCategories, fetchExpenses, fetchExpensesRange, fetchWalletTotals, fetchWalletBalances, setWalletBalance, fetchCategories, fetchWallets, fetchMe, warmBackend, createExpense, deleteExpense, deleteCategory, saveThemeSetting, reorderWallets, fetchExpenseDrafts, deleteExpenseDraft } from "./api";
 import { loadLocalTheme, setLocalTheme } from "./theme";
 import { getToken, setToken } from "./auth";
 import { listPendingExpenses, syncPendingExpenses, hasPendingExpenses, removePendingExpense, clearConfirmedSynced, onExpenseRejected } from "./offlineQueue";
@@ -44,6 +44,30 @@ const CACHE_KEY = "traty-cache-v4";
 // tab is open — so they get their own flat, account-scoped cache instead of
 // living inside CACHE_KEY's per-selection blobs.
 const BALANCES_CACHE_KEY = "traty-wallet-balances-cache-v1";
+
+// Черновики, с которыми здесь уже разобрались (сохранили или закрыли).
+// Нужны потому, что удаление черновика на сервере — обычный сетевой
+// запрос: офлайн он не пройдёт, а шторка при этом уже закрыта, и без
+// локальной пометки тот же черновик всплывал бы снова на каждом опросе.
+// Сервер сам чистит их через трое суток, так что список короткий.
+const HANDLED_DRAFTS_KEY = "traty-handled-drafts-v1";
+
+function loadHandledDrafts() {
+  try {
+    return new Set(JSON.parse(localStorage.getItem(HANDLED_DRAFTS_KEY) || "[]"));
+  } catch {
+    return new Set();
+  }
+}
+
+function rememberHandledDraft(id) {
+  const kept = [...loadHandledDrafts().add(id)].slice(-50);
+  try {
+    localStorage.setItem(HANDLED_DRAFTS_KEY, JSON.stringify(kept));
+  } catch {
+    // приватный режим/переполненное хранилище — не повод ронять сохранение
+  }
+}
 
 // How long a deleted expense can be brought back before the DELETE is
 // actually sent (the reference app's ring takes about this long to drain).
@@ -203,6 +227,10 @@ export default function App() {
   const [insightsOpen, setInsightsOpen] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
   const [editingExpense, setEditingExpense] = useState(null);
+  // Трата, пришедшая снаружи с уже известной суммой (шорткат Команд после
+  // оплаты Apple Pay, см. backend/src/routes/expenseDrafts.js). Открывает
+  // шторку добавления заполненной — остаётся выбрать счёт и категорию.
+  const [draft, setDraft] = useState(null);
   const [addingExpense, setAddingExpense] = useState(false);
   // Receipt scan result — an array of one or more detected expenses (one
   // for a plain scan, several for "Раздельно"), reviewed together in
@@ -857,18 +885,39 @@ export default function App() {
     function pickUpRemoteChanges() {
       refreshAll(periodRef.current, selectedWalletRef.current);
     }
+    // Черновик от шортката приходит ровно так же, как трата от бота, —
+    // молча, мимо приложения. Поэтому подбирается тем же опросом, а не
+    // отдельным механизмом.
+    function pickUpDrafts() {
+      fetchExpenseDrafts()
+        .then((rows) => {
+          const handled = loadHandledDrafts();
+          const fresh = rows.find((r) => !handled.has(r.id));
+          // Только если шторки ещё нет: подменять черновик под открытой
+          // формой нельзя — человек уже правит именно этот.
+          if (fresh) setDraft((prev) => prev || fresh);
+        })
+        .catch(() => {
+          // офлайн или сервер спит — подберётся на следующем опросе
+        });
+    }
     const onVisible = () => {
       if (document.visibilityState === "visible") {
         trySyncPending();
         pickUpRemoteChanges();
+        pickUpDrafts();
       }
     };
     trySyncPending();
+    pickUpDrafts();
     window.addEventListener("online", trySyncPending);
     document.addEventListener("visibilitychange", onVisible);
     const pollId = setInterval(() => {
       if (hasPendingExpenses()) trySyncPending();
-      if (document.visibilityState === "visible") pickUpRemoteChanges();
+      if (document.visibilityState === "visible") {
+        pickUpRemoteChanges();
+        pickUpDrafts();
+      }
     }, 15000);
     return () => {
       window.removeEventListener("online", trySyncPending);
@@ -876,6 +925,19 @@ export default function App() {
       clearInterval(pollId);
     };
   }, [user]);
+
+  // Черновик закрывается и после сохранения, и после закрытия шторки:
+  // закрыть = «не надо», иначе он всплывал бы снова при каждом возврате в
+  // приложение. Локальная пометка ставится ДО запроса — она и есть то, на
+  // что смотрит опрос (см. pickUpDrafts).
+  function dismissDraft(entry) {
+    if (!entry) return;
+    rememberHandledDraft(entry.id);
+    setDraft(null);
+    deleteExpenseDraft(entry.id).catch(() => {
+      // офлайн — на сервере он протухнет сам через трое суток
+    });
+  }
 
   if (!authChecked) {
     return <div className="login-screen" />;
@@ -1153,6 +1215,24 @@ export default function App() {
           onSaved={() => setEditingExpense(null)}
           onDeleted={() => setEditingExpense(null)}
           onDeleteRequested={requestDeleteExpense}
+        />
+      )}
+
+      {/* Заполненная шторка из черновика. Не открывается поверх уже
+          открытой формы — очередной опрос поднимет её, когда та закроется. */}
+      {draft && !addingExpense && !editingExpense && !scanItems && (
+        <EditExpenseSheet
+          defaultWallet={selectedWallet}
+          defaultAmount={Number(draft.amount)}
+          defaultNote={draft.description || ""}
+          onClose={() => dismissDraft(draft)}
+          onCommitted={() => refreshAll(period)}
+          onSaved={(saved) => {
+            dismissDraft(draft);
+            if (saved?.wallet && saved.wallet !== selectedWallet) {
+              selectWallet(saved.wallet);
+            }
+          }}
         />
       )}
 

@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { fetchExpenses, fetchSheetsSyncStatus } from "../api";
+import { fetchExpenses, fetchSheetsSyncStatus, fetchShortcutKey } from "../api";
 import { logout } from "../auth";
 import { haptic, withHaptic } from "../haptics";
 import { useSwipeDismissRight } from "../sheetGestures";
@@ -132,6 +132,10 @@ export default function SettingsSheet({ user, theme, onClose, onOpenCategories, 
   // Кроме как здесь, их больше нигде не видно — из списка трат они уже
   // ушли, а на сервер так и не попали.
   const [rejected, setRejected] = useState(listRejectedExpenses);
+  // Ключ для шортката Команд. Не хранится вместе с профилем и не тянется
+  // при открытии настроек — только по тапу, в момент копирования
+  // (backend: GET /api/auth/shortcut-key).
+  const [keyState, setKeyState] = useState(null);
 
   useSwipeDismissRight(pageRef, onClose);
 
@@ -163,6 +167,25 @@ export default function SettingsSheet({ user, theme, onClose, onOpenCategories, 
       localStorage.setItem(SETTINGS_KEY, JSON.stringify(next));
       return next;
     });
+  }
+
+  // Копирование в буфер требует жеста — тап по строке им и является.
+  // Если буфер недоступен (старая iOS, отказ в разрешении), показываем сам
+  // ключ прямо в строке: переписать руками хуже, чем никак.
+  async function copyShortcutKey() {
+    try {
+      const key = await fetchShortcutKey();
+      await navigator.clipboard.writeText(key);
+      setKeyState("Скопировано");
+      setTimeout(() => setKeyState(null), 2000);
+    } catch {
+      try {
+        setKeyState(await fetchShortcutKey());
+      } catch {
+        setKeyState("Нет сети");
+        setTimeout(() => setKeyState(null), 2000);
+      }
+    }
   }
 
   async function exportCsv() {
@@ -267,6 +290,12 @@ export default function SettingsSheet({ user, theme, onClose, onOpenCategories, 
                 </button>
               </div>
             ))}
+            <Row
+              icon={Icons.lock}
+              label="Ключ для Команд"
+              value={keyState || "Скопировать"}
+              onPress={copyShortcutKey}
+            />
             <Row icon={Icons.logout} label="Выйти" onPress={logout} />
           </div>
         </>

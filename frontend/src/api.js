@@ -127,6 +127,27 @@ export async function deleteExpense(id) {
   await apiFetch(`/api/expenses/${id}`, { method: "DELETE" });
 }
 
+// Черновики «снаружи»: сумма уже известна (шорткат Команд её прислал), а
+// счёт и категорию человек выбирает в приложении. См.
+// backend/src/routes/expenseDrafts.js.
+export async function fetchExpenseDrafts() {
+  const res = await apiFetch(`/api/expense-drafts`);
+  return res.json();
+}
+
+export async function deleteExpenseDraft(id) {
+  await apiFetch(`/api/expense-drafts/${id}`, { method: "DELETE" });
+}
+
+// Долгоживущий ключ аккаунта для шортката. Запрашивается только в момент
+// копирования — специально не хранится вместе с профилем.
+export async function fetchShortcutKey() {
+  const res = await apiFetch(`/api/auth/shortcut-key`);
+  const body = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(body.error || "Не удалось получить ключ");
+  return body.key;
+}
+
 export async function fetchSheetsSyncStatus() {
   const res = await apiFetch(`/api/expenses/sheets-sync-status`);
   return res.json();
