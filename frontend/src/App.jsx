@@ -26,6 +26,7 @@ import WalletsSheet from "./components/WalletsSheet";
 import NewWalletSheet from "./components/NewWalletSheet";
 import WalletTransferSheet from "./components/WalletTransferSheet";
 import BalanceHistorySheet from "./components/BalanceHistorySheet";
+import AutomationSheet from "./components/AutomationSheet";
 import DebtsSheet from "./components/DebtsSheet";
 import NewDebtSheet from "./components/NewDebtSheet";
 import DebtDetailSheet from "./components/DebtDetailSheet";
@@ -241,6 +242,7 @@ export default function App() {
   const [remindersOpen, setRemindersOpen] = useState(false);
   const [themeOpen, setThemeOpen] = useState(false);
   const [balanceHistoryOpen, setBalanceHistoryOpen] = useState(false);
+  const [automationOpen, setAutomationOpen] = useState(false);
   const [theme, setTheme] = useState(loadLocalTheme);
   const themeSyncedRef = useRef(false);
   const [newCategoryWallet, setNewCategoryWallet] = useState(null);
@@ -1276,6 +1278,7 @@ export default function App() {
           onOpenReminders={() => setRemindersOpen(true)}
           onOpenTheme={() => setThemeOpen(true)}
           onOpenBalanceHistory={() => setBalanceHistoryOpen(true)}
+          onOpenAutomation={() => setAutomationOpen(true)}
         />
       )}
 
@@ -1284,6 +1287,7 @@ export default function App() {
       {themeOpen && <ThemeSheet theme={theme} onChange={changeTheme} onClose={() => setThemeOpen(false)} />}
 
       {balanceHistoryOpen && <BalanceHistorySheet user={user} onClose={() => setBalanceHistoryOpen(false)} />}
+      {automationOpen && <AutomationSheet onClose={() => setAutomationOpen(false)} />}
 
       {debtsOpen && (
         <DebtsSheet

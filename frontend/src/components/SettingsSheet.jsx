@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { fetchExpenses, fetchSheetsSyncStatus, fetchShortcutKey } from "../api";
+import { fetchExpenses, fetchSheetsSyncStatus } from "../api";
 import { logout } from "../auth";
 import { haptic, withHaptic } from "../haptics";
 import { useSwipeDismissRight } from "../sheetGestures";
@@ -118,7 +118,7 @@ function ToggleRow({ icon, label, on, onFlip }) {
   );
 }
 
-export default function SettingsSheet({ user, theme, onClose, onOpenCategories, onOpenReminders, onOpenTheme, onOpenBalanceHistory }) {
+export default function SettingsSheet({ user, theme, onClose, onOpenCategories, onOpenReminders, onOpenTheme, onOpenBalanceHistory, onOpenAutomation }) {
   const [toggles, setToggles] = useState(loadToggles);
   const [closing, setClosing] = useState(false);
   const pageRef = useRef(null);
@@ -132,25 +132,8 @@ export default function SettingsSheet({ user, theme, onClose, onOpenCategories, 
   // Кроме как здесь, их больше нигде не видно — из списка трат они уже
   // ушли, а на сервер так и не попали.
   const [rejected, setRejected] = useState(listRejectedExpenses);
-  // Ключ для шортката Команд (backend: GET /api/auth/shortcut-key).
-  // Загружается вместе с настройками, а не по тапу: iOS отзывает доступ к
-  // буферу обмена, если между жестом и записью успел завершиться await —
-  // с загрузкой внутри обработчика копирование падало всегда.
-  const [shortcutKey, setShortcutKey] = useState(null);
-  const [keyState, setKeyState] = useState(null);
-  // Буфер недоступен (старая iOS, отказ в разрешении) — показываем ключ
-  // строкой под строкой, длинным нажатием копируется вручную.
-  const [keyShown, setKeyShown] = useState(false);
 
   useSwipeDismissRight(pageRef, onClose);
-
-  useEffect(() => {
-    fetchShortcutKey()
-      .then(setShortcutKey)
-      .catch(() => {
-        // офлайн — тап по строке скажет об этом словами
-      });
-  }, []);
 
   useEffect(() => {
     fetchSheetsSyncStatus()
@@ -180,27 +163,6 @@ export default function SettingsSheet({ user, theme, onClose, onOpenCategories, 
       localStorage.setItem(SETTINGS_KEY, JSON.stringify(next));
       return next;
     });
-  }
-
-  // Синхронно, прямо в обработчике тапа: ключ уже загружен (см. эффект
-  // выше), между жестом и записью в буфер ничего не ждём.
-  function copyShortcutKey() {
-    if (!shortcutKey) {
-      setKeyState("Нет сети");
-      setTimeout(() => setKeyState(null), 2000);
-      return;
-    }
-    const written = navigator.clipboard?.writeText(shortcutKey);
-    if (!written) {
-      setKeyShown(true);
-      return;
-    }
-    written
-      .then(() => {
-        setKeyState("Скопировано");
-        setTimeout(() => setKeyState(null), 2000);
-      })
-      .catch(() => setKeyShown(true));
   }
 
   async function exportCsv() {
@@ -305,23 +267,6 @@ export default function SettingsSheet({ user, theme, onClose, onOpenCategories, 
                 </button>
               </div>
             ))}
-            <Row
-              icon={Icons.lock}
-              label="Ключ для Команд"
-              value={keyState || "Скопировать"}
-              onPress={copyShortcutKey}
-            />
-            {/* Сам ключ — только если буфер отказал. В строке значения ему
-                не место: 48 символов там не переносятся и наезжают на
-                название (ровно это и вылезло на iPhone). */}
-            {keyShown && (
-              <div className="settings-row sync-problem">
-                <span className="sync-problem-main">
-                  <span className="settings-key">{shortcutKey}</span>
-                  <span className="sync-problem-meta">Скопировать не вышло — нажми и удерживай ключ</span>
-                </span>
-              </div>
-            )}
             <Row icon={Icons.logout} label="Выйти" onPress={logout} />
           </div>
         </>
@@ -362,7 +307,7 @@ export default function SettingsSheet({ user, theme, onClose, onOpenCategories, 
       </div>
 
       <div className="settings-group">
-        <Row icon={Icons.robot} label="Автоматизация" value="Команды и диплинки" />
+        <Row icon={Icons.robot} label="Автоматизация" value="Команды" onPress={onOpenAutomation} />
       </div>
 
       <p className="settings-section">Поддержка</p>

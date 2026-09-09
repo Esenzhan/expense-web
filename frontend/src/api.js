@@ -1,6 +1,8 @@
 import { getToken, clearToken } from "./auth";
 
-const API_BASE = import.meta.env.VITE_API_URL || "http://localhost:3001";
+// Экспортируется ради экрана «Автоматизация»: там адрес показывают целиком,
+// чтобы его можно было вбить в шорткат, и вторая копия этой строчки разошлась бы.
+export const API_BASE = import.meta.env.VITE_API_URL || "http://localhost:3001";
 export const WS_URL = API_BASE.replace(/^http/, "ws") + "/ws/voice";
 export const GOOGLE_LOGIN_URL = `${API_BASE}/api/auth/google/start`;
 
