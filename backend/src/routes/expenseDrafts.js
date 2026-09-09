@@ -48,7 +48,16 @@ function valid(value) {
 expenseDraftsRouter.post("/", async (req, res) => {
   const amount = parseAmount(req.body.amount);
   if (amount === null) {
-    return res.status(400).json({ error: "Некорректная сумма" });
+    // Эхо того, что пришло: у шортката Команд не видно, чем именно он
+    // заполнил поле (пустая переменная приезжает нулём, свойство
+    // «Сумма» может прийти строкой с валютой), а «Показать уведомление»
+    // печатает ответ целиком — так одна попытка отвечает на вопрос,
+    // вместо гадания по одинаковой ошибке.
+    const raw = req.body.amount;
+    return res.status(400).json({
+      error: "Некорректная сумма",
+      received: `${typeof raw}: ${JSON.stringify(raw ?? null)}`.slice(0, 120),
+    });
   }
   // merchant — на случай, если триггер отдаст название магазина: оно
   // ложится в заметку, её же человек увидит в шторке.
