@@ -4,6 +4,7 @@ import { haptic, hapticHeavy, withHaptic } from "../haptics";
 import { useSwipeDismiss } from "../sheetGestures";
 import { almaty } from "../insights";
 import { loadCached, saveCached } from "../offlineCache";
+import { formatAmountDisplay, sanitizeAmountInput } from "../amountInput";
 
 function paymentsCacheKey(debtId) {
   return `traty-debt-payments-${debtId}`;
@@ -183,14 +184,19 @@ export default function DebtDetailSheet({ debt: initialDebt, user, currentUserId
             <p className="newcat-group-title">Погасить</p>
             <div className="balance-row">
               <span className="balance-label">Сумма</span>
+              {/* type="text", а не "number": числовое поле не принимает
+                  пробелы, а без них 100000 не прочитать (amountInput.js —
+                  та же группировка, что в остальных полях с суммой). */}
               <input
                 className="balance-input"
-                type="number"
+                type="text"
                 inputMode="decimal"
-                placeholder={Number(debt.remaining).toFixed(2)}
-                value={payAmount}
+                placeholder={formatAmountDisplay(Number(debt.remaining).toFixed(2).replace(".", ","))}
+                value={formatAmountDisplay(payAmount)}
                 onChange={(event) => {
-                  setPayAmount(event.target.value);
+                  const raw = sanitizeAmountInput(event.target.value);
+                  if (raw === null) return;
+                  setPayAmount(raw);
                   setError("");
                 }}
               />

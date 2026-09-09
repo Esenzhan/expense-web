@@ -6,6 +6,7 @@ import { haptic, hapticHeavy, withHaptic } from "../haptics";
 import { useSwipeDismiss } from "../sheetGestures";
 import CategoryGlyph from "./CategoryGlyph";
 import { catIconVars } from "../catIconVars";
+import { formatAmountDisplay, sanitizeAmountInput } from "../amountInput";
 
 // «Переводы»: move money from one wallet's balance to another — re-bases
 // both (same anchor mechanism as a manual "Баланс" edit), no expense rows
@@ -125,14 +126,18 @@ export default function WalletTransferSheet({ initialFrom, onClose, onTransferre
 
         <div className="balance-row" style={{ marginTop: 16 }}>
           <span className="balance-label">Сумма, {symbol}</span>
+          {/* см. комментарий в DebtDetailSheet: числовое поле не даёт
+              разделять разряды пробелами */}
           <input
             className="balance-input"
-            type="number"
+            type="text"
             inputMode="decimal"
             placeholder="0"
-            value={amount}
+            value={formatAmountDisplay(amount)}
             onChange={(event) => {
-              setAmount(event.target.value);
+              const raw = sanitizeAmountInput(event.target.value);
+              if (raw === null) return;
+              setAmount(raw);
               setError("");
             }}
           />

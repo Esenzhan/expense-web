@@ -11,6 +11,7 @@ import { haptic, hapticTick, withHaptic } from "../haptics";
 import { useSwipeDismiss } from "../sheetGestures";
 import { catIconVars } from "../catIconVars";
 import CalendarIcon from "./CalendarIcon";
+import { formatAmountDisplay } from "../amountInput";
 
 function toNumber(raw) {
   return parseFloat(raw.replace(",", ".")) || 0;
@@ -24,13 +25,13 @@ function applyOp(a, b, op) {
   return b;
 }
 
-// Groups the integer part with spaces while the user is still typing
-// (e.g. a trailing "," must survive re-formatting).
+// Та же группировка разрядов, что во всех полях ввода суммы
+// (amountInput.js) — вторая копия этого правила тут и жила, пока поля
+// долгов/переводов/лимитов оставались без неё. Отличие одно: у калькулятора
+// целая часть может быть пустой («,5» сразу после запятой), и ноль перед
+// запятой дописывается, чтобы строка не начиналась с неё.
 function formatDisplay(raw) {
-  const hasComma = raw.includes(",");
-  const [intPart, decPart = ""] = raw.split(",");
-  const grouped = (intPart || "0").replace(/\B(?=(\d{3})+(?!\d))/g, " ");
-  return hasComma ? `${grouped},${decPart}` : grouped;
+  return formatAmountDisplay(!raw || /^[.,]/.test(raw) ? `0${raw}` : raw);
 }
 
 const OPS = ["+", "−", "×", "÷"];

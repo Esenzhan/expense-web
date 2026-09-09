@@ -11,6 +11,7 @@ import { catIconVars } from "../catIconVars";
 import { useSwipeDismiss } from "../sheetGestures";
 import { formatPeriodLabel, isFullMonthPeriod } from "../insights";
 import { loadCached, saveCached } from "../offlineCache";
+import { formatAmountDisplay, sanitizeAmountInput } from "../amountInput";
 
 function categoryLimitsCacheKey(wallet) {
   return `traty-category-limits-${wallet}`;
@@ -185,8 +186,11 @@ export default function InsightsSheet({ user, period, insights: data, wallet, wa
                   inputMode="numeric"
                   autoFocus
                   placeholder={`Лимит на месяц, ${currencySymbol(currency)}`}
-                  value={limitDraft}
-                  onChange={(event) => setLimitDraft(event.target.value)}
+                  value={formatAmountDisplay(limitDraft)}
+                  onChange={(event) => {
+                    const raw = sanitizeAmountInput(event.target.value);
+                    if (raw !== null) setLimitDraft(raw);
+                  }}
                   onKeyDown={(event) => event.key === "Enter" && saveLimit()}
                 />
                 <button className="limit-save" onClick={withHaptic(saveLimit)}>
@@ -347,8 +351,11 @@ export default function InsightsSheet({ user, period, insights: data, wallet, wa
                               inputMode="numeric"
                               autoFocus
                               placeholder={`Лимит, ${currencySymbol(currency)}`}
-                              value={categoryLimitDraft}
-                              onChange={(event) => setCategoryLimitDraft(event.target.value)}
+                              value={formatAmountDisplay(categoryLimitDraft)}
+                              onChange={(event) => {
+                                const raw = sanitizeAmountInput(event.target.value);
+                                if (raw !== null) setCategoryLimitDraft(raw);
+                              }}
                               onKeyDown={(event) => event.key === "Enter" && saveCategoryLimit(cat.name)}
                             />
                             <button className="limit-save" onClick={() => withHaptic(saveCategoryLimit)(cat.name)}>
