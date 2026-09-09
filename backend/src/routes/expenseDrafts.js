@@ -15,7 +15,10 @@ const MAX_AMOUNT = 1e12;
 // определяем по последнему разделителю в строке: если после него 1–2
 // цифры до конца — это дробная часть, иначе всё это разряды.
 export function parseAmount(raw) {
-  if (typeof raw === "number") return Number.isFinite(raw) ? Math.abs(raw) : null;
+  // Проверка сумм — одна на оба входа. Числовая ветка раньше выходила
+  // отсюда сразу, минуя её: пустая переменная в Командах приезжает нулём,
+  // и черновик заводился на 0 ₸ вместо отказа.
+  if (typeof raw === "number") return valid(Math.abs(raw));
   if (typeof raw !== "string") return null;
 
   const cleaned = raw.replace(/[^\d.,]/g, "");
@@ -30,6 +33,10 @@ export function parseAmount(raw) {
     ? Number(`${digitsOnly(cleaned.slice(0, lastSep))}.${tail}`)
     : Number(digitsOnly(cleaned));
 
+  return valid(value);
+}
+
+function valid(value) {
   if (!Number.isFinite(value) || value <= 0 || value > MAX_AMOUNT) return null;
   return value;
 }
