@@ -299,6 +299,70 @@ export default function App() {
   // window to undo before the DELETE actually reaches the server — matches
   // the reference app's "Операция удалена — Отменить" banner. { expense,
   // timeoutId } while a deletion is pending, otherwise null.
+  // Черновик и «висит ли что-нибудь поверх главной» — в рефах, потому что
+  // читает их фоновый опрос (см. pickUpDrafts), а он живёт в эффекте с
+  // [user] и обычные значения там застывают на первом рендере.
+  const draftRef = useRef(null);
+  draftRef.current = draft;
+  const overlaysOpenRef = useRef(false);
+  overlaysOpenRef.current = Boolean(
+    periodPickerOpen ||
+      insightsOpen ||
+      searchOpen ||
+      editingExpense ||
+      addingExpense ||
+      scanItems ||
+      settingsOpen ||
+      categoriesOpen ||
+      remindersOpen ||
+      themeOpen ||
+      balanceHistoryOpen ||
+      automationOpen ||
+      newCategoryWallet ||
+      editingCategory ||
+      walletsOpen ||
+      newWalletOpen ||
+      editingWallet ||
+      transferOpen ||
+      debtsOpen ||
+      newDebtOpen ||
+      selectedDebt ||
+      capitalOpen ||
+      newCapitalOpen ||
+      selectedCapitalSnapshot
+  );
+
+  // Возвращает на главную, закрывая всё разом. Нужна черновику из Apple
+  // Pay: человек открыл приложение, чтобы записать только что оплаченное,
+  // — а не чтобы сначала руками разгребать экран, на котором его прервали.
+  function closeAllOverlays() {
+    setPeriodPickerOpen(false);
+    setInsightsOpen(false);
+    setSearchOpen(false);
+    setEditingExpense(null);
+    setAddingExpense(false);
+    setScanItems(null);
+    setSettingsOpen(false);
+    setCategoriesOpen(false);
+    setRemindersOpen(false);
+    setThemeOpen(false);
+    setBalanceHistoryOpen(false);
+    setAutomationOpen(false);
+    setNewCategoryWallet(null);
+    setEditingCategory(null);
+    setWalletsOpen(false);
+    setNewWalletOpen(false);
+    setEditingWallet(null);
+    setTransferOpen(false);
+    setDebtsOpen(false);
+    setNewDebtOpen(false);
+    setSelectedDebt(null);
+    setCapitalOpen(false);
+    setNewCapitalOpen(false);
+    setNewCapitalPrevId(null);
+    setSelectedCapitalSnapshot(null);
+  }
+
   const [pendingDelete, setPendingDelete] = useState(null);
   const pendingDeleteRef = useRef(null);
   pendingDeleteRef.current = pendingDelete;
@@ -890,14 +954,22 @@ export default function App() {
     // Черновик от шортката приходит ровно так же, как трата от бота, —
     // молча, мимо приложения. Поэтому подбирается тем же опросом, а не
     // отдельным механизмом.
-    function pickUpDrafts() {
+    // takeOver — приложение только что открыли или вернулись в него. Тогда
+    // черновик занимает экран целиком: закрываем настройки, счета, долги,
+    // любую открытую шторку и показываем трату. На фоновом опросе (человек
+    // уже в приложении и что-то делает) так нельзя — ждём, пока экран
+    // освободится сам.
+    function pickUpDrafts(takeOver) {
       fetchExpenseDrafts()
         .then((rows) => {
           const handled = loadHandledDrafts();
           const fresh = rows.find((r) => !handled.has(r.id));
-          // Только если шторки ещё нет: подменять черновик под открытой
-          // формой нельзя — человек уже правит именно этот.
-          if (fresh) setDraft((prev) => prev || fresh);
+          // Шторка уже висит — подменять черновик под открытой формой
+          // нельзя, человек правит именно этот.
+          if (!fresh || draftRef.current) return;
+          if (!takeOver && overlaysOpenRef.current) return;
+          closeAllOverlays();
+          setDraft(fresh);
         })
         .catch(() => {
           // офлайн или сервер спит — подберётся на следующем опросе
@@ -907,18 +979,18 @@ export default function App() {
       if (document.visibilityState === "visible") {
         trySyncPending();
         pickUpRemoteChanges();
-        pickUpDrafts();
+        pickUpDrafts(true);
       }
     };
     trySyncPending();
-    pickUpDrafts();
+    pickUpDrafts(true);
     window.addEventListener("online", trySyncPending);
     document.addEventListener("visibilitychange", onVisible);
     const pollId = setInterval(() => {
       if (hasPendingExpenses()) trySyncPending();
       if (document.visibilityState === "visible") {
         pickUpRemoteChanges();
-        pickUpDrafts();
+        pickUpDrafts(false);
       }
     }, 15000);
     return () => {
@@ -1220,9 +1292,9 @@ export default function App() {
         />
       )}
 
-      {/* Заполненная шторка из черновика. Не открывается поверх уже
-          открытой формы — очередной опрос поднимет её, когда та закроется. */}
-      {draft && !addingExpense && !editingExpense && !scanItems && (
+      {/* Заполненная шторка из черновика. Условий на другие экраны тут
+          нет: pickUpDrafts закрывает их сам, когда решает её показать. */}
+      {draft && (
         <EditExpenseSheet
           defaultWallet={selectedWallet}
           defaultAmount={Number(draft.amount)}
