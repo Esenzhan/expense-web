@@ -259,10 +259,17 @@ export default function EditExpenseSheet({
       applyCarouselScales(row);
       skippedFirstCenterRef.current = true;
     } else {
-      // No direct applyCarouselScales call here — onScroll (already wired
-      // below) keeps the tile scales in step as the smooth scroll plays
-      // out, same as scrollCategoryTo's own tap-to-select scroll.
+      // onScroll (already wired below) держит масштабы плиток в ногу с
+      // плавной прокруткой, пока она играет, — но только если прокрутка
+      // вообще случилась. А она случается не всегда: в новом счёте
+      // выбранной категории может не быть, подставится первая, и целевая
+      // позиция окажется той же, что и текущая (обе — ноль). Тогда
+      // события прокрутки не будет вовсе, а плитки у нового списка —
+      // новые узлы, без inline-стилей: выбранная категория рисуется
+      // обычного размера вместо увеличенной. Поэтому масштабы
+      // применяются здесь же, а прокрутка (если она будет) их уточнит.
       row.scrollTo({ left: targetLeft, behavior: "smooth" });
+      applyCarouselScales(row);
     }
   }, [wallet, type]);
 
