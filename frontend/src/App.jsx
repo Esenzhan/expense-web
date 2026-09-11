@@ -304,6 +304,9 @@ export default function App() {
   // [user] и обычные значения там застывают на первом рендере.
   const draftRef = useRef(null);
   draftRef.current = draft;
+  // Ссылка на подборщик черновиков — он живёт внутри эффекта, а звать его надо и снаружи,
+  // из dismissDraft (см. ниже).
+  const pickUpDraftsRef = useRef(null);
   const overlaysOpenRef = useRef(false);
   overlaysOpenRef.current = Boolean(
     periodPickerOpen ||
@@ -963,7 +966,10 @@ export default function App() {
       fetchExpenseDrafts()
         .then((rows) => {
           const handled = loadHandledDrafts();
-          const fresh = rows.find((r) => !handled.has(r.id));
+          // Сервер отдаёт свежие сверху, а показываем в порядке ОПЛАТЫ: если платежей было
+          // несколько подряд, первым открывается самый ранний — так же, как они шли в жизни.
+          const pending = rows.filter((r) => !handled.has(r.id));
+          const fresh = pending[pending.length - 1];
           // Шторка уже висит — подменять черновик под открытой формой
           // нельзя, человек правит именно этот.
           if (!fresh || draftRef.current) return;
@@ -975,6 +981,11 @@ export default function App() {
           // офлайн или сервер спит — подберётся на следующем опросе
         });
     }
+    // Чтобы следующий черновик из очереди поднимался сразу после закрытия предыдущего, а не
+    // ждал очередного тика опроса (до 15 секунд — за это время легко решить, что больше
+    // ничего нет, и уйти из приложения).
+    pickUpDraftsRef.current = pickUpDrafts;
+
     const onVisible = () => {
       if (document.visibilityState === "visible") {
         trySyncPending();
@@ -1008,9 +1019,15 @@ export default function App() {
     if (!entry) return;
     rememberHandledDraft(entry.id);
     setDraft(null);
+    // Реф обнуляем руками: он обновляется на рендере, а очередь дёргаем прямо сейчас —
+    // иначе pickUpDrafts увидит «шторка ещё висит» и ничего не поднимет.
+    draftRef.current = null;
     deleteExpenseDraft(entry.id).catch(() => {
       // офлайн — на сервере он протухнет сам через трое суток
     });
+    // Следующий платёж из очереди — сразу. Оплатила три раза подряд, зашла один раз: шторки
+    // идут одна за другой, а не по одной на каждые 15 секунд.
+    pickUpDraftsRef.current?.(true);
   }
 
   if (!authChecked) {
@@ -1296,6 +1313,11 @@ export default function App() {
           нет: pickUpDrafts закрывает их сам, когда решает её показать. */}
       {draft && (
         <EditExpenseSheet
+          // key по номеру черновика обязателен: платежей может быть несколько подряд, и
+          // следующая шторка открывается сразу после закрытия предыдущей. Без key React
+          // переиспользует ТОТ ЖЕ компонент, а он внутри уже помечен закрытым (dismissedRef,
+          // closing) — новая трата просто не показывалась бы.
+          key={draft.id}
           defaultWallet={selectedWallet}
           defaultAmount={Number(draft.amount)}
           defaultNote={draft.description || ""}
