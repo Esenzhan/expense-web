@@ -24,73 +24,32 @@
 .wallet-pick-icon { transition: transform 180ms var(--ease-out); }
 .wallet-pick.active .wallet-pick-icon { transform: translateY(-2px); }
 
-/* Flip-clock numerals: the final glyph is always present behind two moving
-   half-glyphs, so the value remains readable even if an animation is cancelled. */
+/* Vertical digit reels, matched to kaspi-dashboard: units move first and the
+   more significant digits follow in a short right-to-left wave. */
 .flip-number {
-  display: block;
-  white-space: nowrap;
-  font-variant-numeric: tabular-nums;
-}
-.flip-number-visual {
   display: inline-flex;
   align-items: baseline;
-  perspective: 600px;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.1;
 }
-.flip-number-static,
-.flip-clock-digit {
-  display: inline-grid;
-  position: relative;
-  line-height: inherit;
+.summary-total.flip-number { display: flex; }
+.flip-number-static { white-space: pre; }
+.flip-number-column {
+  display: inline-block;
+  height: 1.1em;
+  overflow: hidden;
+  vertical-align: bottom;
 }
-.flip-clock-digit > span {
-  grid-area: 1 / 1;
+.flip-number-strip {
+  display: block;
+  transition: transform 750ms cubic-bezier(.22, .61, .36, 1);
+  will-change: transform;
 }
-.flip-clock-final {
-  opacity: 1;
-}
-.flip-clock-old-base,
-.flip-clock-old,
-.flip-clock-new {
-  backface-visibility: hidden;
-  will-change: transform, opacity;
-}
-.flip-clock-old-base {
-  clip-path: inset(50% 0 0 0);
-  animation: flip-clock-old-base 220ms linear var(--flip-delay) both;
-}
-.flip-clock-old {
-  clip-path: inset(0 0 50% 0);
-  transform-origin: center bottom;
-  animation: flip-clock-old 220ms var(--ease-out) var(--flip-delay) both;
-}
-.flip-clock-new {
-  clip-path: inset(50% 0 0 0);
-  transform-origin: center top;
-  animation: flip-clock-new 220ms var(--ease-out) var(--flip-delay) both;
-}
-.flip-clock-seam {
-  align-self: center;
-  height: 1px;
-  background: currentColor;
-  opacity: 0;
-  pointer-events: none;
-  animation: flip-clock-seam 220ms var(--ease-out) var(--flip-delay) both;
-}
-@keyframes flip-clock-old {
-  0% { transform: rotateX(0); opacity: 1; }
-  52%, 100% { transform: rotateX(-88deg); opacity: 0; }
-}
-@keyframes flip-clock-old-base {
-  0%, 54% { opacity: 1; }
-  55%, 100% { opacity: 0; }
-}
-@keyframes flip-clock-new {
-  0%, 38% { transform: rotateX(88deg); opacity: 0; }
-  100% { transform: rotateX(0); opacity: 1; }
-}
-@keyframes flip-clock-seam {
-  0%, 100% { opacity: 0; transform: scaleX(.6); }
-  45%, 65% { opacity: .1; transform: scaleX(1); }
+.flip-number-digit {
+  display: block;
+  height: 1.1em;
+  line-height: 1.1;
 }
 
 .listen-pill, .confirm-card, .status-line.error { animation: feedback-in 220ms var(--ease-out); }
@@ -107,20 +66,14 @@
   transition-duration: .01ms !important;
   scroll-behavior: auto !important;
 }
-:root[data-input-method="keyboard"] .flip-clock-old-base,
-:root[data-input-method="keyboard"] .flip-clock-old,
-:root[data-input-method="keyboard"] .flip-clock-new,
-:root[data-input-method="keyboard"] .flip-clock-seam,
-:root[data-motion-enabled="false"] .flip-clock-old-base,
-:root[data-motion-enabled="false"] .flip-clock-old,
-:root[data-motion-enabled="false"] .flip-clock-new,
-:root[data-motion-enabled="false"] .flip-clock-seam {
-  display: none;
+:root[data-input-method="keyboard"] .flip-number-strip,
+:root[data-motion-enabled="false"] .flip-number-strip {
+  transition-delay: 0ms !important;
 }
 :root[data-motion-enabled="false"] [data-pressed] { scale: 1; }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; scroll-behavior: auto !important; }
   [data-pressed] { scale: 1 !important; }
   .app-behind { transform: none; }
-  .flip-clock-old-base, .flip-clock-old, .flip-clock-new, .flip-clock-seam { display: none; }
+  .flip-number-strip { transition-delay: 0ms !important; }
 }

@@ -1,69 +1,57 @@
-import { useLayoutEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
-function zeroDigits(text) {
-  return text.replace(/\d/g, "0");
-}
-
-// Align the previous digits from the right, so adding/removing a thousands
-// group still flips units against units and tens against tens. Punctuation,
-// spaces, signs and the currency symbol stay fixed while the number changes.
-function previousDigitsByTargetPosition(from, to) {
-  const oldDigits = [...from].filter((char) => /\d/.test(char));
-  const newDigitCount = [...to].filter((char) => /\d/.test(char)).length;
-  const missing = Math.max(0, newDigitCount - oldDigits.length);
-  const aligned = [...Array(missing).fill("0"), ...oldDigits].slice(-newDigitCount);
-  let index = 0;
-  return [...to].map((char) => (/\d/.test(char) ? aligned[index++] : null));
-}
+const DIGITS = ["0", "1", "2", "3", "4", "5", "6", "7", "8", "9"];
 
 export default function FlipNumber({ children, className = "" }) {
   const text = String(children ?? "");
-  const latestText = useRef(text);
-  const [frame, setFrame] = useState(() => ({
-    from: zeroDigits(text),
-    to: text,
-    revision: 0,
-  }));
+  const [shown, setShown] = useState(() => text.replace(/\d/g, "0"));
+  const raf = useRef(null);
+  const fallback = useRef(null);
 
-  useLayoutEffect(() => {
-    if (latestText.current === text) return;
-    const from = latestText.current;
-    latestText.current = text;
-    setFrame((current) => ({ from, to: text, revision: current.revision + 1 }));
+  useEffect(() => {
+    cancelAnimationFrame(raf.current);
+    clearTimeout(fallback.current);
+
+    // Give the browser one painted frame at the previous value. Without it,
+    // React and CSS can collapse both positions and skip the transition.
+    raf.current = requestAnimationFrame(() => setShown(text));
+    // Background tabs may pause animation frames; never leave zeroes visible.
+    fallback.current = setTimeout(() => setShown(text), 250);
+
+    return () => {
+      cancelAnimationFrame(raf.current);
+      clearTimeout(fallback.current);
+    };
   }, [text]);
 
-  const previous = previousDigitsByTargetPosition(frame.from, frame.to);
-  let digitIndex = 0;
+  // When the formatted length changes, new columns appear immediately instead
+  // of shifting the whole amount while its existing digits are still moving.
+  const chars = shown.length === text.length ? shown : text;
+  const total = chars.length;
 
   return (
-    <span className={`flip-number ${className}`.trim()} aria-label={frame.to}>
-      <span className="flip-number-visual" aria-hidden="true">
-        {[...frame.to].map((char, index) => {
-          if (!/\d/.test(char)) {
-            return (
-              <span className="flip-number-static" key={`static-${index}-${char}`}>
-                {char}
-              </span>
-            );
-          }
+    <span className={`flip-number ${className}`.trim()} aria-label={text} role="text">
+      {chars.split("").map((char, index) => {
+        if (!/\d/.test(char)) {
+          return <span className="flip-number-static" key={index}>{char}</span>;
+        }
 
-          const oldChar = previous[index] ?? "0";
-          const delay = Math.min(digitIndex++, 6) * 12;
-          return (
+        return (
+          <span className="flip-number-column" key={index} aria-hidden="true">
             <span
-              className="flip-clock-digit"
-              key={`${frame.revision}-${index}-${char}`}
-              style={{ "--flip-delay": `${delay}ms` }}
+              className="flip-number-strip"
+              style={{
+                transform: `translateY(${-Number(char) * 10}%)`,
+                transitionDelay: `${Math.min(total - index - 1, 8) * 45}ms`,
+              }}
             >
-              <span className="flip-clock-final">{char}</span>
-              <span className="flip-clock-old-base">{oldChar}</span>
-              <span className="flip-clock-old">{oldChar}</span>
-              <span className="flip-clock-new">{char}</span>
-              <span className="flip-clock-seam" />
+              {DIGITS.map((digit) => (
+                <span className="flip-number-digit" key={digit}>{digit}</span>
+              ))}
             </span>
-          );
-        })}
-      </span>
+          </span>
+        );
+      })}
     </span>
   );
 }
