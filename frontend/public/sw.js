@@ -1,4 +1,18 @@
 const CACHE_NAME = "traty-shell-v2";
+const DRAFT_CACHE_NAME = "traty-expense-drafts-v1";
+const DRAFT_CACHE_PATH = "/__traty-cache/expense-drafts/";
+
+async function cacheExpenseDraft(userId, draft) {
+  if (!userId || draft?.id == null) return;
+  const cache = await caches.open(DRAFT_CACHE_NAME);
+  const url = `${self.location.origin}${DRAFT_CACHE_PATH}${encodeURIComponent(userId)}/${encodeURIComponent(draft.id)}`;
+  await cache.put(
+    url,
+    new Response(JSON.stringify(draft), {
+      headers: { "Content-Type": "application/json" },
+    })
+  );
+}
 
 self.addEventListener("install", (event) => {
   self.skipWaiting();
@@ -7,7 +21,11 @@ self.addEventListener("install", (event) => {
 self.addEventListener("activate", (event) => {
   event.waitUntil(
     caches.keys().then((keys) =>
-      Promise.all(keys.filter((k) => k !== CACHE_NAME).map((k) => caches.delete(k)))
+      Promise.all(
+        keys
+          .filter((key) => key !== CACHE_NAME && key !== DRAFT_CACHE_NAME)
+          .map((key) => caches.delete(key))
+      )
     )
   );
   self.clients.claim();
@@ -57,8 +75,8 @@ self.addEventListener("fetch", (event) => {
   );
 });
 
-// Daily reminder push — payload is {title, body}, sent by the backend's
-// /api/reminders/tick (see backend/src/services/webPush.js).
+// Reminder pushes only show a notification. Expense-draft pushes first write
+// their payload to Cache Storage, so reopening the installed PWA works offline.
 self.addEventListener("push", (event) => {
   let data = { title: "Траты", body: "Не забыли внести расходы?" };
   try {
@@ -66,12 +84,19 @@ self.addEventListener("push", (event) => {
   } catch {
     // non-JSON payload — fall back to the default text above
   }
+  const cacheDraft = data.type === "expense_draft"
+    ? cacheExpenseDraft(data.userId, data.draft)
+    : Promise.resolve();
   event.waitUntil(
-    self.registration.showNotification(data.title, {
-      body: data.body,
-      icon: "/icon-192.png",
-      badge: "/icon-192.png",
-    })
+    Promise.all([
+      cacheDraft,
+      self.registration.showNotification(data.title, {
+        body: data.body,
+        icon: "/icon-192.png",
+        badge: "/icon-192.png",
+        tag: data.type === "expense_draft" ? `expense-draft-${data.draft?.id}` : undefined,
+      }),
+    ])
   );
 });
 

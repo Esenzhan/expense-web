@@ -39,6 +39,7 @@ import AccountBalanceRow from "./components/AccountBalanceRow";
 import FlipNumber from "./components/FlipNumber";
 import { useSwipeDismissUp } from "./sheetGestures";
 import { loadCached, saveCached } from "./offlineCache";
+import { cacheExpenseDrafts, loadCachedExpenseDrafts, removeCachedExpenseDraft } from "./draftCache";
 
 const CACHE_KEY = "traty-cache-v4";
 // Wallet balances aren't scoped to a (period, wallet) pair like the cache
@@ -963,23 +964,32 @@ export default function App() {
     // любую открытую шторку и показываем трату. На фоновом опросе (человек
     // уже в приложении и что-то делает) так нельзя — ждём, пока экран
     // освободится сам.
+    function presentDraft(rows, takeOver) {
+      const handled = loadHandledDrafts();
+      // Сервер и кэш хранят свежие сверху, а показываем в порядке ОПЛАТЫ: если платежей
+      // было несколько подряд, первым открывается самый ранний.
+      const pending = rows.filter((row) => !handled.has(row.id));
+      const fresh = pending[pending.length - 1];
+      if (!fresh || draftRef.current) return;
+      if (!takeOver && overlaysOpenRef.current) return;
+      closeAllOverlays();
+      // Set the ref immediately: the cached read and network fetch can finish in the
+      // same frame, before React has committed setDraft.
+      draftRef.current = fresh;
+      setDraft(fresh);
+    }
+
     function pickUpDrafts(takeOver) {
+      // Cache Storage is shared with the service worker. A Web Push received while
+      // the PWA is closed can therefore paint this draft without waking the API.
+      loadCachedExpenseDrafts(user.id).then((rows) => presentDraft(rows, takeOver));
       fetchExpenseDrafts()
         .then((rows) => {
-          const handled = loadHandledDrafts();
-          // Сервер отдаёт свежие сверху, а показываем в порядке ОПЛАТЫ: если платежей было
-          // несколько подряд, первым открывается самый ранний — так же, как они шли в жизни.
-          const pending = rows.filter((r) => !handled.has(r.id));
-          const fresh = pending[pending.length - 1];
-          // Шторка уже висит — подменять черновик под открытой формой
-          // нельзя, человек правит именно этот.
-          if (!fresh || draftRef.current) return;
-          if (!takeOver && overlaysOpenRef.current) return;
-          closeAllOverlays();
-          setDraft(fresh);
+          cacheExpenseDrafts(user.id, rows);
+          presentDraft(rows, takeOver);
         })
         .catch(() => {
-          // офлайн или сервер спит — подберётся на следующем опросе
+          // Offline or the server is asleep: the cached read above is sufficient.
         });
     }
     // Чтобы следующий черновик из очереди поднимался сразу после закрытия предыдущего, а не
@@ -1019,6 +1029,7 @@ export default function App() {
   function dismissDraft(entry) {
     if (!entry) return;
     rememberHandledDraft(entry.id);
+    removeCachedExpenseDraft(user?.id, entry.id);
     setDraft(null);
     // Реф обнуляем руками: он обновляется на рендере, а очередь дёргаем прямо сейчас —
     // иначе pickUpDrafts увидит «шторка ещё висит» и ничего не поднимет.

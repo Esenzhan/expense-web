@@ -1,5 +1,6 @@
 import { Router } from "express";
 import { pool } from "../db.js";
+import { sendPush } from "../services/webPush.js";
 
 export const expenseDraftsRouter = Router();
 
@@ -9,6 +10,24 @@ const MAX_AGE_DAYS = 3;
 // Верхняя граница вменяемости суммы — защита от «12 986 ₸» разобранного как
 // 12986000000 при неожиданном формате, а не бизнес-ограничение.
 const MAX_AMOUNT = 1e12;
+
+async function pushDraftToDevices(userId, draft) {
+  const { rows: subscriptions } = await pool.query(
+    `SELECT endpoint, p256dh, auth FROM push_subscriptions WHERE user_id = $1`,
+    [userId]
+  );
+  await Promise.all(
+    subscriptions.map((subscription) =>
+      sendPush(subscription, {
+        type: "expense_draft",
+        userId,
+        draft,
+        title: "Траты",
+        body: "Черновик платежа сохранён и доступен офлайн.",
+      })
+    )
+  );
+}
 
 // Сумма из Команд приходит как угодно: числом, «12 986,00 ₸», «1 234.5»,
 // с неразрывными пробелами и знаком валюты. Разделитель целой части
@@ -67,7 +86,13 @@ expenseDraftsRouter.post("/", async (req, res) => {
      VALUES ($1, $2, $3, $4, $5) RETURNING *`,
     [req.user.id, amount, description, req.body.source || "shortcut", req.body.raw_text || null]
   );
-  res.status(201).json(rows[0]);
+  const draft = rows[0];
+  // Respond to Shortcuts immediately. Push delivery continues independently,
+  // so an unavailable device never delays the Apple Pay automation.
+  pushDraftToDevices(req.user.id, draft).catch((err) => {
+    console.error("Expense draft push failed:", err.message);
+  });
+  res.status(201).json(draft);
 });
 
 expenseDraftsRouter.get("/", async (req, res) => {

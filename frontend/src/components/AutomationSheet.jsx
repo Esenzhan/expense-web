@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
-import { API_BASE, fetchShortcutKey } from "../api";
+import { API_BASE, fetchShortcutKey, subscribeReminderPush } from "../api";
 import { haptic } from "../haptics";
+import { isStandalone, urlBase64ToUint8Array } from "../push";
 import { useSwipeDismissRight } from "../sheetGestures";
 
 // Адрес, на который шлёт шорткат Команд. Здесь же, а не только в голове:
@@ -19,6 +20,36 @@ export default function AutomationSheet({ onClose }) {
   // Буфер недоступен (старая iOS, отказ в разрешении) — показываем ключ
   // строкой ниже, длинным нажатием копируется вручную.
   const [keyShown, setKeyShown] = useState(false);
+  const [offlineDraftsState, setOfflineDraftsState] = useState("Проверка…");
+
+  async function ensureDraftPush(askPermission = false) {
+    if (!("Notification" in window) || !("serviceWorker" in navigator) || !("PushManager" in window)) {
+      setOfflineDraftsState("Не поддерживается");
+      return;
+    }
+    if (!isStandalone()) {
+      setOfflineDraftsState("Добавьте на экран Домой");
+      return;
+    }
+    let permission = Notification.permission;
+    if (permission === "default" && askPermission) permission = await Notification.requestPermission();
+    if (permission !== "granted") {
+      setOfflineDraftsState(permission === "denied" ? "Запрещено в iOS" : "Включить");
+      return;
+    }
+
+    setOfflineDraftsState("Подключение…");
+    const registration = await navigator.serviceWorker.ready;
+    let subscription = await registration.pushManager.getSubscription();
+    if (!subscription) {
+      subscription = await registration.pushManager.subscribe({
+        userVisibleOnly: true,
+        applicationServerKey: urlBase64ToUint8Array(import.meta.env.VITE_VAPID_PUBLIC_KEY),
+      });
+    }
+    await subscribeReminderPush(subscription.toJSON());
+    setOfflineDraftsState("Включено");
+  }
 
   useEffect(() => {
     fetchShortcutKey()
@@ -26,6 +57,10 @@ export default function AutomationSheet({ onClose }) {
       .catch(() => {
         // офлайн — тап по строке скажет об этом словами
       });
+  }, []);
+
+  useEffect(() => {
+    ensureDraftPush(false).catch(() => setOfflineDraftsState("Включить"));
   }, []);
 
   function handleClose() {
@@ -53,6 +88,11 @@ export default function AutomationSheet({ onClose }) {
       .catch(() => setKeyShown(true));
   }
 
+  function enableOfflineDrafts() {
+    haptic();
+    ensureDraftPush(true).catch(() => setOfflineDraftsState("Не удалось включить"));
+  }
+
   return (
     <div ref={pageRef} className="settings-page">
       <div className="settings-header">
@@ -65,6 +105,10 @@ export default function AutomationSheet({ onClose }) {
 
       <p className="settings-section">Команды (Shortcuts)</p>
       <div className="settings-group">
+        <button className="settings-row" onClick={enableOfflineDrafts}>
+          <span className="settings-row-label">Черновики офлайн</span>
+          <span className="settings-row-value">{offlineDraftsState}</span>
+        </button>
         <button className="settings-row" onClick={copyKey}>
           <span className="settings-row-label">Ключ для Команд</span>
           <span className="settings-row-value">{keyState || "Скопировать"}</span>
@@ -89,8 +133,8 @@ export default function AutomationSheet({ onClose }) {
         </div>
       </div>
       <p className="settings-section">
-        Шорткат присылает сумму сюда, приложение при открытии само поднимает шторку с этой суммой — остаётся
-        выбрать счёт и категорию.
+        Шорткат присылает сумму сюда. При включённых офлайн-черновиках установленное приложение получает и
+        сохраняет её сразу, даже когда закрыто. Позже можно открыть его без сети, выбрать счёт и категорию.
       </p>
     </div>
   );
