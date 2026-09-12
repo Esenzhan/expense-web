@@ -54,17 +54,45 @@ const BALANCES_CACHE_KEY = "traty-wallet-balances-cache-v1";
 // локальной пометки тот же черновик всплывал бы снова на каждом опросе.
 // Сервер сам чистит их через трое суток, так что список короткий.
 const HANDLED_DRAFTS_KEY = "traty-handled-drafts-v1";
+const HANDLED_DRAFT_TTL_MS = 4 * 24 * 60 * 60 * 1000;
+const MAX_HANDLED_DRAFTS = 500;
 
-function loadHandledDrafts() {
+function loadHandledDraftEntries() {
   try {
-    return new Set(JSON.parse(localStorage.getItem(HANDLED_DRAFTS_KEY) || "[]"));
+    const stored = JSON.parse(localStorage.getItem(HANDLED_DRAFTS_KEY) || "[]");
+    if (!Array.isArray(stored)) return [];
+    const now = Date.now();
+    const entries = stored
+      .map((entry) => {
+        if (entry && typeof entry === "object" && entry.id != null) {
+          return { id: String(entry.id), handledAt: Number(entry.handledAt) || now };
+        }
+        // Migrate the old array of bare ids without losing its protection.
+        return entry == null ? null : { id: String(entry), handledAt: now };
+      })
+      .filter((entry) => entry && now - entry.handledAt < HANDLED_DRAFT_TTL_MS)
+      .slice(-MAX_HANDLED_DRAFTS);
+    try {
+      localStorage.setItem(HANDLED_DRAFTS_KEY, JSON.stringify(entries));
+    } catch {
+      // Reading still works when storage has become temporarily unwritable.
+    }
+    return entries;
   } catch {
-    return new Set();
+    return [];
   }
 }
 
+function loadHandledDrafts() {
+  return new Set(loadHandledDraftEntries().map((entry) => entry.id));
+}
+
 function rememberHandledDraft(id) {
-  const kept = [...loadHandledDrafts().add(id)].slice(-50);
+  const normalizedId = String(id);
+  const kept = loadHandledDraftEntries()
+    .filter((entry) => entry.id !== normalizedId)
+    .concat({ id: normalizedId, handledAt: Date.now() })
+    .slice(-MAX_HANDLED_DRAFTS);
   try {
     localStorage.setItem(HANDLED_DRAFTS_KEY, JSON.stringify(kept));
   } catch {
@@ -966,9 +994,15 @@ export default function App() {
     // освободится сам.
     function presentDraft(rows, takeOver) {
       const handled = loadHandledDrafts();
+      // A late/duplicate push can put an already handled draft back into
+      // Cache Storage. Remove it again while keeping the handled marker as
+      // the source of truth until the server's three-day TTL has elapsed.
+      rows
+        .filter((row) => handled.has(String(row.id)))
+        .forEach((row) => removeCachedExpenseDraft(user.id, row.id));
       // Сервер и кэш хранят свежие сверху, а показываем в порядке ОПЛАТЫ: если платежей
       // было несколько подряд, первым открывается самый ранний.
-      const pending = rows.filter((row) => !handled.has(row.id));
+      const pending = rows.filter((row) => !handled.has(String(row.id)));
       const fresh = pending[pending.length - 1];
       if (!fresh || draftRef.current) return;
       if (!takeOver && overlaysOpenRef.current) return;
@@ -985,8 +1019,22 @@ export default function App() {
       loadCachedExpenseDrafts(user.id).then((rows) => presentDraft(rows, takeOver));
       fetchExpenseDrafts()
         .then((rows) => {
-          cacheExpenseDrafts(user.id, rows);
-          presentDraft(rows, takeOver);
+          const handled = loadHandledDrafts();
+          const pending = rows.filter((row) => !handled.has(String(row.id)));
+          const completed = rows.filter((row) => handled.has(String(row.id)));
+
+          // dismissDraft tries this immediately, but that request cannot
+          // succeed offline. Every successful GET is proof that the network
+          // is back, so retry all outstanding server deletions here. Until
+          // they succeed, the local marker still prevents reopening.
+          completed.forEach((row) => {
+            deleteExpenseDraft(row.id)
+              .then(() => removeCachedExpenseDraft(user.id, row.id))
+              .catch(() => {});
+          });
+
+          cacheExpenseDrafts(user.id, pending);
+          presentDraft(pending, takeOver);
         })
         .catch(() => {
           // Offline or the server is asleep: the cached read above is sufficient.
@@ -1006,7 +1054,11 @@ export default function App() {
     };
     trySyncPending();
     pickUpDrafts(true);
-    window.addEventListener("online", trySyncPending);
+    const onOnline = () => {
+      trySyncPending();
+      pickUpDrafts(false);
+    };
+    window.addEventListener("online", onOnline);
     document.addEventListener("visibilitychange", onVisible);
     const pollId = setInterval(() => {
       if (hasPendingExpenses()) trySyncPending();
@@ -1016,7 +1068,7 @@ export default function App() {
       }
     }, 15000);
     return () => {
-      window.removeEventListener("online", trySyncPending);
+      window.removeEventListener("online", onOnline);
       document.removeEventListener("visibilitychange", onVisible);
       clearInterval(pollId);
     };

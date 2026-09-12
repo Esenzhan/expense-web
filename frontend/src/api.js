@@ -134,11 +134,13 @@ export async function deleteExpense(id) {
 // backend/src/routes/expenseDrafts.js.
 export async function fetchExpenseDrafts() {
   const res = await apiFetch(`/api/expense-drafts`);
+  if (!res.ok) throw new Error("Не удалось получить черновики");
   return res.json();
 }
 
 export async function deleteExpenseDraft(id) {
-  await apiFetch(`/api/expense-drafts/${id}`, { method: "DELETE" });
+  const res = await apiFetch(`/api/expense-drafts/${id}`, { method: "DELETE" });
+  if (!res.ok) throw new Error("Не удалось удалить черновик");
 }
 
 // Долгоживущий ключ аккаунта для шортката. Запрашивается только в момент
