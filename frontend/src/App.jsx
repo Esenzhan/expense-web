@@ -557,8 +557,42 @@ export default function App() {
   }
 
   function selectWallet(name) {
-    setSelectedWallet(name);
-    if (name) localStorage.setItem("traty-wallet", name);
+    const target = name || null;
+    const current = selectedWalletRef.current;
+    const currentPeriod = periodRef.current;
+    const targetCacheKey = `${currentPeriod}|${target || ""}`;
+    let targetSnapshot = dataCacheRef.current.get(targetCacheKey);
+
+    // Saving from "Все счета" into a concrete wallet closes the sheet and
+    // switches the wallet in the same turn. Prepare that wallet's snapshot
+    // from the already-complete all-accounts snapshot before changing the
+    // selection, so the wallet label, list, "Расходы" and "Баланс" commit
+    // together instead of briefly rendering the new label with old totals.
+    // rawRef is server truth only; mergeAndSet adds the just-queued row once.
+    if (!targetSnapshot && !current && target) {
+      const allCacheKey = `${currentPeriod}|`;
+      const allSnapshot = dataCacheRef.current.get(allCacheKey);
+      if (allSnapshot) {
+        targetSnapshot = {
+          exp: (allSnapshot.exp || []).filter((row) => row.wallet === target),
+          wallets: allSnapshot.wallets || [],
+          insightsRows: (allSnapshot.insightsRows || []).filter((row) => row.wallet === target),
+        };
+        dataCacheRef.current.set(targetCacheKey, targetSnapshot);
+        if (user) saveCache(targetCacheKey, targetSnapshot, user.email);
+      }
+    }
+
+    // Update the guard synchronously. React state commits on the next render,
+    // but an already-running save can finish in this gap and try to refresh
+    // the wallet that was selected when its sheet opened.
+    selectedWalletRef.current = target;
+    setSelectedWallet(target);
+    if (targetSnapshot) {
+      rawRef.current = targetSnapshot;
+      mergeAndSet(target, currentPeriod);
+    }
+    if (target) localStorage.setItem("traty-wallet", target);
     else localStorage.removeItem("traty-wallet");
   }
 
@@ -884,7 +918,18 @@ export default function App() {
     // below still runs and quietly replaces it once it lands.
     const cacheKey = `${currentPeriod}|${wallet || ""}`;
     const cached = dataCacheRef.current.get(cacheKey);
-    if (cached) {
+    // A save callback can outlive the sheet that created it. In particular,
+    // its second refresh (after background sync) used to keep the wallet
+    // captured before an automatic post-save switch. Network responses were
+    // already guarded below, but this cache fast-path was not: it could put
+    // "Все счета" totals back onto a "Семья" screen for half a second and
+    // make FlipNumber retarget mid-roll. Never paint a snapshot unless its
+    // selection is still the one on screen.
+    if (
+      cached &&
+      wallet === selectedWalletRef.current &&
+      currentPeriod === periodRef.current
+    ) {
       rawRef.current = cached;
       mergeAndSet(wallet, currentPeriod);
     }
@@ -1349,7 +1394,10 @@ export default function App() {
       />
 
       <VoiceRecorder
-        onSaved={() => refreshAll(period)}
+        // Voice/manual saves sync in the background and may call this prop
+        // again after the app has switched wallets. Read refs at call time
+        // instead of refreshing the wallet captured by an older render.
+        onSaved={() => refreshAll(periodRef.current, selectedWalletRef.current)}
         onManualAdd={() => setAddingExpense(true)}
         onScanned={(items) => setScanItems(items)}
       />
@@ -1381,7 +1429,7 @@ export default function App() {
         <EditExpenseSheet
           expense={editingExpense}
           onClose={() => setEditingExpense(null)}
-          onCommitted={() => refreshAll(period)}
+          onCommitted={() => refreshAll(periodRef.current, selectedWalletRef.current)}
           onSaved={() => setEditingExpense(null)}
           onDeleted={() => setEditingExpense(null)}
           onDeleteRequested={requestDeleteExpense}
@@ -1401,7 +1449,7 @@ export default function App() {
           defaultAmount={Number(draft.amount)}
           defaultNote={draft.description || ""}
           onClose={() => dismissDraft(draft)}
-          onCommitted={() => refreshAll(period)}
+          onCommitted={() => refreshAll(periodRef.current, selectedWalletRef.current)}
           onSaved={(saved) => {
             dismissDraft(draft);
             if (saved?.wallet && saved.wallet !== selectedWallet) {
@@ -1415,7 +1463,7 @@ export default function App() {
         <EditExpenseSheet
           defaultWallet={selectedWallet}
           onClose={() => setAddingExpense(false)}
-          onCommitted={() => refreshAll(period)}
+          onCommitted={() => refreshAll(periodRef.current, selectedWalletRef.current)}
           onSaved={(saved) => {
             setAddingExpense(false);
             // Jump to the wallet the expense was actually saved under —
@@ -1432,7 +1480,7 @@ export default function App() {
         <ScanReviewSheet
           items={scanItems}
           onClose={() => setScanItems(null)}
-          onCommitted={() => refreshAll(period)}
+          onCommitted={() => refreshAll(periodRef.current, selectedWalletRef.current)}
           onSaved={(saved) => {
             setScanItems(null);
             if (saved?.wallet && saved.wallet !== selectedWallet) {
