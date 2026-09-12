@@ -742,7 +742,9 @@ select,
   opacity: 1;
   /* Duration must match ROW_EXIT_MS in App.jsx — that's how long a row
      stays in the rendered list past being excluded from totals. */
-  transition: grid-template-rows 0.24s ease, opacity 0.24s ease;
+  transition:
+    grid-template-rows 0.24s cubic-bezier(0.23, 1, 0.32, 1),
+    opacity 0.2s cubic-bezier(0.23, 1, 0.32, 1);
 }
 
 .expense-row-wrap:last-child {
@@ -815,7 +817,7 @@ select,
      instead of collapsing the rest of the way. */
   min-height: 0;
   overflow: hidden;
-  transition: padding 0.24s ease;
+  transition: padding 0.24s cubic-bezier(0.23, 1, 0.32, 1);
 }
 
 .expense-row-wrap.exiting .expense-row {

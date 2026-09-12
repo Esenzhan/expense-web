@@ -1,6 +1,6 @@
 import { formatMoney } from "../currencies";
 import { walletCurrency } from "../wallets";
-import { useEffect, useRef } from "react";
+import { useEffect, useLayoutEffect, useRef } from "react";
 import CategoryGlyph from "./CategoryGlyph";
 import TrashIcon from "./TrashIcon";
 import { hapticHeavy, haptic } from "../haptics";
@@ -25,11 +25,14 @@ export default function ExpenseRow({ expense, icon, readonly, onSelect, onDelete
   // whether the row is currently sitting open.
   const swipedRef = useRef(false);
   const gestureRef = useRef({ axis: null, startX: 0, startY: 0, dx: 0, baseDx: 0, open: false });
+  const wasExitingRef = useRef(false);
 
   function paint(dx, animate) {
     const el = rowRef.current;
     if (!el) return;
-    el.style.transition = animate ? "transform 0.22s ease" : "none";
+    el.style.transition = animate
+      ? "transform 0.22s cubic-bezier(0.23, 1, 0.32, 1), padding 0.24s cubic-bezier(0.23, 1, 0.32, 1)"
+      : "none";
     el.style.transform = `translateX(${dx}px)`;
     // Reveals the delete button only while actually shifted — see the CSS
     // comment on .expense-row-delete-btn for why this can't just rely on
@@ -41,6 +44,25 @@ export default function ExpenseRow({ expense, icon, readonly, onSelect, onDelete
     gestureRef.current.open = open;
     paint(open ? -BUTTON_WIDTH : 0, animate);
   }
+
+  // The swipe writes transform/transition inline. Previously the parent's
+  // exit class only collapsed the wrapper, leaving that last drag position
+  // visible for the first frames: on iOS an overdrag near -100px looked like
+  // a broken row with its icon and the start of its title cut off. Continue
+  // the same physical motion fully past the left edge before paint instead.
+  // If Undo interrupts the collapse, retarget the CSS transition back to 0.
+  useLayoutEffect(() => {
+    const el = rowRef.current;
+    if (expense.exiting && el) {
+      gestureRef.current.axis = null;
+      gestureRef.current.open = false;
+      gestureRef.current.dx = -el.offsetWidth;
+      paint(-el.offsetWidth, true);
+    } else if (wasExitingRef.current) {
+      setOpen(false, true);
+    }
+    wasExitingRef.current = Boolean(expense.exiting);
+  }, [expense.exiting]);
 
   useEffect(() => {
     const el = rowRef.current;
