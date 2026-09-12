@@ -683,7 +683,16 @@ export default function App() {
     // so it never renders, counts toward a total, or feeds insights twice.
     const baseIds = new Set(baseExp.map((e) => e.id));
     const insightsBaseIds = new Set(baseInsightsRows.map((e) => e.id));
-    const unconfirmedForList = pendingForList.filter((p) => !baseIds.has(p.id));
+    // A just-synced row can still live only in syncedShadow while the
+    // wallet-specific refresh is in flight. This is especially visible
+    // after saving from "Все счета" into another wallet: the app switches
+    // wallets, then the user can delete the row before that refresh lands.
+    // Apply the same delete exclusion to the shadow row as to baseExp;
+    // otherwise it finishes its 240ms exit and then reappears, fully drawn,
+    // until the four-second undo window commits the server DELETE.
+    const unconfirmedForList = pendingForList.filter(
+      (p) => !baseIds.has(p.id) && (!excluded.has(p.id) || exitingRef.current.has(p.id))
+    );
     // Sorted by date, not just concatenated — a pending row used to always
     // be "just now" so prepending it was harmless, but a backdated one
     // (custom date picked in EditExpenseSheet) needs to land in its actual
@@ -754,6 +763,10 @@ export default function App() {
       // baseInsightsRows already excludes income server-side, this keeps a
       // not-yet-synced income row from sneaking in through the local queue.
       if (p.type === "income") return false;
+      // Same syncedShadow case as the visible list above: once deletion is
+      // requested, the header total and Insights must stop counting it
+      // immediately instead of waiting for the server DELETE.
+      if (excluded.has(p.id)) return false;
       if (insightsBaseIds.has(p.id)) return false;
       const createdAt = new Date(p.created_at);
       return createdAt >= periodStart && createdAt < periodEnd;
