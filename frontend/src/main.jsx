@@ -1,7 +1,9 @@
+import { installPressMotion } from "./motion";
 import React from "react";
 import ReactDOM from "react-dom/client";
 import App from "./App.jsx";
 import "./styles.css";
+import "./motion.css";
 import { applyTheme, loadLocalTheme } from "./theme.js";
 
 // Runs before the first render (not inside a React effect) so there's no
@@ -17,6 +19,9 @@ if (initialTheme === "system") {
     .matchMedia("(prefers-color-scheme: dark)")
     .addEventListener("change", () => applyTheme("system"));
 }
+
+const disposePressMotion = installPressMotion();
+if (import.meta.hot) import.meta.hot.dispose(disposePressMotion);
 
 ReactDOM.createRoot(document.getElementById("root")).render(
   <React.StrictMode>

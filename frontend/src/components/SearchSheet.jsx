@@ -23,9 +23,9 @@ function shortDate(dateStr) {
 // Free-text search over the whole history (not period-bounded), scoped to
 // whichever wallet is currently selected on the main screen — matches how
 // every other view on the main screen is already scoped.
-export default function SearchSheet({ wallet, currentUserId, onSelect, onClose }) {
+export default function SearchSheet({ wallet, currentUserId, onSelect, onClose: onDismiss }) {
   const sheetRef = useRef(null);
-  useSwipeDismiss(sheetRef, onClose);
+  const onClose = useSwipeDismiss(sheetRef, onDismiss);
 
   const [query, setQuery] = useState("");
   const [results, setResults] = useState(null); // null = nothing searched yet

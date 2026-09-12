@@ -2,6 +2,7 @@ import { useState } from "react";
 import { haptic, hapticHeavy } from "../haptics";
 import { formatAmountDisplay, sanitizeAmountInput } from "../amountInput";
 import { formatMoney, HOME_CURRENCY } from "../currencies";
+import FlipNumber from "./FlipNumber";
 
 // "Баланс" — tap the number to correct it against your real bank balance.
 // `editable` is false for the "Все счета" aggregate (nothing single to edit
@@ -95,13 +96,13 @@ export default function AccountBalanceRow({ balance, currency = HOME_CURRENCY, e
       ) : (
         <button className={`balance-row ${editable ? "" : "readonly"}`} onClick={startEdit}>
           <span className="balance-label">Баланс</span>
-          <span className="balance-value">
-            {balance != null
-              ? formatMoney(balance, currency, { decimals: true })
-              : editable
-              ? "Указать сумму"
-              : "—"}
-          </span>
+          {balance != null ? (
+            <FlipNumber className="balance-value">
+              {formatMoney(balance, currency, { decimals: true })}
+            </FlipNumber>
+          ) : (
+            <span className="balance-value">{editable ? "Указать сумму" : "—"}</span>
+          )}
         </button>
       )}
       {error && <p className="balance-error">{error}</p>}

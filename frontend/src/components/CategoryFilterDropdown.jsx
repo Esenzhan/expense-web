@@ -1,3 +1,4 @@
+import { useMotionDismiss } from "../motion";
 import { useEffect, useRef } from "react";
 import CategoryGlyph from "./CategoryGlyph";
 import { catIconVars } from "../catIconVars";
@@ -7,8 +8,9 @@ import { haptic } from "../haptics";
 // same visual language as EditExpenseSheet's .edit-menu (absolute-positioned
 // popover, menu-pop animation), extended with a category icon per row.
 // Closes on any pointerdown outside itself, not just on picking a row.
-export default function CategoryFilterDropdown({ expenseCategories, incomeCategories, selected, onSelect, onClose }) {
+export default function CategoryFilterDropdown({ expenseCategories, incomeCategories, selected, onSelect, onClose: onDismiss }) {
   const ref = useRef(null);
+  const onClose = useMotionDismiss(ref, onDismiss, "popover");
 
   useEffect(() => {
     function onPointerDown(event) {

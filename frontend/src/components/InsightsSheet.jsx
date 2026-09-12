@@ -38,7 +38,7 @@ function daysInCurrentMonth() {
   return new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
 }
 
-export default function InsightsSheet({ user, period, insights: data, wallet, walletBalance, onClose }) {
+export default function InsightsSheet({ user, period, insights: data, wallet, walletBalance, onClose: onDismiss }) {
   const currency = walletCurrency(wallet);
   const fmt = (value) => money(value, currency);
   const email = user?.email;
@@ -123,7 +123,7 @@ export default function InsightsSheet({ user, period, insights: data, wallet, wa
   }
 
   const sheetRef = useRef(null);
-  useSwipeDismiss(sheetRef, onClose);
+  const onClose = useSwipeDismiss(sheetRef, onDismiss);
 
   // `data` (aliased from the `insights` prop) is computed by App.jsx in the
   // background — already fresh by the time this sheet opens, no fetch here.

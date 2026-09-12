@@ -42,9 +42,9 @@ function buildMonthCells(viewMonth) {
 // left untouched, the expense keeps recording at the exact save moment.
 // Both past and future days are pickable: backfilling a forgotten purchase
 // and planning an upcoming payment/income go through the same sheet.
-export default function DateTimePickerSheet({ initial, onClose, onApply }) {
+export default function DateTimePickerSheet({ initial, onClose: onDismiss, onApply }) {
   const sheetRef = useRef(null);
-  useSwipeDismiss(sheetRef, onClose);
+  const onClose = useSwipeDismiss(sheetRef, onDismiss);
 
   const today = startOfDay(new Date());
   const [viewMonth, setViewMonth] = useState(() => startOfMonth(initial));
@@ -122,7 +122,7 @@ export default function DateTimePickerSheet({ initial, onClose, onApply }) {
     const [h, m] = time.split(":").map(Number);
     const result = new Date(selectedDay);
     result.setHours(h || 0, m || 0, 0, 0);
-    onApply(result);
+    onClose(() => onApply(result));
   }
 
   return (

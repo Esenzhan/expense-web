@@ -133,7 +133,7 @@ export default function SettingsSheet({ user, theme, onClose, onOpenCategories, 
   // ушли, а на сервер так и не попали.
   const [rejected, setRejected] = useState(listRejectedExpenses);
 
-  useSwipeDismissRight(pageRef, onClose);
+  const dismissPage = useSwipeDismissRight(pageRef, onClose);
 
   useEffect(() => {
     fetchSheetsSyncStatus()
@@ -145,15 +145,7 @@ export default function SettingsSheet({ user, theme, onClose, onOpenCategories, 
   }, []);
 
   function handleClose() {
-    if (closing) return;
-    haptic();
-    setClosing(true);
-    const el = pageRef.current;
-    if (el) {
-      el.style.transition = "transform 0.26s cubic-bezier(0.2, 0.9, 0.3, 1)";
-      el.style.transform = "translateX(100%)";
-    }
-    setTimeout(onClose, 260);
+    dismissPage();
   }
 
   function flip(key) {

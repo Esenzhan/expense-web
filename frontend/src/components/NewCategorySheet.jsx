@@ -46,9 +46,9 @@ function suggestionsFor(name) {
 // the server and in one transaction (see routes/categories.js PUT); rows
 // already written to Google Sheets keep the old name until edited there by
 // hand, which is deliberate.
-export default function NewCategorySheet({ wallet, initial, onClose, onCreated, onDelete }) {
+export default function NewCategorySheet({ wallet, initial, onClose: onDismiss, onCreated, onDelete }) {
   const sheetRef = useRef(null);
-  useSwipeDismiss(sheetRef, onClose);
+  const onClose = useSwipeDismiss(sheetRef, onDismiss);
 
   const [name, setName] = useState(initial?.name || "");
   const [emoji, setEmoji] = useState(initial?.emoji || "");
@@ -90,7 +90,7 @@ export default function NewCategorySheet({ wallet, initial, onClose, onCreated, 
         ? await updateCategory(wallet, initial.name, { name: name.trim(), emoji, bg: color.bg, fg: color.fg })
         : await createCategory({ name: name.trim(), emoji, bg: color.bg, fg: color.fg, wallet });
       hapticHeavy();
-      onCreated(saved);
+      onClose(() => onCreated(saved));
     } catch (err) {
       setError(err.message);
       setSaving(false);
@@ -105,7 +105,7 @@ export default function NewCategorySheet({ wallet, initial, onClose, onCreated, 
       await onDelete(wallet, initial.name);
       hapticHeavy();
       setMenuOpen(false);
-      onCreated();
+      onClose(() => onCreated());
     } catch (err) {
       setError(err.message || "Не удалось удалить");
       setSaving(false);

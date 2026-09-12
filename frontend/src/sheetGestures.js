@@ -1,3 +1,4 @@
+import { useMotionDismiss } from "./motion";
 import { useEffect, useRef } from "react";
 
 // NOTE on background scroll-locking: both classic tricks are broken here —
@@ -14,6 +15,7 @@ import { useEffect, useRef } from "react";
 // internal scrolling keeps working; release past the threshold slides the
 // sheet out and calls onClose, otherwise it springs back.
 export function useSwipeDismiss(sheetRef, onClose) {
+  const dismiss = useMotionDismiss(sheetRef, onClose);
   const onCloseRef = useRef(onClose);
   onCloseRef.current = onClose;
 
@@ -126,6 +128,7 @@ export function useSwipeDismiss(sheetRef, onClose) {
       el.removeEventListener("touchcancel", onTouchEnd);
     };
   }, [sheetRef]);
+  return dismiss;
 }
 
 // Swipe-right-to-dismiss for a full-screen page (e.g. Settings), the
@@ -133,6 +136,7 @@ export function useSwipeDismiss(sheetRef, onClose) {
 // slides off to the right instead of down, matching its slide-in-from-right
 // entrance animation.
 export function useSwipeDismissRight(pageRef, onClose) {
+  const dismiss = useMotionDismiss(pageRef, onClose, "right");
   const onCloseRef = useRef(onClose);
   onCloseRef.current = onClose;
 
@@ -210,6 +214,7 @@ export function useSwipeDismissRight(pageRef, onClose) {
       el.removeEventListener("touchcancel", onTouchEnd);
     };
   }, [pageRef]);
+  return dismiss;
 }
 
 // Swipe-up-to-dismiss for the delete-undo banner — it's a small, always

@@ -1,3 +1,4 @@
+import { motionAllowed } from "../motion";
 import { useEffect, useLayoutEffect, useReducer, useRef, useState } from "react";
 import { createExpense, updateExpense } from "../api";
 import { enqueueExpense, updatePendingExpense, removePendingExpense, syncPendingExpenses } from "../offlineQueue";
@@ -175,7 +176,7 @@ export default function EditExpenseSheet({
     if (dismissedRef.current) return;
     dismissedRef.current = true;
     setClosing(true);
-    setTimeout(after, 300);
+    setTimeout(after, motionAllowed() ? 260 : 0);
   }
   const [calc, dispatch] = useReducer(calcReducer, {
     tokens: [

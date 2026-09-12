@@ -52,9 +52,9 @@ function suggestionsFor(name) {
 }
 
 // Creates a wallet, or edits `initial` when passed (the pencil flow)
-export default function NewWalletSheet({ initial, onClose, onSaved, onDeleted }) {
+export default function NewWalletSheet({ initial, onClose: onDismiss, onSaved, onDeleted }) {
   const sheetRef = useRef(null);
-  useSwipeDismiss(sheetRef, onClose);
+  const onClose = useSwipeDismiss(sheetRef, onDismiss);
 
   const [name, setName] = useState(initial?.name || "");
   const [emoji, setEmoji] = useState(initial?.emoji || "");
@@ -102,7 +102,7 @@ export default function NewWalletSheet({ initial, onClose, onSaved, onDeleted })
       if (initial) await updateWallet(initial.name, payload);
       else await createWallet(payload);
       hapticHeavy();
-      onSaved(payload.name, initial?.name);
+      onClose(() => onSaved(payload.name, initial?.name));
     } catch (err) {
       setError(err.message);
       setSaving(false);

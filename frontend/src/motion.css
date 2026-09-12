@@ -1,0 +1,126 @@
+/* Motion only: no changes to the application's colors, geometry or typography. */
+:root { --ease-out: cubic-bezier(.23, 1, .32, 1); --ease-drawer: cubic-bezier(.32, .72, 0, 1); }
+.key:active { opacity: .72; }
+[data-motion-closing="true"] { pointer-events: none; }
+
+/* Keep entrance and exit in the same spatial direction and below 300ms. */
+.edit-sheet, .insights-sheet, .categories-sheet, .period-picker-sheet, .dt-sheet {
+  animation-duration: 280ms;
+  animation-timing-function: var(--ease-drawer);
+}
+.settings-page { animation-duration: 280ms; animation-timing-function: var(--ease-drawer); }
+.sheet-backdrop { animation-duration: 180ms; animation-timing-function: var(--ease-out); transition: opacity 260ms var(--ease-out); }
+.edit-sheet.closing { transition: transform 260ms var(--ease-drawer); }
+.category-filter-dropdown, .edit-menu { transform-origin: top right; animation-duration: 180ms; animation-timing-function: var(--ease-out); }
+.expense-row { animation-duration: 180ms; animation-timing-function: var(--ease-out); }
+.app { transition: transform 280ms var(--ease-drawer); }
+
+/* Give selection feedback without moving the content around it. */
+.period-pill, .filter-pill, .theme-option, .type-pill { transition: scale 140ms var(--ease-out), background-color 180ms ease, color 180ms ease; }
+.switch-knob { transition: transform 220ms var(--ease-out), background-color 160ms ease; }
+.switch { transition: background-color 180ms ease; }
+.settings-row:active .switch-knob { scale: .94; }
+.switch-knob { transition-property: transform, background-color, scale; }
+.wallet-pick-icon { transition: transform 180ms var(--ease-out); }
+.wallet-pick.active .wallet-pick-icon { transform: translateY(-2px); }
+
+/* Flip-clock numerals: the final glyph is always present behind two moving
+   half-glyphs, so the value remains readable even if an animation is cancelled. */
+.flip-number {
+  display: block;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+.flip-number-visual {
+  display: inline-flex;
+  align-items: baseline;
+  perspective: 600px;
+}
+.flip-number-static,
+.flip-clock-digit {
+  display: inline-grid;
+  position: relative;
+  line-height: inherit;
+}
+.flip-clock-digit > span {
+  grid-area: 1 / 1;
+}
+.flip-clock-final {
+  opacity: 1;
+}
+.flip-clock-old-base,
+.flip-clock-old,
+.flip-clock-new {
+  backface-visibility: hidden;
+  will-change: transform, opacity;
+}
+.flip-clock-old-base {
+  clip-path: inset(50% 0 0 0);
+  animation: flip-clock-old-base 220ms linear var(--flip-delay) both;
+}
+.flip-clock-old {
+  clip-path: inset(0 0 50% 0);
+  transform-origin: center bottom;
+  animation: flip-clock-old 220ms var(--ease-out) var(--flip-delay) both;
+}
+.flip-clock-new {
+  clip-path: inset(50% 0 0 0);
+  transform-origin: center top;
+  animation: flip-clock-new 220ms var(--ease-out) var(--flip-delay) both;
+}
+.flip-clock-seam {
+  align-self: center;
+  height: 1px;
+  background: currentColor;
+  opacity: 0;
+  pointer-events: none;
+  animation: flip-clock-seam 220ms var(--ease-out) var(--flip-delay) both;
+}
+@keyframes flip-clock-old {
+  0% { transform: rotateX(0); opacity: 1; }
+  52%, 100% { transform: rotateX(-88deg); opacity: 0; }
+}
+@keyframes flip-clock-old-base {
+  0%, 54% { opacity: 1; }
+  55%, 100% { opacity: 0; }
+}
+@keyframes flip-clock-new {
+  0%, 38% { transform: rotateX(88deg); opacity: 0; }
+  100% { transform: rotateX(0); opacity: 1; }
+}
+@keyframes flip-clock-seam {
+  0%, 100% { opacity: 0; transform: scaleX(.6); }
+  45%, 65% { opacity: .1; transform: scaleX(1); }
+}
+
+.listen-pill, .confirm-card, .status-line.error { animation: feedback-in 220ms var(--ease-out); }
+@keyframes feedback-in { from { opacity: 0; transform: translateY(8px) scale(.98); } to { opacity: 1; transform: translateY(0) scale(1); } }
+.sheet-error, .balance-error { animation: error-in 160ms var(--ease-out); }
+@keyframes error-in { from { opacity: 0; transform: translateY(-3px); } to { opacity: 1; transform: translateY(0); } }
+@media (hover: hover) and (pointer: fine) {
+  .header-icon:hover, .icon-button:hover, .side-button:hover { background-color: var(--surface-soft); }
+}
+/* Keyboard use and the OS reduced-motion preference retain immediate control. */
+:root[data-input-method="keyboard"] *, :root[data-motion-enabled="false"] * {
+  animation-duration: .01ms !important;
+  animation-iteration-count: 1 !important;
+  transition-duration: .01ms !important;
+  scroll-behavior: auto !important;
+}
+:root[data-input-method="keyboard"] .flip-clock-old-base,
+:root[data-input-method="keyboard"] .flip-clock-old,
+:root[data-input-method="keyboard"] .flip-clock-new,
+:root[data-input-method="keyboard"] .flip-clock-seam,
+:root[data-motion-enabled="false"] .flip-clock-old-base,
+:root[data-motion-enabled="false"] .flip-clock-old,
+:root[data-motion-enabled="false"] .flip-clock-new,
+:root[data-motion-enabled="false"] .flip-clock-seam {
+  display: none;
+}
+:root[data-motion-enabled="false"] [data-pressed] { scale: 1; }
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; scroll-behavior: auto !important; }
+  [data-pressed] { scale: 1 !important; }
+  .app-behind { transform: none; }
+  .flip-clock-old-base, .flip-clock-old, .flip-clock-new, .flip-clock-seam { display: none; }
+}

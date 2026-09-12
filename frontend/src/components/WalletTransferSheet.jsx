@@ -11,9 +11,9 @@ import { formatAmountDisplay, sanitizeAmountInput } from "../amountInput";
 // «Переводы»: move money from one wallet's balance to another — re-bases
 // both (same anchor mechanism as a manual "Баланс" edit), no expense rows
 // involved. Opened from WalletsSheet's header, next to "+".
-export default function WalletTransferSheet({ initialFrom, onClose, onTransferred }) {
+export default function WalletTransferSheet({ initialFrom, onClose: onDismiss, onTransferred }) {
   const sheetRef = useRef(null);
-  useSwipeDismiss(sheetRef, onClose);
+  const onClose = useSwipeDismiss(sheetRef, onDismiss);
 
   const wallets = listWallets();
   // Куда переводить можно только в той же валюте: перевод переносит число,
@@ -66,7 +66,7 @@ export default function WalletTransferSheet({ initialFrom, onClose, onTransferre
     try {
       await transferBetweenWallets(from, to, num);
       hapticHeavy();
-      onTransferred();
+      onClose(() => onTransferred());
     } catch (err) {
       setError(err.message);
       setSaving(false);

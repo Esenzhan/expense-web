@@ -88,11 +88,11 @@ function canMerge(items) {
 // a single-total scan, several for "Раздельно") in one list instead of
 // stepping through them one at a time, with an optional merge for line
 // items that share a category before committing the whole batch at once.
-export default function ScanReviewSheet({ items: initialItems, onClose, onCommitted, onSaved }) {
+export default function ScanReviewSheet({ items: initialItems, onClose: onDismiss, onCommitted, onSaved }) {
   const [items, setItems] = useState(initialItems);
   const [saving, setSaving] = useState(false);
   const sheetRef = useRef(null);
-  useSwipeDismiss(sheetRef, onClose);
+  const onClose = useSwipeDismiss(sheetRef, onDismiss);
 
   const total = items.reduce((sum, item) => sum + Number(item.amount), 0);
   const totalCode = totalCurrency(items);

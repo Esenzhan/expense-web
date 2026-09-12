@@ -96,9 +96,9 @@ function WalletGroup({ items, selected, balanceOf, formatBalance, onChoose, onEd
 
 // «Счета»: pick the wallet the whole main screen is scoped to, add new ones,
 // or edit an existing one via the pencil.
-export default function WalletsSheet({ balances, pendingWalletDeltas, selected, onSelect, onAdd, onEdit, onClose, onTransfer, onReorder }) {
+export default function WalletsSheet({ balances, pendingWalletDeltas, selected, onSelect, onAdd, onEdit, onClose: onDismiss, onTransfer, onReorder }) {
   const sheetRef = useRef(null);
-  useSwipeDismiss(sheetRef, onClose);
+  const onClose = useSwipeDismiss(sheetRef, onDismiss);
 
   const groups = walletsByScope();
   // Same formula as accountBalance in App.jsx's "Баланс" row — a wallet with

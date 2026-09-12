@@ -28,10 +28,10 @@ function formatDate(value) {
 // Открывается тапом по строке в CapitalSheet — тот же редактор строк, что и
 // «Новый снимок» (CapitalItemsEditor), только предзаполненный этим
 // снимком, плюс удаление всего снимка через «⋮» (как в EditExpenseSheet).
-export default function CapitalDetailSheet({ user, snapshot, previousTotal, onClose, onSaved, onDeleted }) {
+export default function CapitalDetailSheet({ user, snapshot, previousTotal, onClose: onDismiss, onSaved, onDeleted }) {
   const email = user?.email;
   const sheetRef = useRef(null);
-  useSwipeDismiss(sheetRef, onClose);
+  const onClose = useSwipeDismiss(sheetRef, onDismiss);
 
   const cacheKey = capitalDetailCacheKey(snapshot.id);
   const cachedItems = loadCached(cacheKey, email);

@@ -32,10 +32,10 @@ function formatDate(value) {
 // и форма погашения (полного или частичного). Удаление доступно только пока
 // не было ни одного платежа (см. routes/debts.js — иначе пришлось бы
 // откатывать историю баланса по каждому платежу).
-export default function DebtDetailSheet({ debt: initialDebt, user, currentUserId, onClose, onChanged }) {
+export default function DebtDetailSheet({ debt: initialDebt, user, currentUserId, onClose: onDismiss, onChanged }) {
   const email = user?.email;
   const sheetRef = useRef(null);
-  useSwipeDismiss(sheetRef, onClose);
+  const onClose = useSwipeDismiss(sheetRef, onDismiss);
 
   const [debt, setDebt] = useState(initialDebt);
   const [payments, setPayments] = useState(() => loadCached(paymentsCacheKey(initialDebt.id), email) || []);

@@ -11,9 +11,9 @@ import { formatAmountDisplay, sanitizeAmountInput } from "../amountInput";
 // опционален: указан только когда деньги реально прошли через отслеживаемый
 // счёт (тогда баланс двигается сразу же на бэкенде, см. routes/debts.js),
 // «Без счёта» — для наличных/долгов, которые не должны влиять на баланс.
-export default function NewDebtSheet({ initialDirection, onClose, onCreated }) {
+export default function NewDebtSheet({ initialDirection, onClose: onDismiss, onCreated }) {
   const sheetRef = useRef(null);
-  useSwipeDismiss(sheetRef, onClose);
+  const onClose = useSwipeDismiss(sheetRef, onDismiss);
 
   const wallets = listWallets();
   const [direction, setDirection] = useState(initialDirection || "owed_to_us");
@@ -51,7 +51,7 @@ export default function NewDebtSheet({ initialDirection, onClose, onCreated }) {
         dueDate: dueDate || null,
       });
       hapticHeavy();
-      onCreated();
+      onClose(() => onCreated());
     } catch (err) {
       setError(err.message);
       setSaving(false);

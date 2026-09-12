@@ -26,10 +26,10 @@ function formatDate(date) {
 // поправить пару строк, чем набирать всё заново. previousSnapshotId
 // приходит от CapitalSheet (id последнего снимка в списке); null у самого
 // первого снимка семьи — тогда просто одна пустая строка на секцию, как раньше.
-export default function NewCapitalSnapshotSheet({ user, previousSnapshotId, onClose, onCreated }) {
+export default function NewCapitalSnapshotSheet({ user, previousSnapshotId, onClose: onDismiss, onCreated }) {
   const email = user?.email;
   const sheetRef = useRef(null);
-  useSwipeDismiss(sheetRef, onClose);
+  const onClose = useSwipeDismiss(sheetRef, onDismiss);
 
   const cachedPrev = previousSnapshotId ? loadCached(capitalDetailCacheKey(previousSnapshotId), email) : null;
   const [assets, setAssets] = useState(() => {
@@ -86,7 +86,7 @@ export default function NewCapitalSnapshotSheet({ user, previousSnapshotId, onCl
     try {
       await createCapitalSnapshot(items, customDate ? customDate.toISOString() : null, numericRates(rates));
       hapticHeavy();
-      onCreated();
+      onClose(() => onCreated());
     } catch (err) {
       setError(err.message);
       setSaving(false);

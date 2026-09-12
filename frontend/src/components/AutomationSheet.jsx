@@ -10,7 +10,7 @@ const DRAFTS_ENDPOINT = `${API_BASE}/api/expense-drafts`;
 export default function AutomationSheet({ onClose }) {
   const [closing, setClosing] = useState(false);
   const pageRef = useRef(null);
-  useSwipeDismissRight(pageRef, onClose);
+  const dismissPage = useSwipeDismissRight(pageRef, onClose);
 
   // Ключ грузится сразу с экраном, а не по тапу: iOS отзывает доступ к
   // буферу обмена, если между жестом и записью успел завершиться await.
@@ -29,15 +29,7 @@ export default function AutomationSheet({ onClose }) {
   }, []);
 
   function handleClose() {
-    if (closing) return;
-    haptic();
-    setClosing(true);
-    const el = pageRef.current;
-    if (el) {
-      el.style.transition = "transform 0.26s cubic-bezier(0.2, 0.9, 0.3, 1)";
-      el.style.transform = "translateX(100%)";
-    }
-    setTimeout(onClose, 260);
+    dismissPage();
   }
 
   // Синхронно, прямо в обработчике тапа — см. комментарий у shortcutKey.

@@ -16,9 +16,9 @@ import { catIconVars } from "../catIconVars";
 // поднимается, соседи расступаются, отпустил — порядок уходит на сервер
 // (`onReorder`). Пока сохранение летит, список показывает уже новый
 // порядок: `localOrder` живёт до тех пор, пока не приедет свежая гидрация.
-export default function CategoriesSheet({ initialWallet, onClose, onAdd, onEdit, onReorder }) {
+export default function CategoriesSheet({ initialWallet, onClose: onDismiss, onAdd, onEdit, onReorder }) {
   const sheetRef = useRef(null);
-  useSwipeDismiss(sheetRef, onClose);
+  const onClose = useSwipeDismiss(sheetRef, onDismiss);
 
   const wallets = listWallets();
   const [activeWallet, setActiveWallet] = useState(initialWallet || wallets[0]?.name);

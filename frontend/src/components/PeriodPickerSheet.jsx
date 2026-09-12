@@ -33,9 +33,9 @@ function recentMonths(now = new Date()) {
 // inclusive Almaty calendar days. Neither end is capped at today: expenses
 // and income can be recorded on future dates (DateTimePickerSheet), so a
 // range must be able to reach them.
-export default function PeriodPickerSheet({ initialFrom, initialTo, onClose, onApply }) {
+export default function PeriodPickerSheet({ initialFrom, initialTo, onClose: onDismiss, onApply }) {
   const sheetRef = useRef(null);
-  useSwipeDismiss(sheetRef, onClose);
+  const onClose = useSwipeDismiss(sheetRef, onDismiss);
 
   const fallback = todayDateOnly();
   const [from, setFrom] = useState(initialFrom || fallback);
@@ -56,7 +56,7 @@ export default function PeriodPickerSheet({ initialFrom, initialTo, onClose, onA
   function apply() {
     if (!valid) return;
     haptic();
-    onApply(from, to);
+    onClose(() => onApply(from, to));
   }
 
   // Месяц целиком — одним нажатием, без двух календарей: за этим сюда и
@@ -68,7 +68,7 @@ export default function PeriodPickerSheet({ initialFrom, initialTo, onClose, onA
     setFrom(range.from);
     setTo(range.to);
     haptic();
-    onApply(range.from, range.to);
+    onClose(() => onApply(range.from, range.to));
   }
 
   return (

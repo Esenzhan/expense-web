@@ -36,6 +36,7 @@ import CapitalDetailSheet from "./components/CapitalDetailSheet";
 import PeriodPickerSheet from "./components/PeriodPickerSheet";
 import SearchSheet from "./components/SearchSheet";
 import AccountBalanceRow from "./components/AccountBalanceRow";
+import FlipNumber from "./components/FlipNumber";
 import { useSwipeDismissUp } from "./sheetGestures";
 import { loadCached, saveCached } from "./offlineCache";
 
@@ -1244,7 +1245,9 @@ export default function App() {
             </button>
           </div>
         </div>
-        <div className="summary-total">−{formatMoney(insights.total, shownCurrency)}</div>
+        <FlipNumber className="summary-total">
+          {`−${formatMoney(insights.total, shownCurrency)}`}
+        </FlipNumber>
         <AccountBalanceRow
           balance={accountBalance}
           currency={shownCurrency}
