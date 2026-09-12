@@ -6,21 +6,47 @@ export default function FlipNumber({ children, className = "" }) {
   const text = String(children ?? "");
   const [shown, setShown] = useState(() => text.replace(/\d/g, "0"));
   const raf = useRef(null);
-  const fallback = useRef(null);
 
   useEffect(() => {
-    cancelAnimationFrame(raf.current);
-    clearTimeout(fallback.current);
+    let cancelled = false;
 
-    // Give the browser one painted frame at the previous value. Without it,
-    // React and CSS can collapse both positions and skip the transition.
-    raf.current = requestAnimationFrame(() => setShown(text));
-    // Background tabs may pause animation frames; never leave zeroes visible.
-    fallback.current = setTimeout(() => setShown(text), 250);
+    function cancelFrame() {
+      if (raf.current != null) cancelAnimationFrame(raf.current);
+      raf.current = null;
+    }
+
+    function startAfterPaint() {
+      cancelFrame();
+      // The first callback still runs before a paint. A second frame is
+      // required to guarantee that the reel's previous position has been
+      // presented before we move it. This matters on an online PWA cold
+      // launch: iOS can run the first callback while its splash screen is
+      // still covering the page, collapsing zero and final positions into
+      // the first visible frame.
+      raf.current = requestAnimationFrame(() => {
+        raf.current = requestAnimationFrame(() => {
+          raf.current = null;
+          if (!cancelled) setShown(text);
+        });
+      });
+    }
+
+    function onVisible() {
+      if (document.visibilityState !== "visible") return;
+      document.removeEventListener("visibilitychange", onVisible);
+      startAfterPaint();
+    }
+
+    // A standalone PWA may mount while its document is still hidden behind
+    // the native launch screen. Wait for real visibility instead of using a
+    // timer that can finish the number animation before the user sees it.
+    if (document.visibilityState === "visible") startAfterPaint();
+    else document.addEventListener("visibilitychange", onVisible);
 
     return () => {
-      cancelAnimationFrame(raf.current);
-      clearTimeout(fallback.current);
+      cancelled = true;
+      cancelFrame();
+      document.removeEventListener("visibilitychange", onVisible);
     };
   }, [text]);
 
