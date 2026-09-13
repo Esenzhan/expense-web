@@ -15,6 +15,21 @@
 .expense-row { animation-duration: 180ms; animation-timing-function: var(--ease-out); }
 .app { transition: transform 280ms var(--ease-drawer); }
 
+/* A wallet change replaces the expense dataset as one scene. Individual
+   row-in animations are paused only for this first scene entrance, otherwise
+   retained and new rows move at different times while React filters the old
+   wallet out. New expenses added later keep their normal row-in animation. */
+@keyframes expense-list-view-in {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.expense-list-content.entering {
+  animation: expense-list-view-in 220ms var(--ease-out) both;
+}
+.expense-row.no-enter {
+  animation: none;
+}
+
 /* Give selection feedback without moving the content around it. */
 .period-pill, .filter-pill, .theme-option, .type-pill { transition: scale 140ms var(--ease-out), background-color 180ms ease, color 180ms ease; }
 .switch-knob { transition: transform 220ms var(--ease-out), background-color 160ms ease; }

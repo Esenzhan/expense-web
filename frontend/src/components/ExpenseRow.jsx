@@ -14,7 +14,7 @@ import { catIconVars } from "../catIconVars";
 const BUTTON_WIDTH = 76;
 const OVERDRAG = 24;
 
-export default function ExpenseRow({ expense, icon, readonly, onSelect, onDeleteRequest }) {
+export default function ExpenseRow({ expense, icon, readonly, suppressEntrance = false, onSelect, onDeleteRequest }) {
   const rowRef = useRef(null);
   const wrapRef = useRef(null);
   const onDeleteRef = useRef(onDeleteRequest);
@@ -145,7 +145,7 @@ export default function ExpenseRow({ expense, icon, readonly, onSelect, onDelete
         </button>
       </div>
       <div
-        className={`expense-row ${expense.pending ? "pending" : ""} ${readonly ? "readonly" : ""}`}
+        className={`expense-row ${expense.pending ? "pending" : ""} ${readonly ? "readonly" : ""} ${suppressEntrance ? "no-enter" : ""}`}
         ref={rowRef}
         onClick={handleClick}
       >

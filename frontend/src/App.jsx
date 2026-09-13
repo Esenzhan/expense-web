@@ -1379,6 +1379,7 @@ export default function App() {
       </div>
 
       <ExpenseList
+        key={`expenses:${selectedWallet || "all"}`}
         expenses={displayedExpenses}
         onSelect={setEditingExpense}
         onDeleteRequest={requestDeleteExpense}

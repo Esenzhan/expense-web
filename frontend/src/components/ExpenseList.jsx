@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { getCategoryIcon, getIncomeCategoryIcon } from "../categoryIcons";
 import { almaty, startOfAlmatyDay } from "../insights";
 import { haptic, withHaptic } from "../haptics";
@@ -75,6 +75,16 @@ export default function ExpenseList({
     ? categoryFilterOptions?.find((c) => c.key === categoryFilter)?.icon
     : null;
   const [dropdownOpen, setDropdownOpen] = useState(false);
+  // App keys ExpenseList by wallet, so a wallet change mounts one coherent
+  // data scene instead of asking React to reconcile a mixture of retained,
+  // removed and newly-entering rows. While the scene itself enters, suppress
+  // each row's own mount animation; future rows added to this same wallet
+  // still get the normal row-in feedback after this flag clears.
+  const [viewEntering, setViewEntering] = useState(true);
+  const sceneExpenseIds = useRef(new Set());
+  if (viewEntering) {
+    for (const expense of expenses) sceneExpenseIds.current.add(expense.id);
+  }
 
   return (
     <div>
@@ -124,39 +134,47 @@ export default function ExpenseList({
           )}
         </div>
       </div>
-      {expenses.length === 0 && (
-        <p className="empty-hint">
-          {categoryFilterActive
-            ? "В этой категории пока пусто."
-            : "Пока пусто — скажи что-нибудь вроде «500 на такси»."}
-        </p>
-      )}
-      {groups.map((group) => (
-        <div className="expense-group" key={group.key}>
-          <p className="expense-date-header">{group.header}</p>
-          <div className="expense-list">
-            {group.items.map((expense) => {
-              const icon =
-                expense.type === "income"
-                  ? getIncomeCategoryIcon(expense.wallet, expense.category)
-                  : getCategoryIcon(expense.wallet, expense.category);
-              // Shared-wallet rows from the other account are visible but
-              // read-only — only whoever logged an expense can edit/delete it.
-              const readonly = expense.user_id != null && expense.user_id !== currentUserId;
-              return (
-                <ExpenseRow
-                  key={expense.id}
-                  expense={expense}
-                  icon={icon}
-                  readonly={readonly}
-                  onSelect={onSelect}
-                  onDeleteRequest={onDeleteRequest}
-                />
-              );
-            })}
+      <div
+        className={`expense-list-content ${viewEntering ? "entering" : ""}`}
+        onAnimationEnd={(event) => {
+          if (event.target === event.currentTarget) setViewEntering(false);
+        }}
+      >
+        {expenses.length === 0 && (
+          <p className="empty-hint">
+            {categoryFilterActive
+              ? "В этой категории пока пусто."
+              : "Пока пусто — скажи что-нибудь вроде «500 на такси»."}
+          </p>
+        )}
+        {groups.map((group) => (
+          <div className="expense-group" key={group.key}>
+            <p className="expense-date-header">{group.header}</p>
+            <div className="expense-list">
+              {group.items.map((expense) => {
+                const icon =
+                  expense.type === "income"
+                    ? getIncomeCategoryIcon(expense.wallet, expense.category)
+                    : getCategoryIcon(expense.wallet, expense.category);
+                // Shared-wallet rows from the other account are visible but
+                // read-only — only whoever logged an expense can edit/delete it.
+                const readonly = expense.user_id != null && expense.user_id !== currentUserId;
+                return (
+                  <ExpenseRow
+                    key={expense.id}
+                    expense={expense}
+                    icon={icon}
+                    readonly={readonly}
+                    suppressEntrance={sceneExpenseIds.current.has(expense.id)}
+                    onSelect={onSelect}
+                    onDeleteRequest={onDeleteRequest}
+                  />
+                );
+              })}
+            </div>
           </div>
-        </div>
-      ))}
+        ))}
+      </div>
     </div>
   );
 }
