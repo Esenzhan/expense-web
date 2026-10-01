@@ -7,7 +7,7 @@ import { loadCached, saveCached } from "../offlineCache";
 import CapitalChart from "./CapitalChart";
 
 function formatAmount(amount) {
-  return `${Number(amount).toLocaleString("ru-RU")} ₸`;
+  return `${Math.round(Number(amount)).toLocaleString("ru-RU")} ₸`;
 }
 
 function formatGrowth(amount) {
