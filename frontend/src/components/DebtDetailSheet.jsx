@@ -32,7 +32,7 @@ function formatDate(value) {
 // и форма погашения (полного или частичного). Удаление доступно только пока
 // не было ни одного платежа (см. routes/debts.js — иначе пришлось бы
 // откатывать историю баланса по каждому платежу).
-export default function DebtDetailSheet({ debt: initialDebt, user, currentUserId, onClose: onDismiss, onChanged }) {
+export default function DebtDetailSheet({ debt: initialDebt, user, currentUserId, onClose: onDismiss, onChanged, onEdit }) {
   const email = user?.email;
   const sheetRef = useRef(null);
   const onClose = useSwipeDismiss(sheetRef, onDismiss);
@@ -44,6 +44,10 @@ export default function DebtDetailSheet({ debt: initialDebt, user, currentUserId
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const [confirmingDelete, setConfirmingDelete] = useState(false);
+
+  useEffect(() => {
+    setDebt(initialDebt);
+  }, [initialDebt]);
 
   useEffect(() => {
     fetchDebtPayments(debt.id)
@@ -117,7 +121,20 @@ export default function DebtDetailSheet({ debt: initialDebt, user, currentUserId
             ✕
           </button>
           <span className="cats-title">{debt.counterparty}</span>
-          <span className="icon-button-spacer" />
+          {isCreator ? (
+            <button
+              className="icon-button"
+              onClick={() => {
+                haptic();
+                onEdit(debt);
+              }}
+              aria-label="Редактировать долг"
+            >
+              ✎
+            </button>
+          ) : (
+            <span className="icon-button-spacer" />
+          )}
         </div>
 
         <div className="settings-group">

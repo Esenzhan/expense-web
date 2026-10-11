@@ -227,6 +227,19 @@ export async function createDebt(payload) {
   return res.json();
 }
 
+export async function updateDebt(debtId, payload) {
+  const res = await apiFetch(`/api/debts/${debtId}`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    throw new Error(body.error || "Не удалось изменить долг");
+  }
+  return res.json();
+}
+
 export async function payDebt(debtId, amount) {
   const res = await apiFetch(`/api/debts/${debtId}/payments`, {
     method: "POST",

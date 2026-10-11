@@ -25,6 +25,7 @@ const REASON_LABEL = {
   debt_repay_in: (row) => `Долг возвращён ← ${row.counterpart_wallet}`,
   debt_repay_out: (row) => `Долг погашен → ${row.counterpart_wallet}`,
   debt_delete: (row) => `Долг отменён (${row.counterpart_wallet})`,
+  debt_edit: (row) => `Долг изменён (${row.counterpart_wallet})`,
   // Правка/удаление записи, которая старше опорной точки счёта: её сумма
   // уже сидела внутри опорной суммы, поэтому баланс поправлен отдельно
   // (см. reconcileExpenseChange на бэкенде). Сама запись стоит в журнале

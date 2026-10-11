@@ -284,6 +284,7 @@ export default function App() {
   const [debtsOpen, setDebtsOpen] = useState(false);
   const [newDebtOpen, setNewDebtOpen] = useState(false);
   const [selectedDebt, setSelectedDebt] = useState(null);
+  const [editingDebt, setEditingDebt] = useState(null);
   const [debtsRefreshKey, setDebtsRefreshKey] = useState(0);
   const [capitalOpen, setCapitalOpen] = useState(false);
   const [newCapitalOpen, setNewCapitalOpen] = useState(false);
@@ -360,6 +361,7 @@ export default function App() {
       debtsOpen ||
       newDebtOpen ||
       selectedDebt ||
+      editingDebt ||
       capitalOpen ||
       newCapitalOpen ||
       selectedCapitalSnapshot
@@ -390,6 +392,7 @@ export default function App() {
     setDebtsOpen(false);
     setNewDebtOpen(false);
     setSelectedDebt(null);
+    setEditingDebt(null);
     setCapitalOpen(false);
     setNewCapitalOpen(false);
     setNewCapitalPrevId(null);
@@ -1541,7 +1544,21 @@ export default function App() {
           user={user}
           currentUserId={user.id}
           onClose={() => setSelectedDebt(null)}
+          onEdit={(debt) => setEditingDebt(debt)}
           onChanged={async () => {
+            setDebtsRefreshKey((k) => k + 1);
+            await refreshWalletBalances();
+          }}
+        />
+      )}
+
+      {editingDebt && (
+        <NewDebtSheet
+          initial={editingDebt}
+          onClose={() => setEditingDebt(null)}
+          onUpdated={async (updated) => {
+            setEditingDebt(null);
+            setSelectedDebt(updated);
             setDebtsRefreshKey((k) => k + 1);
             await refreshWalletBalances();
           }}

@@ -1,29 +1,37 @@
 import { useRef, useState } from "react";
 import { listWallets } from "../wallets";
-import { createDebt } from "../api";
+import { createDebt, updateDebt } from "../api";
 import { haptic, hapticHeavy, withHaptic } from "../haptics";
 import { useSwipeDismiss } from "../sheetGestures";
 import CategoryGlyph from "./CategoryGlyph";
 import { catIconVars } from "../catIconVars";
 import { formatAmountDisplay, sanitizeAmountInput } from "../amountInput";
+import { almaty } from "../insights";
+
+function dateInputValue(value) {
+  if (!value) return "";
+  return almaty(new Date(value)).toISOString().slice(0, 10);
+}
 
 // «Новый долг» — свайп-down шторка, открывается «+» в DebtsSheet. Счёт
 // опционален: указан только когда деньги реально прошли через отслеживаемый
 // счёт (тогда баланс двигается сразу же на бэкенде, см. routes/debts.js),
 // «Без счёта» — для наличных/долгов, которые не должны влиять на баланс.
-export default function NewDebtSheet({ initialDirection, onClose: onDismiss, onCreated }) {
+export default function NewDebtSheet({ initialDirection, initial, onClose: onDismiss, onCreated, onUpdated }) {
   const sheetRef = useRef(null);
   const onClose = useSwipeDismiss(sheetRef, onDismiss);
 
   const wallets = listWallets();
-  const [direction, setDirection] = useState(initialDirection || "owed_to_us");
-  const [scope, setScope] = useState("personal");
-  const [counterparty, setCounterparty] = useState("");
-  const [amount, setAmount] = useState("");
-  const [description, setDescription] = useState("");
-  const [issueDate, setIssueDate] = useState("");
-  const [dueDate, setDueDate] = useState("");
-  const [wallet, setWallet] = useState(null);
+  const isEditing = Boolean(initial);
+  const financialLocked = isEditing && Number(initial.remaining) !== Number(initial.amount);
+  const [direction, setDirection] = useState(initial?.direction || initialDirection || "owed_to_us");
+  const [scope, setScope] = useState(initial ? (initial.user_id == null ? "family" : "personal") : "personal");
+  const [counterparty, setCounterparty] = useState(initial?.counterparty || "");
+  const [amount, setAmount] = useState(initial ? String(Number(initial.amount)).replace(".", ",") : "");
+  const [description, setDescription] = useState(initial?.description || "");
+  const [issueDate, setIssueDate] = useState(initial ? dateInputValue(initial.created_at) : "");
+  const [dueDate, setDueDate] = useState(initial?.due_date ? String(initial.due_date).slice(0, 10) : "");
+  const [wallet, setWallet] = useState(initial?.wallet || null);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
 
@@ -40,7 +48,7 @@ export default function NewDebtSheet({ initialDirection, onClose: onDismiss, onC
     setSaving(true);
     setError("");
     try {
-      await createDebt({
+      const payload = {
         direction,
         scope,
         counterparty: counterparty.trim(),
@@ -49,9 +57,12 @@ export default function NewDebtSheet({ initialDirection, onClose: onDismiss, onC
         wallet,
         issueDate: issueDate || null,
         dueDate: dueDate || null,
-      });
+      };
+      const saved = isEditing
+        ? await updateDebt(initial.id, payload)
+        : await createDebt(payload);
       hapticHeavy();
-      onClose(() => onCreated());
+      onClose(() => (isEditing ? onUpdated?.(saved) : onCreated?.(saved)));
     } catch (err) {
       setError(err.message);
       setSaving(false);
@@ -65,13 +76,14 @@ export default function NewDebtSheet({ initialDirection, onClose: onDismiss, onC
           <button className="icon-button" onClick={withHaptic(onClose)} aria-label="Закрыть">
             ✕
           </button>
-          <span className="cats-title">Новый долг</span>
+          <span className="cats-title">{isEditing ? "Редактировать долг" : "Новый долг"}</span>
           <span className="icon-button-spacer" />
         </div>
 
         <div className="debt-direction-toggle">
           <button
             className={`period-pill ${direction === "owed_to_us" ? "active" : ""}`}
+            disabled={financialLocked}
             onClick={() => {
               haptic();
               setDirection("owed_to_us");
@@ -81,6 +93,7 @@ export default function NewDebtSheet({ initialDirection, onClose: onDismiss, onC
           </button>
           <button
             className={`period-pill ${direction === "we_owe" ? "active" : ""}`}
+            disabled={financialLocked}
             onClick={() => {
               haptic();
               setDirection("we_owe");
@@ -93,6 +106,7 @@ export default function NewDebtSheet({ initialDirection, onClose: onDismiss, onC
         <div className="debt-direction-toggle">
           <button
             className={`period-pill ${scope === "personal" ? "active" : ""}`}
+            disabled={financialLocked}
             onClick={() => {
               haptic();
               setScope("personal");
@@ -102,6 +116,7 @@ export default function NewDebtSheet({ initialDirection, onClose: onDismiss, onC
           </button>
           <button
             className={`period-pill ${scope === "family" ? "active" : ""}`}
+            disabled={financialLocked}
             onClick={() => {
               haptic();
               setScope("family");
@@ -129,6 +144,7 @@ export default function NewDebtSheet({ initialDirection, onClose: onDismiss, onC
           type="text"
           inputMode="decimal"
           placeholder="Сумма"
+          disabled={financialLocked}
           value={formatAmountDisplay(amount)}
           onChange={(event) => {
             const raw = sanitizeAmountInput(event.target.value);
@@ -149,7 +165,7 @@ export default function NewDebtSheet({ initialDirection, onClose: onDismiss, onC
         />
 
         <label className="period-picker-field" style={{ marginTop: 12 }}>
-          <span>Дата передачи долга (по умолчанию сегодня)</span>
+          <span>{isEditing ? "Дата передачи долга" : "Дата передачи долга (по умолчанию сегодня)"}</span>
           <input type="date" value={issueDate} onChange={(event) => setIssueDate(event.target.value)} />
         </label>
 
@@ -163,6 +179,7 @@ export default function NewDebtSheet({ initialDirection, onClose: onDismiss, onC
           <button
             type="button"
             className={`wallet-pick ${wallet === null ? "active" : ""}`}
+            disabled={financialLocked}
             onClick={() => {
               haptic();
               setWallet(null);
@@ -178,6 +195,7 @@ export default function NewDebtSheet({ initialDirection, onClose: onDismiss, onC
               key={w.name}
               type="button"
               className={`wallet-pick ${wallet === w.name ? "active" : ""}`}
+              disabled={financialLocked}
               onClick={() => {
                 haptic();
                 setWallet(w.name);
@@ -198,10 +216,16 @@ export default function NewDebtSheet({ initialDirection, onClose: onDismiss, onC
           </p>
         )}
 
+        {financialLocked && (
+          <p className="debt-hint debt-edit-locked">
+            По долгу уже были платежи. Сумма, направление, тип и счёт сохранены как часть финансовой истории; имя, комментарий и даты можно изменить.
+          </p>
+        )}
+
         {error && <p className="sheet-error">{error}</p>}
 
         <button className="sheet-close" onClick={handleSave} disabled={saving}>
-          {saving ? "Сохраняю…" : "Сохранить"}
+          {saving ? "Сохраняю…" : isEditing ? "Сохранить изменения" : "Сохранить"}
         </button>
       </div>
     </div>

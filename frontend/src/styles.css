@@ -2279,6 +2279,19 @@ select,
   margin-bottom: 12px;
 }
 
+.debt-direction-toggle button:disabled,
+.wallet-pick:disabled,
+.note-input:disabled {
+  opacity: 0.55;
+}
+
+.debt-edit-locked {
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: var(--surface-soft);
+  line-height: 1.45;
+}
+
 .hero-total-sub {
   font-size: 13px;
   color: var(--ink-soft);

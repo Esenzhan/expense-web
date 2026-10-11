@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { pool } from "../db.js";
-import { isValidWallet } from "../wallets.js";
+import { canUseWallet } from "../wallets.js";
 import { getCurrentBalance, setBalance, logBalanceChange } from "../services/balanceHistory.js";
 
 export const debtsRouter = Router();
@@ -62,7 +62,7 @@ debtsRouter.post("/", async (req, res) => {
   if (typeof amount !== "number" || !Number.isFinite(amount) || amount <= 0) {
     return res.status(400).json({ error: "Некорректная сумма" });
   }
-  if (wallet != null && !(await isValidWallet(wallet))) {
+  if (wallet != null && !(await canUseWallet(wallet, req.user.id))) {
     return res.status(400).json({ error: "Некорректный счёт" });
   }
   if (dueDate != null && !/^\d{4}-\d{2}-\d{2}$/.test(dueDate)) {
@@ -117,6 +117,146 @@ debtsRouter.post("/", async (req, res) => {
 
     await client.query("COMMIT");
     res.status(201).json(rows[0]);
+  } catch (err) {
+    await client.query("ROLLBACK");
+    throw err;
+  } finally {
+    client.release();
+  }
+});
+
+// Editing a debt is intentionally split into two safety levels. Before the
+// first payment every field can change; any creation-time wallet movement is
+// reversed and the edited one is applied in the same transaction. Once a
+// payment exists, the financial shape is history (direction/scope/amount/
+// wallet) and only descriptive fields and dates may change.
+debtsRouter.put("/:id", async (req, res) => {
+  const { id } = req.params;
+  const { direction, scope, counterparty, description, amount, wallet, dueDate, issueDate } = req.body;
+
+  if (!isValidDirection(direction)) {
+    return res.status(400).json({ error: "Некорректное направление долга" });
+  }
+  if (scope !== "personal" && scope !== "family") {
+    return res.status(400).json({ error: "Некорректный тип долга" });
+  }
+  if (typeof counterparty !== "string" || !counterparty.trim()) {
+    return res.status(400).json({ error: "Укажите, с кем долг" });
+  }
+  if (typeof amount !== "number" || !Number.isFinite(amount) || amount <= 0) {
+    return res.status(400).json({ error: "Некорректная сумма" });
+  }
+  if (wallet != null && !(await canUseWallet(wallet, req.user.id))) {
+    return res.status(400).json({ error: "Некорректный счёт" });
+  }
+  if (dueDate != null && !/^\d{4}-\d{2}-\d{2}$/.test(dueDate)) {
+    return res.status(400).json({ error: "Некорректная дата погашения" });
+  }
+  if (issueDate != null && !/^\d{4}-\d{2}-\d{2}$/.test(issueDate)) {
+    return res.status(400).json({ error: "Некорректная дата передачи долга" });
+  }
+
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+
+    const { rows: debtRows } = await client.query(
+      `SELECT * FROM debts WHERE id = $1 AND (user_id IS NULL OR user_id = $2) FOR UPDATE`,
+      [id, req.user.id]
+    );
+    const debt = debtRows[0];
+    if (!debt) {
+      await client.query("ROLLBACK");
+      return res.status(404).json({ error: "Долг не найден" });
+    }
+    if (debt.created_by !== req.user.id) {
+      await client.query("ROLLBACK");
+      return res.status(403).json({ error: "Изменить долг может только тот, кто его создал" });
+    }
+
+    const { rows: paymentRows } = await client.query(
+      `SELECT 1 FROM debt_payments WHERE debt_id = $1 LIMIT 1`,
+      [id]
+    );
+    const hasPayments = paymentRows.length > 0;
+    const nextUserId = scope === "family" ? null : req.user.id;
+    const oldScope = debt.user_id == null ? "family" : "personal";
+    const nextWallet = wallet || null;
+    const financialChanged =
+      debt.direction !== direction ||
+      oldScope !== scope ||
+      Number(debt.amount) !== amount ||
+      (debt.wallet || null) !== nextWallet;
+
+    if (hasPayments && financialChanged) {
+      await client.query("ROLLBACK");
+      return res.status(400).json({
+        error: "После первого платежа можно менять только имя, комментарий и даты",
+      });
+    }
+
+    if (!hasPayments && financialChanged) {
+      // Creation-time effect: lending removes money, borrowing adds it.
+      // Remove the old effect, then apply the new one. A Map collapses the
+      // common same-wallet case into one precise net movement.
+      const adjustments = new Map();
+      const addAdjustment = (walletName, delta) => {
+        if (!walletName) return;
+        adjustments.set(walletName, (adjustments.get(walletName) || 0) + delta);
+      };
+      const oldEffect = debt.direction === "owed_to_us" ? -Number(debt.amount) : Number(debt.amount);
+      const newEffect = direction === "owed_to_us" ? -amount : amount;
+      addAdjustment(debt.wallet, -oldEffect);
+      addAdjustment(nextWallet, newEffect);
+
+      // Stable order keeps two simultaneous cross-wallet edits from taking
+      // balance rows in opposite order.
+      for (const walletName of [...adjustments.keys()].sort()) {
+        const delta = Math.round(adjustments.get(walletName) * 100) / 100;
+        if (!delta) continue;
+        const oldBalance = (await getCurrentBalance(client, walletName, req.user.id)) ?? 0;
+        const newBalance = Math.round((oldBalance + delta) * 100) / 100;
+        await setBalance(client, walletName, req.user.id, newBalance);
+        await logBalanceChange(client, {
+          wallet: walletName,
+          oldAmount: oldBalance,
+          newAmount: newBalance,
+          reason: "debt_edit",
+          counterpartWallet: counterparty.trim(),
+          changedBy: req.user.id,
+        });
+      }
+    }
+
+    const { rows: updatedRows } = await client.query(
+      `UPDATE debts
+       SET direction = $1,
+           user_id = $2,
+           counterparty = $3,
+           description = $4,
+           amount = $5,
+           remaining = CASE WHEN $6 THEN remaining ELSE $5 END,
+           wallet = $7,
+           due_date = $8,
+           created_at = COALESCE($9::timestamptz, created_at)
+       WHERE id = $10
+       RETURNING *`,
+      [
+        direction,
+        nextUserId,
+        counterparty.trim(),
+        description || null,
+        amount,
+        hasPayments,
+        nextWallet,
+        dueDate || null,
+        issueDate || null,
+        id,
+      ]
+    );
+
+    await client.query("COMMIT");
+    res.json(updatedRows[0]);
   } catch (err) {
     await client.query("ROLLBACK");
     throw err;
