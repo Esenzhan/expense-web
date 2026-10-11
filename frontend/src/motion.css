@@ -1,6 +1,7 @@
 /* Motion only: no changes to the application's colors, geometry or typography. */
 :root {
   --ease-out: cubic-bezier(.23, 1, .32, 1);
+  --ease-in-out: cubic-bezier(.77, 0, .175, 1);
   --ease-drawer: cubic-bezier(.32, .72, 0, 1);
   --duration-drawer: 500ms;
   --duration-backdrop: 250ms;
@@ -13,14 +14,24 @@
 .edit-sheet, .insights-sheet, .categories-sheet, .period-picker-sheet, .dt-sheet {
   animation-duration: var(--duration-drawer);
   animation-timing-function: var(--ease-drawer);
+  will-change: transform;
 }
-.settings-page { animation-duration: var(--duration-drawer); animation-timing-function: var(--ease-drawer); }
+.settings-page {
+  animation-duration: var(--duration-drawer);
+  animation-timing-function: var(--ease-drawer);
+  will-change: transform;
+}
 .sheet-backdrop {
   animation-duration: var(--duration-backdrop);
   animation-timing-function: var(--ease-out);
   transition: opacity var(--duration-backdrop) var(--ease-out);
+  will-change: opacity;
 }
-.camera-sheet { animation-duration: var(--duration-backdrop); animation-timing-function: var(--ease-out); }
+.camera-sheet {
+  animation-duration: var(--duration-backdrop);
+  animation-timing-function: var(--ease-out);
+  will-change: opacity;
+}
 .category-filter-dropdown, .edit-menu { transform-origin: top right; animation-duration: 180ms; animation-timing-function: var(--ease-out); }
 .expense-row { animation-duration: 180ms; animation-timing-function: var(--ease-out); }
 .app { transition: transform var(--duration-drawer) var(--ease-drawer); }

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef } from "react";
 
 export const MOTION_EASE = "cubic-bezier(0.23, 1, 0.32, 1)";
+export const MOTION_EASE_IN_OUT = "cubic-bezier(0.77, 0, 0.175, 1)";
 export const DRAWER_EASE = "cubic-bezier(0.32, 0.72, 0, 1)";
 export const DRAWER_DURATION_MS = 500;
 export const BACKDROP_DURATION_MS = 250;
@@ -29,6 +30,7 @@ export function useMotionDismiss(ref, onDismiss, direction = "down") {
     el.dataset.motionClosing = "true";
     const isPopover = direction === "popover";
     const isFade = direction === "fade";
+    const isDrawer = !isPopover && !isFade;
     const endTransform = direction === "right"
       ? "translateX(100%)"
       : isPopover
@@ -41,13 +43,21 @@ export function useMotionDismiss(ref, onDismiss, direction = "down") {
       { transform: endTransform === "none" ? "translate(0, 0)" : endTransform, opacity: isPopover || isFade ? 0 : 1 },
     ], {
       duration: isPopover ? POPOVER_DURATION_MS : isFade ? BACKDROP_DURATION_MS : DRAWER_DURATION_MS,
-      easing: isPopover || isFade ? MOTION_EASE : DRAWER_EASE,
+      // The drawer curve is perfect for entering, but on exit it launches
+      // most of the sheet off-screen in the first few frames. A deliberate
+      // ease-in-out keeps the whole 500ms path visible and removes that
+      // apparent snap without making opening feel heavier.
+      easing: isDrawer ? MOTION_EASE_IN_OUT : MOTION_EASE,
       fill: "forwards",
     });
     const backdrop = el.parentElement?.matches(".sheet-backdrop") ? el.parentElement : null;
     const fade = backdrop?.animate(
       [{ opacity: getComputedStyle(backdrop).opacity }, { opacity: 0 }],
-      { duration: BACKDROP_DURATION_MS, easing: MOTION_EASE, fill: "forwards" }
+      {
+        duration: isDrawer ? DRAWER_DURATION_MS : BACKDROP_DURATION_MS,
+        easing: isDrawer ? MOTION_EASE_IN_OUT : MOTION_EASE,
+        fill: "forwards",
+      }
     );
     let cancelled = false;
     running.current = { cancel() { cancelled = true; animation.cancel(); fade?.cancel(); delete el.dataset.motionClosing; } };

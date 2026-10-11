@@ -3,6 +3,7 @@ import {
   DRAWER_DURATION_MS,
   DRAWER_EASE,
   MOTION_EASE,
+  MOTION_EASE_IN_OUT,
   useMotionDismiss,
 } from "./motion";
 import { useEffect, useRef } from "react";
@@ -32,10 +33,15 @@ export function useSwipeDismiss(sheetRef, onClose) {
     const state = { armed: false, pulling: false, startX: 0, startY: 0, dy: 0 };
 
     // The dim fades out in step with the pull and comes back on spring-back
-    function paintBackdrop(progress, animate) {
+    function paintBackdrop(
+      progress,
+      animate,
+      duration = BACKDROP_DURATION_MS,
+      easing = MOTION_EASE
+    ) {
       if (!backdrop) return;
       backdrop.style.transition = animate
-        ? `background-color ${BACKDROP_DURATION_MS}ms ${MOTION_EASE}, backdrop-filter ${BACKDROP_DURATION_MS}ms ${MOTION_EASE}`
+        ? `background-color ${duration}ms ${easing}, backdrop-filter ${duration}ms ${easing}`
         : "none";
       backdrop.style.backgroundColor = `rgba(20, 20, 26, ${0.4 * (1 - progress)})`;
       backdrop.style.backdropFilter = `blur(${4 * (1 - progress)}px)`;
@@ -93,10 +99,10 @@ export function useSwipeDismiss(sheetRef, onClose) {
       state.armed = false;
       state.pulling = false;
       if (!wasPulling) return;
-      el.style.transition = `transform ${DRAWER_DURATION_MS}ms ${DRAWER_EASE}`;
       if (state.dy > 130) {
+        el.style.transition = `transform ${DRAWER_DURATION_MS}ms ${MOTION_EASE_IN_OUT}`;
         el.style.transform = "translateY(110%)";
-        paintBackdrop(1, true); // dim finishes fading with the slide-out
+        paintBackdrop(1, true, DRAWER_DURATION_MS, MOTION_EASE_IN_OUT);
         // Unmount exactly when the slide-out finishes — a fixed timeout
         // shorter than the transition left the sheet's top edge hanging at
         // the bottom of the screen for a frame or two
@@ -109,6 +115,7 @@ export function useSwipeDismiss(sheetRef, onClose) {
         el.addEventListener("transitionend", close, { once: true });
         setTimeout(close, DRAWER_DURATION_MS + 100); // fallback if transitionend never fires
       } else {
+        el.style.transition = `transform ${DRAWER_DURATION_MS}ms ${DRAWER_EASE}`;
         el.style.transform = "translateY(0)";
         resetBackdrop();
       }
@@ -192,8 +199,8 @@ export function useSwipeDismissRight(pageRef, onClose) {
       const wasPulling = state.pulling;
       state.pulling = false;
       if (!wasPulling) return;
-      el.style.transition = `transform ${DRAWER_DURATION_MS}ms ${DRAWER_EASE}`;
       if (state.dx > 110) {
+        el.style.transition = `transform ${DRAWER_DURATION_MS}ms ${MOTION_EASE_IN_OUT}`;
         el.style.transform = "translateX(110%)";
         let closed = false;
         const close = () => {
@@ -204,6 +211,7 @@ export function useSwipeDismissRight(pageRef, onClose) {
         el.addEventListener("transitionend", close, { once: true });
         setTimeout(close, DRAWER_DURATION_MS + 100); // fallback if transitionend never fires
       } else {
+        el.style.transition = `transform ${DRAWER_DURATION_MS}ms ${DRAWER_EASE}`;
         el.style.transform = "translateX(0)";
       }
       state.dx = 0;
