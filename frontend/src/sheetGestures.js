@@ -1,4 +1,10 @@
-import { useMotionDismiss } from "./motion";
+import {
+  BACKDROP_DURATION_MS,
+  DRAWER_DURATION_MS,
+  DRAWER_EASE,
+  MOTION_EASE,
+  useMotionDismiss,
+} from "./motion";
 import { useEffect, useRef } from "react";
 
 // NOTE on background scroll-locking: both classic tricks are broken here —
@@ -29,7 +35,7 @@ export function useSwipeDismiss(sheetRef, onClose) {
     function paintBackdrop(progress, animate) {
       if (!backdrop) return;
       backdrop.style.transition = animate
-        ? "background-color 0.26s ease, backdrop-filter 0.26s ease"
+        ? `background-color ${BACKDROP_DURATION_MS}ms ${MOTION_EASE}, backdrop-filter ${BACKDROP_DURATION_MS}ms ${MOTION_EASE}`
         : "none";
       backdrop.style.backgroundColor = `rgba(20, 20, 26, ${0.4 * (1 - progress)})`;
       backdrop.style.backdropFilter = `blur(${4 * (1 - progress)}px)`;
@@ -37,7 +43,7 @@ export function useSwipeDismiss(sheetRef, onClose) {
 
     function resetBackdrop() {
       if (!backdrop) return;
-      backdrop.style.transition = "background-color 0.26s ease, backdrop-filter 0.26s ease";
+      backdrop.style.transition = `background-color ${BACKDROP_DURATION_MS}ms ${MOTION_EASE}, backdrop-filter ${BACKDROP_DURATION_MS}ms ${MOTION_EASE}`;
       backdrop.style.backgroundColor = "";
       backdrop.style.backdropFilter = "";
     }
@@ -87,7 +93,7 @@ export function useSwipeDismiss(sheetRef, onClose) {
       state.armed = false;
       state.pulling = false;
       if (!wasPulling) return;
-      el.style.transition = "transform 0.26s cubic-bezier(0.2, 0.9, 0.3, 1)";
+      el.style.transition = `transform ${DRAWER_DURATION_MS}ms ${DRAWER_EASE}`;
       if (state.dy > 130) {
         el.style.transform = "translateY(110%)";
         paintBackdrop(1, true); // dim finishes fading with the slide-out
@@ -101,7 +107,7 @@ export function useSwipeDismiss(sheetRef, onClose) {
           onCloseRef.current?.();
         };
         el.addEventListener("transitionend", close, { once: true });
-        setTimeout(close, 350); // fallback if transitionend never fires
+        setTimeout(close, DRAWER_DURATION_MS + 100); // fallback if transitionend never fires
       } else {
         el.style.transform = "translateY(0)";
         resetBackdrop();
@@ -186,7 +192,7 @@ export function useSwipeDismissRight(pageRef, onClose) {
       const wasPulling = state.pulling;
       state.pulling = false;
       if (!wasPulling) return;
-      el.style.transition = "transform 0.26s cubic-bezier(0.2, 0.9, 0.3, 1)";
+      el.style.transition = `transform ${DRAWER_DURATION_MS}ms ${DRAWER_EASE}`;
       if (state.dx > 110) {
         el.style.transform = "translateX(110%)";
         let closed = false;
@@ -196,7 +202,7 @@ export function useSwipeDismissRight(pageRef, onClose) {
           onCloseRef.current?.();
         };
         el.addEventListener("transitionend", close, { once: true });
-        setTimeout(close, 350); // fallback if transitionend never fires
+        setTimeout(close, DRAWER_DURATION_MS + 100); // fallback if transitionend never fires
       } else {
         el.style.transform = "translateX(0)";
       }

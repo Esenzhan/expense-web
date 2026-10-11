@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { haptic, hapticHeavy, withHaptic } from "../haptics";
 import { resizeImageFile, captureVideoFrame, renderPdfFirstPageToDataUrl } from "../receiptCapture";
+import { useMotionDismiss } from "../motion";
 
 function ListIcon() {
   return (
@@ -51,6 +52,8 @@ function GalleryIcon() {
 // (a receipt with several line items sometimes needs splitting into
 // separate expenses) plus torch, PDF, and gallery entry points in one place.
 export default function ReceiptCameraSheet({ onClose, onCapture, onError }) {
+  const sheetRef = useRef(null);
+  const dismiss = useMotionDismiss(sheetRef, onClose, "fade");
   const videoRef = useRef(null);
   const streamRef = useRef(null);
   const trackRef = useRef(null);
@@ -94,8 +97,12 @@ export default function ReceiptCameraSheet({ onClose, onCapture, onError }) {
   }
 
   function close() {
-    stopCamera();
-    onClose();
+    // Keep the last live frame visible while the surface fades; stopping
+    // the stream first flashes a black frame during the exit animation.
+    dismiss(() => {
+      stopCamera();
+      onClose();
+    });
   }
 
   async function toggleTorch() {
@@ -148,7 +155,7 @@ export default function ReceiptCameraSheet({ onClose, onCapture, onError }) {
   }
 
   return (
-    <div className="camera-sheet">
+    <div className="camera-sheet" ref={sheetRef}>
       <video ref={videoRef} autoPlay playsInline muted className="camera-video" />
 
       <button className="camera-close" onClick={withHaptic(close)} aria-label="Закрыть">

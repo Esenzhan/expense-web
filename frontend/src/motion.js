@@ -2,6 +2,9 @@ import { useCallback, useEffect, useRef } from "react";
 
 export const MOTION_EASE = "cubic-bezier(0.23, 1, 0.32, 1)";
 export const DRAWER_EASE = "cubic-bezier(0.32, 0.72, 0, 1)";
+export const DRAWER_DURATION_MS = 500;
+export const BACKDROP_DURATION_MS = 250;
+export const POPOVER_DURATION_MS = 200;
 export function motionAllowed() {
   return !matchMedia("(prefers-reduced-motion: reduce)").matches &&
     document.documentElement.dataset.motionEnabled !== "false" &&
@@ -24,12 +27,28 @@ export function useMotionDismiss(ref, onDismiss, direction = "down") {
     el.getAnimations().forEach((a) => a.cancel());
     el.style.animation = "none";
     el.dataset.motionClosing = "true";
+    const isPopover = direction === "popover";
+    const isFade = direction === "fade";
+    const endTransform = direction === "right"
+      ? "translateX(100%)"
+      : isPopover
+        ? "scale(.97)"
+        : isFade
+          ? start
+          : "translateY(100%)";
     const animation = el.animate([
       { transform: start === "none" ? "translate(0, 0)" : start, opacity: 1 },
-      { transform: direction === "right" ? "translateX(100%)" : direction === "popover" ? "scale(.97)" : "translateY(105%)", opacity: direction === "popover" ? 0 : 1 },
-    ], { duration: direction === "popover" ? 160 : 260, easing: DRAWER_EASE, fill: "forwards" });
+      { transform: endTransform === "none" ? "translate(0, 0)" : endTransform, opacity: isPopover || isFade ? 0 : 1 },
+    ], {
+      duration: isPopover ? POPOVER_DURATION_MS : isFade ? BACKDROP_DURATION_MS : DRAWER_DURATION_MS,
+      easing: isPopover || isFade ? MOTION_EASE : DRAWER_EASE,
+      fill: "forwards",
+    });
     const backdrop = el.parentElement?.matches(".sheet-backdrop") ? el.parentElement : null;
-    const fade = backdrop?.animate([{ opacity: getComputedStyle(backdrop).opacity }, { opacity: 0 }], { duration: 260, easing: MOTION_EASE, fill: "forwards" });
+    const fade = backdrop?.animate(
+      [{ opacity: getComputedStyle(backdrop).opacity }, { opacity: 0 }],
+      { duration: BACKDROP_DURATION_MS, easing: MOTION_EASE, fill: "forwards" }
+    );
     let cancelled = false;
     running.current = { cancel() { cancelled = true; animation.cancel(); fade?.cancel(); delete el.dataset.motionClosing; } };
     animation.finished.then(() => { if (!cancelled) done(); }).catch(() => {});

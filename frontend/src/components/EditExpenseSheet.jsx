@@ -1,4 +1,3 @@
-import { motionAllowed } from "../motion";
 import { useEffect, useLayoutEffect, useReducer, useRef, useState } from "react";
 import { createExpense, updateExpense } from "../api";
 import { enqueueExpense, updatePendingExpense, removePendingExpense, syncPendingExpenses } from "../offlineQueue";
@@ -168,16 +167,11 @@ export default function EditExpenseSheet({
 }) {
   const isNew = !expense;
   const isPending = Boolean(expense?.pending);
-  // Slide-down dismissal, like the reference: the sheet animates away while
-  // the (already refreshed) main screen shows through, then unmounts.
-  const [closing, setClosing] = useState(false);
-  const dismissedRef = useRef(false);
-  function dismiss(after) {
-    if (dismissedRef.current) return;
-    dismissedRef.current = true;
-    setClosing(true);
-    setTimeout(after, motionAllowed() ? 260 : 0);
-  }
+  const sheetRef = useRef(null);
+  // One shared entrance/exit path for every bottom sheet. This used to have
+  // a local 260ms timeout and CSS class, so it closed at a different speed
+  // from every other modal and could unmount before its motion finished.
+  const dismiss = useSwipeDismiss(sheetRef, onClose);
   const [calc, dispatch] = useReducer(calcReducer, {
     tokens: [
       !isNew
@@ -213,9 +207,6 @@ export default function EditExpenseSheet({
   const [customDate, setCustomDate] = useState(() => (expense ? new Date(expense.created_at) : null));
   const [dateChanged, setDateChanged] = useState(false);
   const [dateTimePickerOpen, setDateTimePickerOpen] = useState(false);
-
-  const sheetRef = useRef(null);
-  useSwipeDismiss(sheetRef, onClose);
 
   // Category picker is a center-snap carousel: whatever icon sits in the
   // middle of the row is the selected category, like the reference app.
@@ -395,12 +386,12 @@ export default function EditExpenseSheet({
 
   return (
     <>
-      <div className={`sheet-backdrop ${closing ? "closing" : ""}`} onClick={() => {
+      <div className="sheet-backdrop" onClick={() => {
           haptic();
           dismiss(onClose);
         }}>
       <div
-        className={`edit-sheet ${closing ? "closing" : ""}`}
+        className="edit-sheet"
         ref={sheetRef}
         onClick={(event) => event.stopPropagation()}
       >

@@ -1,19 +1,29 @@
 /* Motion only: no changes to the application's colors, geometry or typography. */
-:root { --ease-out: cubic-bezier(.23, 1, .32, 1); --ease-drawer: cubic-bezier(.32, .72, 0, 1); }
+:root {
+  --ease-out: cubic-bezier(.23, 1, .32, 1);
+  --ease-drawer: cubic-bezier(.32, .72, 0, 1);
+  --duration-drawer: 500ms;
+  --duration-backdrop: 250ms;
+}
 .key:active { opacity: .72; }
 [data-motion-closing="true"] { pointer-events: none; }
 
-/* Keep entrance and exit in the same spatial direction and below 300ms. */
+/* A deliberate, readable drawer pace: the same 500ms spatial path is used
+   in reverse by useMotionDismiss when the surface closes. */
 .edit-sheet, .insights-sheet, .categories-sheet, .period-picker-sheet, .dt-sheet {
-  animation-duration: 280ms;
+  animation-duration: var(--duration-drawer);
   animation-timing-function: var(--ease-drawer);
 }
-.settings-page { animation-duration: 280ms; animation-timing-function: var(--ease-drawer); }
-.sheet-backdrop { animation-duration: 180ms; animation-timing-function: var(--ease-out); transition: opacity 260ms var(--ease-out); }
-.edit-sheet.closing { transition: transform 260ms var(--ease-drawer); }
+.settings-page { animation-duration: var(--duration-drawer); animation-timing-function: var(--ease-drawer); }
+.sheet-backdrop {
+  animation-duration: var(--duration-backdrop);
+  animation-timing-function: var(--ease-out);
+  transition: opacity var(--duration-backdrop) var(--ease-out);
+}
+.camera-sheet { animation-duration: var(--duration-backdrop); animation-timing-function: var(--ease-out); }
 .category-filter-dropdown, .edit-menu { transform-origin: top right; animation-duration: 180ms; animation-timing-function: var(--ease-out); }
 .expense-row { animation-duration: 180ms; animation-timing-function: var(--ease-out); }
-.app { transition: transform 280ms var(--ease-drawer); }
+.app { transition: transform var(--duration-drawer) var(--ease-drawer); }
 
 /* A wallet change replaces the expense dataset as one scene. Individual
    row-in animations are paused only for this first scene entrance, otherwise
